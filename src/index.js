@@ -1,10 +1,77 @@
-import { Engine } from './engine.js';
-import { Organism } from './organism.js';
-import { initUi } from './ui.js';
+import { buildWorld, pathAt } from './terrain.js';
+import { createRenderer } from './render.js';
 
-const canvas = document.getElementById('game-canvas');
-const engine = new Engine(canvas);
-const organism = engine.add(new Organism(canvas));
+export const CONFIG = {
+  mapSize: 500,
+  plainStickiness: 0.75,
+  unicornDensity: 0.01,
+  adultChance: 0.75,
+  trackRadiusFrac: 0.25,
+  startFilm: 15,
+  cartSpeed: 14,        // world units per second
+  eyeHeight: 2.4,
+};
 
-initUi(organism);
-engine.start();
+const canvas = document.getElementById('c');
+const hud = document.getElementById('hud');
+const bar = document.getElementById('bar');
+
+const seed = (Math.random() * 0x7fffffff) | 0;
+const world = buildWorld(seed, CONFIG);
+const renderer = createRenderer(canvas, world);
+
+const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+let distance = 0;
+
+// Start the ride looking along the track rather than at a random compass point.
+{
+  const a = pathAt(world.path, 0), b = pathAt(world.path, 4);
+  cam.yaw = Math.atan2(-(b.x - a.x), -(b.z - a.z));
+}
+let fovy = Math.PI / 3;
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+}
+addEventListener('resize', resize);
+resize();
+
+// --- look controls -------------------------------------------------------
+
+canvas.addEventListener('click', () => {
+  // Chrome returns a promise here and rejects it if the lock was exited very
+  // recently; an unhandled rejection would show up as a console error.
+  Promise.resolve(canvas.requestPointerLock()).catch(() => {});
+});
+addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement !== canvas) return;
+  cam.yaw -= e.movementX * 0.0022;
+  cam.pitch -= e.movementY * 0.0022;
+  const lim = Math.PI / 2 - 0.05;
+  cam.pitch = Math.max(-lim, Math.min(lim, cam.pitch));
+});
+
+// --- loop ----------------------------------------------------------------
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+
+  distance += CONFIG.cartSpeed * dt;
+  const lap = distance / world.path.length;
+  const p = pathAt(world.path, distance);
+  cam.x = p.x;
+  cam.y = p.y + CONFIG.eyeHeight;
+  cam.z = p.z;
+
+  renderer.draw(cam, fovy);
+
+  bar.style.width = (Math.min(1, lap) * 100).toFixed(1) + '%';
+  hud.textContent = 'seed ' + seed + '  ·  lap ' + (lap * 100).toFixed(0) + '%';
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);

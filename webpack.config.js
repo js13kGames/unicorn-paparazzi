@@ -13,8 +13,9 @@ module.exports = {
   },
   watch: process.argv.indexOf("--watch") > -1,
   plugins: [
+    // Only what the judged archive needs: index.html at the top level + the bundle.
     new ZipPlugin({
-      include: [/\.js$/, /\.html$/],
+      include: [/^main\.js$/, /^index\.html$/],
     }),
     new HtmlWebpackPlugin({
       template: "./index.html",

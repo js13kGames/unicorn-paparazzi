@@ -4,193 +4,65 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chromazoa</title>
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#111111">
+  <title>Unicorn Snap</title>
+  <meta name="theme-color" content="#9ec7f2">
   <style>
-    :root {
-      --bg: #111;
-      --panel: #1b1b1b;
-      --line: #333;
-      --text: #ddd;
-      --dim: #888;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
+    html, body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace;
-    }
-
-    #lab {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    h1 {
-      font-size: 18px;
-      margin: 0;
-      letter-spacing: 2px;
-    }
-
-    h1 span {
-      color: var(--dim);
-      font-weight: normal;
-      letter-spacing: 0;
-    }
-
-    #genome {
-      width: 100%;
-      background: var(--panel);
-      color: var(--text);
-      border: 1px solid var(--line);
-      padding: 10px;
-      font: inherit;
-      letter-spacing: 3px;
-      resize: vertical;
-      min-height: 64px;
-    }
-
-    #codons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3px;
-    }
-
-    .codon {
-      padding: 2px 5px;
-      font-size: 11px;
-      letter-spacing: 1px;
-      border: 1px solid rgba(255, 255, 255, .15);
-      cursor: default;
-    }
-
-    .codon.dead {
-      opacity: .3;
-    }
-
-    #controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    button {
-      background: var(--panel);
-      color: var(--text);
-      border: 1px solid var(--line);
-      padding: 7px 14px;
-      font: inherit;
-      cursor: pointer;
-    }
-
-    button:hover {
-      border-color: #666;
-    }
-
-    #stage {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    canvas {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      flex: 1 1 420px;
-      touch-action: none;
-    }
-
-    #inspector {
-      flex: 1 1 220px;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      padding: 12px;
-      min-height: 120px;
-    }
-
-    #inspector h2 {
-      font-size: 15px;
-      margin: 6px 0 4px;
-    }
-
-    #swatch {
-      width: 100%;
-      height: 26px;
-      border: 1px solid var(--line);
-    }
-
-    .k {
-      color: var(--dim);
-    }
-
-    #stats {
-      color: var(--dim);
-      font-size: 12px;
-    }
-
-    #parents {
-      display: flex;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--dim);
-      flex-wrap: wrap;
-    }
-
-    #parents div {
-      flex: 1 1 200px;
+      height: 100%;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      background: #9ec7f2;
+      color: #fff;
+      font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    #c {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+    }
+
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    #hud {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      text-shadow: 0 1px 2px #0008;
+    }
+
+    #track {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      height: 5px;
+      background: #0004;
+      border-radius: 3px;
+    }
+
+    #bar {
+      height: 100%;
+      width: 0;
+      background: #fff;
+      border-radius: 3px;
     }
   </style>
 </head>
 
 <body>
-  <div id="lab">
-    <h1>CHROMAZOA <span>— breeding lab</span></h1>
-
-    <textarea id="genome" spellcheck="false" autocomplete="off"></textarea>
-    <div id="codons"></div>
-
-    <div id="controls">
-      <button id="random">Random</button>
-      <button id="mutate">Mutate</button>
-      <button id="keep-a">Keep as parent A</button>
-      <button id="keep-b">Keep as parent B</button>
-      <button id="breed">Breed A × B</button>
-      <button id="shift">Frameshift</button>
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <div id="hud"></div>
+    <div id="track">
+      <div id="bar"></div>
     </div>
-
-    <div id="parents">
-      <div id="parent-a"><span class="k">A:</span> —</div>
-      <div id="parent-b"><span class="k">B:</span> —</div>
-    </div>
-
-    <div id="stage">
-      <canvas id="game-canvas" width="560" height="420"></canvas>
-      <div id="inspector"></div>
-    </div>
-
-    <div id="stats"></div>
   </div>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js');
-      });
-    }
-  </script>
 </body>
 
 </html>
