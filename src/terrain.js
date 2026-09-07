@@ -1,15 +1,19 @@
 import { mulberry32, hash, fbm } from './rng.js';
 
 // World units: 1 tile = 1 unit across, 1 elevation band = HEIGHT units tall.
-export const HEIGHT = 1.4;
-// Sea surface sits just below band 0, so band-0 tiles read as dry beach.
-export const WATER_Y = -0.25 * HEIGHT;
+export const HEIGHT = 1.9;
+// Sea surface. The smoothed shoreline crosses it wherever it likes, which reads
+// as wet sand rather than a hard edge.
+export const WATER_Y = -0.2 * HEIGHT;
 
-// --- elevation -----------------------------------------------------------
+const PATH_POINTS = 1024;
 
-// Continuous elevation from fBm. The fBm spans roughly 0.15-0.91 with a median
-// near 0.49, so SEA sits at the ~28th percentile and the land curve is stretched
-// across the remainder: median lands in plains, the top few percent in peaks.
+// --- elevation bands -----------------------------------------------------
+// Bands are integers. They decide colour, biome and where each unicorn colour
+// lives; the geometry uses a smoothed copy so the world isn't a staircase.
+
+// The fBm spans roughly 0.15-0.91 with a median near 0.49, so SEA sits at the
+// ~28th percentile and the land curve is stretched across the remainder.
 const SEA = 0.41;
 
 function rawElevation(seed, x, y) {
@@ -20,9 +24,8 @@ function rawElevation(seed, x, y) {
   return Math.max(-3, Math.min(10, e));
 }
 
-function generateElevation(seed, N, cfg) {
-  const rnd = mulberry32(seed ^ 0x9e37);
-  const elev = new Float32Array(N * N);
+function generateBands(seed, N, cfg) {
+  const band = new Float32Array(N * N);
   const volcanic = new Uint8Array(N * N);
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -32,20 +35,22 @@ function generateElevation(seed, N, cfg) {
       // Plains are sticky: bands adjacent to 1 mostly collapse onto it, which is
       // what turns noisy lowland into the broad open plains the game wants.
       // Band 0 is spared near the waterline so shores keep their sand rim.
-      if ((q === 2 || (q === 0 && e > 0.15)) && rnd() < cfg.plainStickiness) q = 1;
-      elev[i] = q;
+      // The roll comes from a noise field rather than white noise, so sticky
+      // regions are coherent patches instead of salt-and-pepper along every edge.
+      if ((q === 2 || (q === 0 && e > 0.15)) &&
+          fbm(seed + 555, x / 5, y / 5, 2) < cfg.plainStickiness) q = 1;
+      band[i] = q;
       // Low-frequency field decides which highlands are volcanoes vs mountains.
       volcanic[i] = fbm(seed + 777, x / 130, y / 130, 2) > 0.5 ? 1 : 0;
     }
   }
-  return { elev: median3(elev, N), volcanic };
+  return { band: median3(band, N), volcanic };
 }
 
 // The sticky-plains roll is independent per cell, which leaves single-tile
-// speckle along every biome boundary -- a field of one-unit pillars in 3D, and
-// a lot of wasted wall geometry. One median pass erases isolated cells while
-// leaving real landforms alone.
-function median3(elev, N) {
+// speckle along every biome boundary. One median pass erases isolated cells
+// while leaving real landforms alone.
+function median3(band, N) {
   const out = new Float32Array(N * N);
   const w = new Float32Array(9);
   for (let y = 0; y < N; y++) {
@@ -57,14 +62,52 @@ function median3(elev, N) {
         for (let dx = -1; dx <= 1; dx++) {
           const xx = x + dx;
           if (xx < 0 || xx >= N) continue;
-          w[n++] = elev[yy * N + xx];
+          w[n++] = band[yy * N + xx];
         }
       }
-      const s = w.subarray(0, n).slice().sort();
-      out[y * N + x] = s[n >> 1];
+      out[y * N + x] = w.subarray(0, n).slice().sort()[n >> 1];
     }
   }
   return out;
+}
+
+// --- smoothed height -----------------------------------------------------
+
+// Separable [1,2,1] blur. Each pass spreads a one-band step over another tile,
+// turning the quantised plateaus into slopes without moving the colour bands.
+function smoothHeight(band, N, passes) {
+  let src = Float32Array.from(band);
+  let dst = new Float32Array(N * N);
+  const cl = (v, hi) => (v < 0 ? 0 : v > hi ? hi : v);
+  for (let p = 0; p < passes; p++) {
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const i = y * N + x;
+        dst[i] = (src[y * N + cl(x - 1, N - 1)] + 2 * src[i] + src[y * N + cl(x + 1, N - 1)]) / 4;
+      }
+    }
+    [src, dst] = [dst, src];
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const i = y * N + x;
+        dst[i] = (src[cl(y - 1, N - 1) * N + x] + 2 * src[i] + src[cl(y + 1, N - 1) * N + x]) / 4;
+      }
+    }
+    [src, dst] = [dst, src];
+  }
+  return src;
+}
+
+// Blurring flattens the plains into a dead wash, so put fine relief back with a
+// high-frequency noise layer. The track carve runs afterwards and irons it out
+// under the roadbed.
+function addDetail(seed, N, height, amp) {
+  if (!amp) return;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      height[y * N + x] += (fbm(seed + 31, x / 7, y / 7, 3) - 0.5) * amp;
+    }
+  }
 }
 
 // --- the track -----------------------------------------------------------
@@ -81,9 +124,7 @@ function wobble(seed, theta) {
   return s / norm;
 }
 
-const PATH_POINTS = 1024;
-
-function generateTrack(seed, N, elev, cfg) {
+function generateTrack(seed, N, band, cfg) {
   const cx = N / 2, cz = N / 2;
   const baseR = N * cfg.trackRadiusFrac;
   const px = new Float32Array(PATH_POINTS), pz = new Float32Array(PATH_POINTS);
@@ -96,7 +137,7 @@ function generateTrack(seed, N, elev, cfg) {
     pz[i] = cz + Math.sin(t) * r;
     const gx = Math.min(N - 1, Math.max(0, Math.round(px[i])));
     const gz = Math.min(N - 1, Math.max(0, Math.round(pz[i])));
-    ph[i] = elev[gz * N + gx];
+    ph[i] = band[gz * N + gx];
   }
 
   // Circular smoothing so the cart rides a gentle grade instead of stairs.
@@ -121,29 +162,45 @@ function generateTrack(seed, N, elev, cfg) {
   return { px, pz, h, cum, length: cum[PATH_POINTS] };
 }
 
-// Flatten the terrain under the track and mark those tiles for colouring.
-function carve(N, elev, path, radius) {
+// Flatten the height field under the track, fading out over an embankment so
+// the roadbed meets the hillside instead of cutting a trench through it.
+const TRACK_R = 1.6, TRACK_FADE = 5.0;
+
+function carve(N, height, path) {
   const track = new Uint8Array(N * N);
-  const r = Math.ceil(radius);
+  const weight = new Float32Array(N * N);
+  const target = new Float32Array(N * N);
+  const r = Math.ceil(TRACK_FADE);
   for (let i = 0; i < PATH_POINTS; i++) {
     const cx = path.px[i], cz = path.pz[i], y = path.h[i];
     for (let dz = -r; dz <= r; dz++) {
       for (let dx = -r; dx <= r; dx++) {
         const gx = Math.round(cx) + dx, gz = Math.round(cz) + dz;
         if (gx < 0 || gz < 0 || gx >= N || gz >= N) continue;
-        if (Math.hypot(gx + 0.5 - cx, gz + 0.5 - cz) > radius) continue;
+        const d = Math.hypot(gx + 0.5 - cx, gz + 0.5 - cz);
+        if (d > TRACK_FADE) continue;
         const k = gz * N + gx;
-        elev[k] = y;
-        track[k] = 1;
+        if (d <= TRACK_R) track[k] = 1;
+        // smoothstep from full flatten at the roadbed to untouched at the fade.
+        let w = 1;
+        if (d > TRACK_R) {
+          const t = 1 - (d - TRACK_R) / (TRACK_FADE - TRACK_R);
+          w = t * t * (3 - 2 * t);
+        }
+        // Nearest path point wins, so the embankment follows the roadbed grade.
+        if (w > weight[k]) { weight[k] = w; target[k] = y; }
       }
     }
+  }
+  for (let k = 0; k < N * N; k++) {
+    if (weight[k] > 0) height[k] += (target[k] - height[k]) * weight[k];
   }
   return track;
 }
 
 // --- colour --------------------------------------------------------------
 
-function tileColor(q, x, y, volcanic, isTrack, out, o) {
+function tileColor(q, x, y, volcanic, isTrack, out) {
   let r, g, b;
   if (isTrack) {
     r = 96; g = 72; b = 52;
@@ -164,77 +221,113 @@ function tileColor(q, x, y, volcanic, isTrack, out, o) {
     const t = Math.min(1, (q - 5) / 5);
     r = 128 + 66 * t; g = 104 + 76 * t; b = 168 + 72 * t;       // mountain: violet -> pale
   }
-  const v = 0.92 + hash(9, x, y) * 0.16;                        // per-tile speckle
-  out[o] = r * v; out[o + 1] = g * v; out[o + 2] = b * v; out[o + 3] = 255;
+  const v = 0.97 + hash(9, x, y) * 0.06;                        // faint per-tile speckle
+  out[0] = r * v; out[1] = g * v; out[2] = b * v;
 }
 
 // --- mesh ----------------------------------------------------------------
 
-// Flat-topped tiles plus vertical walls wherever a neighbour sits lower.
-// Quantised elevations mean most neighbours match, so walls stay cheap.
-function buildMesh(N, elev, volcanic, track) {
-  const at = (x, z) => elev[z * N + x];
-
-  let quads = 0;
-  for (let z = 0; z < N; z++) {
-    for (let x = 0; x < N; x++) {
-      quads++;
-      const e = at(x, z);
-      if (x === 0 || at(x - 1, z) < e) quads++;
-      if (x === N - 1 || at(x + 1, z) < e) quads++;
-      if (z === 0 || at(x, z - 1) < e) quads++;
-      if (z === N - 1 || at(x, z + 1) < e) quads++;
+// An indexed grid over the (N+1)^2 corners. Corner height, colour and normal are
+// all averaged from the cells that touch the corner, so the surface, the shading
+// and the biome edges are continuous -- no walls, no stair-steps, no facets.
+function buildMesh(N, band, height, volcanic, track) {
+  const S = N + 1;
+  const cornerH = new Float32Array(S * S);
+  for (let z = 0; z <= N; z++) {
+    for (let x = 0; x <= N; x++) {
+      let sum = 0, n = 0;
+      for (let dz = -1; dz <= 0; dz++) {
+        for (let dx = -1; dx <= 0; dx++) {
+          const cx = x + dx, cz = z + dz;
+          if (cx < 0 || cz < 0 || cx >= N || cz >= N) continue;
+          sum += height[cz * N + cx];
+          n++;
+        }
+      }
+      cornerH[z * S + x] = n ? sum / n : 0;
     }
   }
 
-  const count = quads * 6;
-  const pos = new Float32Array(count * 3);
-  const col = new Uint8Array(count * 4);
-  let p = 0, c = 0;
+  const pos = new Float32Array(S * S * 3);
+  const col = new Uint8Array(S * S * 4);
+  const nrm = new Int8Array(S * S * 4);
+  const rgb = new Float32Array(3), acc = new Float32Array(3);
 
-  const push = (x, y, z) => { pos[p++] = x; pos[p++] = y; pos[p++] = z; };
-  // Counter-clockwise when seen from the outside.
-  const quad = (ax, ay, az, bx, by, bz, cx2, cy2, cz2, dx, dy, dz, x, z, q, vol, tr) => {
-    push(ax, ay, az); push(bx, by, bz); push(cx2, cy2, cz2);
-    push(ax, ay, az); push(cx2, cy2, cz2); push(dx, dy, dz);
-    for (let i = 0; i < 6; i++) { tileColor(q, x, z, vol, tr, col, c); c += 4; }
-  };
+  for (let z = 0; z <= N; z++) {
+    for (let x = 0; x <= N; x++) {
+      const ci = z * S + x;
+      pos[ci * 3] = x;
+      pos[ci * 3 + 1] = cornerH[ci] * HEIGHT;
+      pos[ci * 3 + 2] = z;
 
-  for (let z = 0; z < N; z++) {
-    for (let x = 0; x < N; x++) {
-      const i = z * N + x;
-      const e = elev[i], vol = volcanic[i], tr = track[i];
-      const q = Math.round(e);
-      const y = e * HEIGHT;
-      const x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
+      acc[0] = acc[1] = acc[2] = 0;
+      let n = 0;
+      for (let dz = -1; dz <= 0; dz++) {
+        for (let dx = -1; dx <= 0; dx++) {
+          const cx = x + dx, cz = z + dz;
+          if (cx < 0 || cz < 0 || cx >= N || cz >= N) continue;
+          const k = cz * N + cx;
+          tileColor(band[k], cx, cz, volcanic[k], track[k], rgb);
+          acc[0] += rgb[0]; acc[1] += rgb[1]; acc[2] += rgb[2];
+          n++;
+        }
+      }
+      col[ci * 4] = acc[0] / n; col[ci * 4 + 1] = acc[1] / n;
+      col[ci * 4 + 2] = acc[2] / n; col[ci * 4 + 3] = 255;
 
-      quad(x0, y, z1, x1, y, z1, x1, y, z0, x0, y, z0, x, z, q, vol, tr);
-
-      const wall = (nx, nz, ax, az, bx, bz) => {
-        const ne = (nx < 0 || nz < 0 || nx >= N || nz >= N) ? -4 : at(nx, nz);
-        if (ne >= e) return;
-        const ny = ne * HEIGHT;
-        quad(ax, ny, az, bx, ny, bz, bx, y, bz, ax, y, az, x, z, q, vol, tr);
-      };
-      wall(x - 1, z, x0, z0, x0, z1);
-      wall(x + 1, z, x1, z1, x1, z0);
-      wall(x, z - 1, x1, z0, x0, z0);
-      wall(x, z + 1, x0, z1, x1, z1);
+      // Analytic normal from central differences of the corner height field.
+      const xm = x > 0 ? cornerH[z * S + x - 1] : cornerH[ci];
+      const xp = x < N ? cornerH[z * S + x + 1] : cornerH[ci];
+      const zm = z > 0 ? cornerH[(z - 1) * S + x] : cornerH[ci];
+      const zp = z < N ? cornerH[(z + 1) * S + x] : cornerH[ci];
+      const nx = -(xp - xm) * HEIGHT / 2, nz = -(zp - zm) * HEIGHT / 2;
+      const len = Math.hypot(nx, 1, nz);
+      nrm[ci * 4] = (nx / len) * 127;
+      nrm[ci * 4 + 1] = (1 / len) * 127;
+      nrm[ci * 4 + 2] = (nz / len) * 127;
     }
   }
 
-  return { pos, col, count };
+  const idx = new Uint32Array(N * N * 6);
+  let o = 0;
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      const a = z * S + x, b = a + 1, c = a + S + 1, d = a + S;
+      // Counter-clockwise seen from above.
+      idx[o++] = d; idx[o++] = c; idx[o++] = b;
+      idx[o++] = d; idx[o++] = b; idx[o++] = a;
+    }
+  }
+
+  return { pos, col, nrm, idx, count: idx.length, cornerH, S };
 }
 
 // --- entry point ---------------------------------------------------------
 
 export function buildWorld(seed, cfg) {
   const N = cfg.mapSize;
-  const { elev, volcanic } = generateElevation(seed, N, cfg);
-  const path = generateTrack(seed, N, elev, cfg);
-  const track = carve(N, elev, path, 2.2);
-  const mesh = buildMesh(N, elev, volcanic, track);
-  return { N, elev, volcanic, track, path, mesh, points: PATH_POINTS };
+  const { band, volcanic } = generateBands(seed, N, cfg);
+  const path = generateTrack(seed, N, band, cfg);
+  const height = smoothHeight(band, N, cfg.terrainSmooth);
+  addDetail(seed, N, height, cfg.terrainDetail);
+  const track = carve(N, height, path);
+  const mesh = buildMesh(N, band, height, volcanic, track);
+  return { N, band, elev: band, height, volcanic, track, path, mesh, points: PATH_POINTS };
+}
+
+// Ground height in world units, bilinear over the corner grid so unicorns and
+// the cart sit exactly on the rendered surface.
+export function elevAt(world, x, z) {
+  const { S, cornerH } = world.mesh;
+  const N = world.N;
+  const fx = x < 0 ? 0 : x > N ? N : x;
+  const fz = z < 0 ? 0 : z > N ? N : z;
+  const x0 = Math.min(N - 1, fx | 0), z0 = Math.min(N - 1, fz | 0);
+  const tx = fx - x0, tz = fz - z0;
+  const h00 = cornerH[z0 * S + x0], h10 = cornerH[z0 * S + x0 + 1];
+  const h01 = cornerH[(z0 + 1) * S + x0], h11 = cornerH[(z0 + 1) * S + x0 + 1];
+  const a = h00 + (h10 - h00) * tx, b = h01 + (h11 - h01) * tx;
+  return (a + (b - a) * tz) * HEIGHT;
 }
 
 // Cart position at an arc-length distance around the loop.
@@ -242,7 +335,6 @@ export function pathAt(path, dist) {
   const n = PATH_POINTS;
   let d = dist % path.length;
   if (d < 0) d += path.length;
-  // cum is monotonic; binary search for the segment.
   let lo = 0, hi = n;
   while (lo + 1 < hi) {
     const mid = (lo + hi) >> 1;

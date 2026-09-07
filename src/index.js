@@ -1,11 +1,16 @@
 import { buildWorld, pathAt } from './terrain.js';
 import { createRenderer } from './render.js';
+import { spawn, updateHerd, packInstances } from './unicorn.js';
 
 export const CONFIG = {
   mapSize: 500,
   plainStickiness: 0.75,
+  terrainSmooth: 2,      // [1,2,1] blur passes turning bands into slopes
+  terrainDetail: 0.35,   // fine relief added back after blurring, in bands
   unicornDensity: 0.01,
   adultChance: 0.75,
+  driftChance: 0.08,      // chance a unicorn wears an off-biome colour
+  poseWeights: [0.80, 0.10, 0.08, 0.02],
   trackRadiusFrac: 0.25,
   startFilm: 15,
   cartSpeed: 14,        // world units per second
@@ -18,7 +23,8 @@ const bar = document.getElementById('bar');
 
 const seed = (Math.random() * 0x7fffffff) | 0;
 const world = buildWorld(seed, CONFIG);
-const renderer = createRenderer(canvas, world);
+const herd = spawn(world, CONFIG, seed);
+const renderer = createRenderer(canvas, world, herd);
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 let distance = 0;
@@ -60,6 +66,9 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
+  updateHerd(herd, world, CONFIG, dt);
+  packInstances(herd, world);
+
   distance += CONFIG.cartSpeed * dt;
   const lap = distance / world.path.length;
   const p = pathAt(world.path, distance);
@@ -70,7 +79,8 @@ function frame(now) {
   renderer.draw(cam, fovy);
 
   bar.style.width = (Math.min(1, lap) * 100).toFixed(1) + '%';
-  hud.textContent = 'seed ' + seed + '  ·  lap ' + (lap * 100).toFixed(0) + '%';
+  hud.textContent = 'seed ' + seed + '  ·  lap ' + (lap * 100).toFixed(0) +
+    '%  ·  ' + herd.n + ' unicorns';
 
   requestAnimationFrame(frame);
 }
