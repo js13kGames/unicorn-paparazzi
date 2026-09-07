@@ -126,6 +126,19 @@ export function createRenderer(canvas, world, herd) {
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, world.mesh.idx, gl.STATIC_DRAW);
   gl.bindVertexArray(null);
 
+  // The track is its own ribbon, drawn over the carved roadbed. Culling is off
+  // for it so a winding mistake can never make the path vanish.
+  const trackVao = vao(gl, [
+    [P, buffer(gl, world.trackMesh.pos), 3, gl.FLOAT, false],
+    [C, buffer(gl, world.trackMesh.col), 4, gl.UNSIGNED_BYTE, true],
+    [NM, buffer(gl, world.trackMesh.nrm), 4, gl.BYTE, true],
+  ]);
+  const trackIdx = gl.createBuffer();
+  gl.bindVertexArray(trackVao);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, trackIdx);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, world.trackMesh.idx, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+
   const N = world.N, wy = WATER_Y;
   const wPos = new Float32Array([0, wy, N, N, wy, N, N, wy, 0, 0, wy, N, N, wy, 0, 0, wy, 0]);
   const wCol = new Uint8Array(24);
@@ -189,6 +202,10 @@ export function createRenderer(canvas, world, herd) {
     if (idPass) gl.colorMask(false, false, false, false);
     gl.bindVertexArray(terrain);
     gl.drawElements(gl.TRIANGLES, world.mesh.count, gl.UNSIGNED_INT, 0);
+    gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(trackVao);
+    gl.drawElements(gl.TRIANGLES, world.trackMesh.count, gl.UNSIGNED_INT, 0);
+    gl.enable(gl.CULL_FACE);
     if (idPass) gl.colorMask(true, true, true, true);
 
     gl.useProgram(hp);

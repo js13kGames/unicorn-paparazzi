@@ -164,7 +164,7 @@ function generateTrack(seed, N, band, cfg) {
 
 // Flatten the height field under the track, fading out over an embankment so
 // the roadbed meets the hillside instead of cutting a trench through it.
-const TRACK_R = 1.6, TRACK_FADE = 5.0;
+const TRACK_R = 2.6, TRACK_FADE = 5.4;
 
 function carve(N, height, path) {
   const track = new Uint8Array(N * N);
@@ -198,13 +198,102 @@ function carve(N, height, path) {
   return track;
 }
 
+// --- the track's own mesh ------------------------------------------------
+
+// Painting the track onto the terrain grid can only ever give it a one-tile
+// blurred edge, because the grid's corner vertices are shared. Building it as a
+// ribbon straight off the path polyline instead gives exact, hard edges that owe
+// nothing to the tile grid -- and lets it carry rails.
+const RIBBON_LIFT = 0.20;   // clears the ground under the whole bed; reads as embankment
+const HALF_W = 1.50;
+const BED = [108, 82, 58], RAIL = [176, 170, 160];
+// [left offset, right offset, is rail]
+const BANDS = [
+  [-1.50, -1.05, 0], [-1.05, -0.85, 1], [-0.85, 0.85, 0],
+  [0.85, 1.05, 1], [1.05, 1.50, 0],
+];
+
+export function buildTrackMesh(path, mesh, N) {
+  const P = PATH_POINTS, nb = BANDS.length;
+  const verts = nb * P * 2;
+  const pos = new Float32Array(verts * 3);
+  const col = new Uint8Array(verts * 4);
+  const nrm = new Int8Array(verts * 4);
+  const idx = new Uint32Array(nb * P * 6);
+
+  // A frame per cross-section: horizontal right vector and surface normal.
+  const rx = new Float32Array(P), rz = new Float32Array(P);
+  const nx = new Float32Array(P), ny = new Float32Array(P), nz = new Float32Array(P);
+  for (let i = 0; i < P; i++) {
+    const j = (i + 1) % P, k = (i - 1 + P) % P;
+    let tx = path.px[j] - path.px[k];
+    let tz = path.pz[j] - path.pz[k];
+    let ty = (path.h[j] - path.h[k]) * HEIGHT;
+    const tl = Math.hypot(tx, ty, tz) || 1;
+    tx /= tl; ty /= tl; tz /= tl;
+    const rl = Math.hypot(tz, tx) || 1;
+    rx[i] = tz / rl; rz[i] = -tx / rl;
+    // n = t x r
+    const ax = ty * rz[i] - tz * 0;
+    const ay = tz * rx[i] - tx * rz[i];
+    const az = tx * 0 - ty * rx[i];
+    const al = Math.hypot(ax, ay, az) || 1;
+    nx[i] = ax / al; ny[i] = ay / al; nz[i] = az / al;
+  }
+
+  // A rail bed is flat across its width, so each cross-section takes one height:
+  // the highest ground anywhere under it. Sampling only at the ribbon's own
+  // vertices is not enough -- the ground bulges up between them on steep flanks,
+  // and the terrain pokes through the middle of the bed.
+  const y = new Float32Array(P);
+  const SAMPLES = 13;
+  for (let i = 0; i < P; i++) {
+    let hi = -1e9;
+    for (let k = 0; k < SAMPLES; k++) {
+      const u = -HALF_W + (2 * HALF_W * k) / (SAMPLES - 1);
+      const h = sampleH(mesh, N, path.px[i] + rx[i] * u, path.pz[i] + rz[i] * u);
+      if (h > hi) hi = h;
+    }
+    y[i] = hi;
+  }
+  // Also clear the neighbouring cross-sections, since the surface between two
+  // of them is only a chord across whatever the ground does in between.
+  const ys = new Float32Array(P);
+  for (let i = 0; i < P; i++) {
+    ys[i] = Math.max(y[(i - 1 + P) % P], y[i], y[(i + 1) % P]) + RIBBON_LIFT;
+  }
+
+  let o = 0;
+  for (let b = 0; b < nb; b++) {
+    const [uL, uR, isRail] = BANDS[b];
+    const c = isRail ? RAIL : BED;
+    for (let i = 0; i < P; i++) {
+      for (let e = 0; e < 2; e++) {
+        const u = e ? uR : uL;
+        const v = (b * P + i) * 2 + e;
+        const wx = path.px[i] + rx[i] * u, wz = path.pz[i] + rz[i] * u;
+        pos[v * 3] = wx;
+        pos[v * 3 + 1] = ys[i] + (isRail ? 0.04 : 0);
+        pos[v * 3 + 2] = wz;
+        col[v * 4] = c[0]; col[v * 4 + 1] = c[1]; col[v * 4 + 2] = c[2]; col[v * 4 + 3] = 255;
+        nrm[v * 4] = nx[i] * 127; nrm[v * 4 + 1] = ny[i] * 127; nrm[v * 4 + 2] = nz[i] * 127;
+      }
+    }
+    for (let i = 0; i < P; i++) {
+      const j = (i + 1) % P;
+      const a = (b * P + i) * 2, d = (b * P + j) * 2;
+      idx[o++] = a; idx[o++] = a + 1; idx[o++] = d + 1;
+      idx[o++] = a; idx[o++] = d + 1; idx[o++] = d;
+    }
+  }
+  return { pos, col, nrm, idx, count: idx.length };
+}
+
 // --- colour --------------------------------------------------------------
 
-function tileColor(q, x, y, volcanic, isTrack, out) {
+function tileColor(q, x, y, volcanic, out) {
   let r, g, b;
-  if (isTrack) {
-    r = 96; g = 72; b = 52;
-  } else if (q < 0) {
+  if (q < 0) {
     const d = Math.min(1, -q / 4);
     r = 26 + 24 * (1 - d); g = 64 + 56 * (1 - d); b = 132 + 74 * (1 - d);
   } else if (q === 0) {
@@ -230,7 +319,7 @@ function tileColor(q, x, y, volcanic, isTrack, out) {
 // An indexed grid over the (N+1)^2 corners. Corner height, colour and normal are
 // all averaged from the cells that touch the corner, so the surface, the shading
 // and the biome edges are continuous -- no walls, no stair-steps, no facets.
-function buildMesh(N, band, height, volcanic, track) {
+function buildMesh(N, band, height, volcanic) {
   const S = N + 1;
   const cornerH = new Float32Array(S * S);
   for (let z = 0; z <= N; z++) {
@@ -267,7 +356,7 @@ function buildMesh(N, band, height, volcanic, track) {
           const cx = x + dx, cz = z + dz;
           if (cx < 0 || cz < 0 || cx >= N || cz >= N) continue;
           const k = cz * N + cx;
-          tileColor(band[k], cx, cz, volcanic[k], track[k], rgb);
+          tileColor(band[k], cx, cz, volcanic[k], rgb);
           acc[0] += rgb[0]; acc[1] += rgb[1]; acc[2] += rgb[2];
           n++;
         }
@@ -311,15 +400,19 @@ export function buildWorld(seed, cfg) {
   const height = smoothHeight(band, N, cfg.terrainSmooth);
   addDetail(seed, N, height, cfg.terrainDetail);
   const track = carve(N, height, path);
-  const mesh = buildMesh(N, band, height, volcanic, track);
-  return { N, band, elev: band, height, volcanic, track, path, mesh, points: PATH_POINTS };
+  const mesh = buildMesh(N, band, height, volcanic);
+  const trackMesh = buildTrackMesh(path, mesh, N);
+  return { N, band, elev: band, height, volcanic, track, path, mesh, trackMesh, points: PATH_POINTS };
 }
 
-// Ground height in world units, bilinear over the corner grid so unicorns and
-// the cart sit exactly on the rendered surface.
+// Ground height in world units, bilinear over the corner grid so unicorns, the
+// cart and the track ribbon all sit exactly on the rendered surface.
 export function elevAt(world, x, z) {
-  const { S, cornerH } = world.mesh;
-  const N = world.N;
+  return sampleH(world.mesh, world.N, x, z);
+}
+
+function sampleH(mesh, N, x, z) {
+  const { S, cornerH } = mesh;
   const fx = x < 0 ? 0 : x > N ? N : x;
   const fz = z < 0 ? 0 : z > N ? N : z;
   const x0 = Math.min(N - 1, fx | 0), z0 = Math.min(N - 1, fz | 0);

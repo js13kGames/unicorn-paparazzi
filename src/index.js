@@ -1,4 +1,4 @@
-import { buildWorld, pathAt } from './terrain.js';
+import { buildWorld, pathAt, elevAt } from './terrain.js';
 import { createRenderer } from './render.js';
 import { spawn, updateHerd, packInstances } from './unicorn.js';
 
@@ -7,7 +7,7 @@ export const CONFIG = {
   plainStickiness: 0.75,
   terrainSmooth: 2,      // [1,2,1] blur passes turning bands into slopes
   terrainDetail: 0.35,   // fine relief added back after blurring, in bands
-  unicornDensity: 0.01,
+  unicornDensity: 0.003,
   adultChance: 0.75,
   driftChance: 0.08,      // chance a unicorn wears an off-biome colour
   poseWeights: [0.80, 0.10, 0.08, 0.02],
@@ -73,7 +73,8 @@ function frame(now) {
   const lap = distance / world.path.length;
   const p = pathAt(world.path, distance);
   cam.x = p.x;
-  cam.y = p.y + CONFIG.eyeHeight;
+  // Ride the rendered surface, not the path's own height estimate.
+  cam.y = elevAt(world, p.x, p.z) + CONFIG.eyeHeight;
   cam.z = p.z;
 
   renderer.draw(cam, fovy);
