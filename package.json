@@ -1,19 +1,21 @@
 {
-  "name": "chromazoa",
+  "name": "unicorn-snap",
   "version": "1.0.0",
-  "description": "js13k 2026 entry - breed and grow robots from RGB genetic code",
+  "description": "js13k 2026 entry - photograph wild unicorns from a cart on rails",
   "private": true,
   "scripts": {
-    "build-prod": "webpack --mode=production",
+    "build-prod": "webpack --mode=production && node build/pack.mjs",
     "build-dev": "webpack --mode=development",
     "build-watch": "webpack --mode=development --watch",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pack": "node build/pack.mjs",
+    "smoke": "node build/smoke.mjs"
   },
   "keywords": [
     "js13k",
     "game",
-    "genetics",
-    "canvas"
+    "webgl",
+    "photography"
   ],
   "author": "thbrown",
   "license": "ISC",
@@ -22,9 +24,9 @@
     "copy-webpack-plugin": "^13.0.1",
     "html-minimizer-webpack-plugin": "^5.0.0",
     "html-webpack-plugin": "^5.5.0",
+    "roadroller": "^2.1.0",
     "terser-webpack-plugin": "^5.3.6",
     "webpack": "^5.74.0",
-    "webpack-cli": "^4.10.0",
-    "zip-webpack-plugin": "^4.0.1"
+    "webpack-cli": "^4.10.0"
   }
 }

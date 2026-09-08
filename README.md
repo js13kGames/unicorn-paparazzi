@@ -1,63 +1,91 @@
-## Chromazoa — js13k 2026
+## Unicorn Snap — js13k 2026
 
 Theme: **Rainbows and Unicorns**.
 
-Breed and grow robots from a DNA-like genetic code. Three bases — `R`, `G`, `B` — are read
-three at a time. Each codon expresses one block of the robot's body.
+A cart carries you once around a rail loop through a procedurally generated
+island. You can look anywhere you like but you cannot stop, you have a fixed
+roll of film, and the herds do not wait. Photograph them; the photographs are
+scored; the points buy better glass.
 
-### The genetic code
+Get all six unicorn colours into one frame and you win.
 
-A codon's colour is the count of each letter mapped through `[0, 64, 128, 255]`:
+### How it is put together
 
-| codon | rgb |
+Everything is raw WebGL2 — no framework. The whole world is derived from one
+seed, so the same seed builds the same island on any machine.
+
+| file | |
 | --- | --- |
-| `RRR` | 255, 0, 0 |
-| `RBB` | 64, 0, 128 |
-| `RBG` | 64, 64, 64 |
+| `src/rng.js` | seeded PRNG and value-noise fBm |
+| `src/mat.js` | perspective, multiply, yaw/pitch view matrix |
+| `src/gl.js` | context, program + uniform cache, VAO and data-texture helpers |
+| `src/terrain.js` | elevation bands, biomes, track path, carve, meshes |
+| `src/unicorn.js` | box model, pose table, spawning, herd simulation |
+| `src/render.js` | terrain, track and instanced herd; shared ID pass |
+| `src/photo.js` | shutter: thumbnail + ID-buffer readback |
+| `src/score.js` | the scoring rubric |
+| `src/ui.js` | HUD, viewfinder, review screens |
+| `src/index.js` | `CONFIG`, state machine, main loop |
 
-The six codons that contain one of each letter (`RGB` `RBG` `GRB` `GBR` `BRG` `BGR`) are
-therefore all grey. Grey means "no colour", so those six are the control ops rather than
-blocks. That leaves exactly 21 functional blocks.
+**Terrain** is two fields. `band` holds quantised integer elevations and decides
+colour, biome and which unicorn colour lives where. A separate `height` field is
+that same band blurred, with a fine noise layer added back, and it drives the
+geometry — so the ground rolls while the biomes stay put. The mesh is an indexed
+grid over the `(N+1)²` corners with analytic normals, which is why there are no
+stair-steps and no walls.
 
-```
-RGB  STOP        end this branch
-RBG  PUSH        save position + heading, start a side branch
-GRB  POP         return to the last PUSH
-GBR  TURN LEFT
-BRG  TURN RIGHT
-BGR  NOP
-```
+**The track** is its own ribbon mesh generated from the path polyline rather than
+painted onto the terrain grid, because shared grid vertices can only ever give a
+blurred edge. Each cross-section sits at the highest ground beneath the full
+width of the bed, so it never gets pierced on a grade.
 
-Growth is a turtle on a square grid. The read head is an anchor — the last block placed —
-plus a heading; a functional codon lays its block in the cell next to the anchor. So a turn
-pivots around the last block and takes effect immediately, which is what lets a branch leave
-the trunk in a different direction instead of fighting it for the same cell. Growing into an
-occupied cell kills that branch.
+**Unicorns** are one instanced draw call. Every vertex names the body part it
+belongs to; the four poses × 16 animation frames are baked into a lookup texture
+of part matrices, so animating the whole herd costs one float per animal.
 
-Because the genome is read in fixed groups of three, an inserted or deleted base is a
-**frameshift** — every codon downstream changes, and the robot is reborn as something else
-entirely.
+**Scoring** works off an ID pass. After the shutter, the scene is drawn again
+into a small offscreen buffer with each unicorn in a flat colour keyed to its
+instance id. One `readPixels` gives every term in the rubric at once — who is in
+frame, how much of it each fills, who is clipped by an edge, and where each sits
+— with occlusion handled for free by the depth buffer.
 
-## Prerequisites
+### Prerequisites
 
-1. install node
-2. install npm
+Node and npm.
 
-## To run
+### To run
 
 ```
 npm install
 npm run build-dev
 ```
 
-Then open `./docs/index.html` in your browser.
+Then serve `docs/` and open `index.html` (a plain `file://` open works too).
 
-## Other scripts
+### To build the submission
 
 ```
-  "build-prod": "webpack --mode=production",
+npm run build-prod
+```
+
+This minifies with Terser, compresses the bundle with
+[Roadroller](https://github.com/lifthrasiir/roadroller), inlines the result into
+a single self-contained page at `docs/dist/index.html`, and writes the archive to
+`docs/game.zip`. The build prints the size against the 13,312-byte budget and
+fails if it goes over.
+
+Roadroller re-serialises JavaScript rather than round-tripping it byte for byte,
+so `build/pack.mjs` decodes its own output and compares it to the bundle through
+Terser's printer. A corrupted payload or a mis-parse fails the build rather than
+shipping.
+
+### Other scripts
+
+```
   "build-dev": "webpack --mode=development",
-  "build-watch": "webpack --mode=development --watch"
+  "build-watch": "webpack --mode=development --watch",
+  "pack": "node build/pack.mjs"
 ```
 
-`node generate-icons.js` regenerates the PWA icons (needs the native `canvas` package).
+`node generate-icons.js` regenerates the PWA icons (needs the native `canvas`
+package).

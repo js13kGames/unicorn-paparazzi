@@ -1,5 +1,4 @@
 const path = require("path");
-const ZipPlugin = require("zip-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const HtmlMinimizerPlugin = require('html-minimizer-webpack-plugin');
@@ -13,10 +12,6 @@ module.exports = {
   },
   watch: process.argv.indexOf("--watch") > -1,
   plugins: [
-    // Only what the judged archive needs: index.html at the top level + the bundle.
-    new ZipPlugin({
-      include: [/^main\.js$/, /^index\.html$/],
-    }),
     new HtmlWebpackPlugin({
       template: "./index.html",
     }),
@@ -33,14 +28,21 @@ module.exports = {
     minimize: true,
     minimizer: [
       new TerserPlugin({
-        extractComments: true,
+        extractComments: false,
         terserOptions: {
-          output: {
-            comments: false,
-          },
+          ecma: 2020,
+          output: { comments: false },
           compress: {
-            drop_console: true
-          }
+            drop_console: true,
+            passes: 4,
+            unsafe: true,
+            unsafe_arrows: true,
+            unsafe_math: true,
+            unsafe_methods: true,
+            booleans_as_integers: true,
+            pure_getters: true,
+          },
+          mangle: { toplevel: true },
         },
       }),
       new HtmlMinimizerPlugin(),

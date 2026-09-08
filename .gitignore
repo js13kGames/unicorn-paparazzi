@@ -1,3 +1,4 @@
 .DS_Store
 node_modules
-docs/main.js.zip
+docs/game.zip
+docs/dist

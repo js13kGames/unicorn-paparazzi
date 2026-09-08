@@ -178,8 +178,11 @@ export function createRenderer(canvas, world, herd) {
   const poseTex = dataTexture(gl, PARTS * 4, POSE_ROWS, buildPoseTable());
   const palette = new Float32Array(COLORS.flat());
 
-  function draw(cam, fovy, idPass) {
-    const w = canvas.width, h = canvas.height;
+  // w/h default to the canvas, but the photo rig renders the ID pass into a
+  // small offscreen buffer at the same aspect, so it must pass its own.
+  function draw(cam, fovy, idPass, w, h) {
+    w = w || canvas.width;
+    h = h || canvas.height;
     gl.viewport(0, 0, w, h);
     gl.clearColor(idPass ? 0 : SKY[0], idPass ? 0 : SKY[1], idPass ? 0 : SKY[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
