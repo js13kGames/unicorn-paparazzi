@@ -1,5 +1,5 @@
 {
-  "name": "unicorn-snap",
+  "name": "unicorn-safari",
   "version": "1.0.0",
   "description": "js13k 2026 entry - photograph wild unicorns from a cart on rails",
   "private": true,
@@ -7,7 +7,7 @@
     "build-prod": "webpack --mode=production && node build/check-shaders.mjs && RR_LEVEL=2 node build/pack.mjs",
     "build-dev": "webpack --mode=development",
     "build-watch": "webpack --mode=development --watch",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test/run.mjs",
     "pack": "node build/pack.mjs",
     "smoke": "node build/smoke.mjs",
     "check-shaders": "node build/check-shaders.mjs"
