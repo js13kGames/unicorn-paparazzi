@@ -40,7 +40,7 @@ const SKELETON = [
   [BODY,  0.20, -0.24,  0.42],  // back right leg
 ];
 
-// Colour roles: 0 coat, 1 mane/tail, 2 horn, 3 hoof/muzzle.
+// Colour roles: 0 coat, 1 mane/tail, 2 horn, 3 hoof/muzzle, 4-6 extra horns.
 //        part,  cx,    cy,    cz,   hx,    hy,    hz,   taper, role
 const BOXES = [
   [BODY,    0,  0.00,  0.00, 0.30,  0.28,  0.62,  1.00, 0],
@@ -48,6 +48,9 @@ const BOXES = [
   [HEAD,    0,  0.03, -0.20, 0.13,  0.15,  0.28,  1.00, 0],
   [HEAD,    0, -0.02, -0.44, 0.10,  0.10,  0.10,  1.00, 3],
   [HORN,    0,  0.18,  0.00, 0.05,  0.20,  0.05,  0.10, 2],
+  [HORN, -0.08,  0.15,  0.05, 0.04,  0.16,  0.04,  0.10, 4],
+  [HORN,  0.08,  0.15,  0.05, 0.04,  0.16,  0.04,  0.10, 5],
+  [HORN,     0,  0.14,  0.11, 0.04,  0.14,  0.04,  0.10, 6],
   [MANE,    0,  0.30,  0.06, 0.09,  0.34,  0.08,  0.70, 1],
   [TAIL,    0, -0.22,  0.06, 0.07,  0.26,  0.07,  0.60, 1],
 ];
@@ -188,7 +191,7 @@ function colorForBand(q, volcanic) {
 export function spawn(world, cfg, seed) {
   const rnd = mulberry32(seed ^ 0x13c9);
   const N = world.N;
-  const list = { x: [], z: [], color: [], adult: [] };
+  const list = { x: [], z: [], color: [], horns: [] };
   for (let z = 0; z < N; z++) {
     for (let x = 0; x < N; x++) {
       const i = z * N + x;
@@ -204,7 +207,10 @@ export function spawn(world, cfg, seed) {
       list.x.push(x + 0.5);
       list.z.push(z + 0.5);
       list.color.push(color);
-      list.adult.push(rnd() < cfg.adultChance ? 1 : 0);
+      // Bicorn 1%, tricorn 0.5%, quadricorn 0.25% -- about a dozen, three and
+      // one per map. Rare enough to be worth hunting for.
+      const r = rnd();
+      list.horns.push(r < 0.0025 ? 3 : r < 0.0075 ? 2 : r < 0.0175 ? 1 : 0);
     }
   }
   return makeHerd(list, cfg, seed);
@@ -229,7 +235,7 @@ function makeHerd(list, cfg, seed) {
     step: new Float32Array(n),          // progress through the current step
     yaw: new Float32Array(n),
     color: Uint8Array.from(list.color),
-    adult: Uint8Array.from(list.adult),
+    horns: Uint8Array.from(list.horns),
     pose: new Uint8Array(n),
     phase: new Float32Array(n),
     hold: new Float32Array(n),
@@ -255,7 +261,22 @@ function rollPose(r, weights) {
   return 0;
 }
 
-export function updateHerd(h, world, cfg, dt) {
+// Lures gather every colour; they differ only in reach. The strong one has to
+// stay wide: at the weak radius only about five unicorns are in range, so six
+// distinct colours in one frame is arithmetically impossible and the rainbow win
+// would be unreachable.
+function lureFor(lures, x, z, cfg) {
+  let best = null, bd = Infinity;
+  for (const l of lures) {
+    if (l.flying) continue;              // still in the air, not yet working
+    const r = l.strong ? cfg.strongRadius : cfg.weakRadius;
+    const d = (l.x - x) * (l.x - x) + (l.z - z) * (l.z - z);
+    if (d < r * r && d < bd) { bd = d; best = l; }
+  }
+  return best;
+}
+
+export function updateHerd(h, world, cfg, dt, lures) {
   const rnd = h.rnd;
   const N = world.N;
   for (let i = 0; i < h.n; i++) {
@@ -269,13 +290,33 @@ export function updateHerd(h, world, cfg, dt) {
 
     // Only a standing unicorn wanders; the other poses are stationary.
     if (h.pose[i] === 0) {
-      h.step[i] += dt / STEP_TIME;
+      // Resolved once per frame rather than per step: it sets the pace as well
+      // as the direction, and a unicorn answering a lure moves at a canter. At
+      // walking pace nothing on the far edge of a rainbow lure could ever arrive
+      // before the lure burned out.
+      const l = lures.length ? lureFor(lures, h.x[i], h.z[i], cfg) : null;
+      // Only a unicorn still travelling counts as lured. One that has arrived
+      // inside the gather radius drops back to a wander -- otherwise it keeps
+      // the canter but picks random directions, and promptly flings itself back
+      // out of the group it just joined.
+      let pull = null;
+      if (l) {
+        const ax = l.x - h.x[i], az = l.z - h.z[i];
+        if (ax * ax + az * az > cfg.lureGather * cfg.lureGather) pull = l;
+      }
+      h.step[i] += (dt * (pull ? cfg.lureSpeed : 1)) / STEP_TIME;
       while (h.step[i] >= 1) {
         h.step[i] -= 1;
         h.fromX[i] = h.toX[i];
         h.fromZ[i] = h.toZ[i];
         // One tile up, down or sideways -- the same +1/0/-1 walk the terrain uses.
-        const dx = ((rnd() * 3) | 0) - 1, dz = ((rnd() * 3) | 0) - 1;
+        let dx = ((rnd() * 3) | 0) - 1, dz = ((rnd() * 3) | 0) - 1;
+        // Mostly, but not always -- a herd that beelines in lockstep looks wrong,
+        // and the stragglers are what make a lured group photograph well.
+        if (pull && rnd() < cfg.lurePull) {
+          dx = Math.sign(pull.x - h.toX[i]);
+          dz = Math.sign(pull.z - h.toZ[i]);
+        }
         const nx = h.toX[i] + dx, nz = h.toZ[i] + dz;
         const gi = (nz | 0) * N + (nx | 0);
         const ok = nx > 1 && nz > 1 && nx < N - 1 && nz < N - 1 && world.elev[gi] >= 0;
@@ -300,15 +341,14 @@ export function packInstances(h, world) {
   const a = h.instances;
   for (let i = 0; i < h.n; i++) {
     const o = i * 8;
-    const scale = h.adult[i] ? 1 : 0.6;
     a[o] = h.x[i];
     a[o + 1] = elevAt(world, h.x[i], h.z[i]);
     a[o + 2] = h.z[i];
     a[o + 3] = h.yaw[i];
-    a[o + 4] = scale;
+    a[o + 4] = 1;
     a[o + 5] = h.color[i];
     a[o + 6] = h.pose[i] * POSE_FRAMES + ((h.phase[i] * POSE_FRAMES) | 0);
-    a[o + 7] = 0;
+    a[o + 7] = h.horns[i];
   }
   return a;
 }

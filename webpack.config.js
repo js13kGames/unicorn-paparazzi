@@ -11,6 +11,14 @@ module.exports = {
     path: path.resolve(__dirname, "docs"),
   },
   watch: process.argv.indexOf("--watch") > -1,
+  module: {
+    rules: [
+      {
+        test: /render\.js$/,
+        use: path.resolve(__dirname, "build/glsl-loader.cjs"),
+      },
+    ],
+  },
   plugins: [
     new HtmlWebpackPlugin({
       template: "./index.html",

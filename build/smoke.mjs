@@ -11,6 +11,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const page = fs.readFileSync(path.join(__dirname, '..', 'docs', 'dist', 'index.html'), 'utf8');
 const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
 
+// The page now builds its own DOM: the bootstrap injects the CSS and markup
+// before the bundle runs. So getElementById only answers for ids the bootstrap
+// actually created -- otherwise this test would pass even with a broken fold.
+const injected = new Set();
+const missing = new Set();
 const touched = new Set();
 const node = (id) => ({
   id, style: {}, className: '', textContent: '', innerHTML: '', width: 0, height: 0,
@@ -26,7 +31,18 @@ const sandbox = {
   Math, Date, JSON, Map, Set, Promise, Uint8Array, Uint16Array, Uint32Array,
   Int8Array, Float32Array, ArrayBuffer, String, Number, Object, Array, Error,
   document: {
-    getElementById(id) { touched.add(id); return node(id); },
+    head: {
+      insertAdjacentHTML(_, html) { collectIds(html); },
+    },
+    body: {
+      set innerHTML(html) { collectIds(html); },
+      get innerHTML() { return ''; },
+    },
+    getElementById(id) {
+      touched.add(id);
+      if (!injected.has(id)) { missing.add(id); return null; }
+      return node(id);
+    },
     createElement: () => node('created'),
     addEventListener() {},
     exitPointerLock() {},
@@ -40,6 +56,10 @@ const sandbox = {
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 
+function collectIds(html) {
+  for (const m of String(html).matchAll(/id=["']?([\w-]+)/g)) injected.add(m[1]);
+}
+
 let err = null;
 const t0 = Date.now();
 try {
@@ -49,8 +69,19 @@ try {
 }
 const ms = Date.now() - t0;
 
-console.log('  elements resolved: ' + [...touched].sort().join(', '));
+console.log('  ids injected by the bootstrap: ' + [...injected].sort().join(', '));
+console.log('  ids looked up by the game:   ' + [...touched].sort().join(', '));
 console.log('  load time (decode + worldgen, no GL): ' + ms + 'ms');
+
+if (missing.size) {
+  console.error('\n  MISSING: the game asked for ' + [...missing].sort().join(', ') +
+    ' but the bootstrap never created ' + (missing.size > 1 ? 'them' : 'it'));
+  process.exit(1);
+}
+if (!injected.size) {
+  console.error('\n  MISSING: the bootstrap injected no markup at all');
+  process.exit(1);
+}
 
 if (err && /WebGL2 required/.test(err.message)) {
   console.log('  reached the WebGL2 context call — everything before it ran clean');

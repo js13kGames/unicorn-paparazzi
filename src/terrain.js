@@ -193,7 +193,13 @@ function carve(N, height, path) {
     }
   }
   for (let k = 0; k < N * N; k++) {
-    if (weight[k] > 0) height[k] += (target[k] - height[k]) * weight[k];
+    if (weight[k] <= 0) continue;
+    // Sea floor is never touched. Grading it up to meet the rails built a mound
+    // out of the bay, and the raised cells kept their water colouring, so the
+    // crossing appeared to stand on blue supports. The track simply spans open
+    // water instead.
+    if (height[k] < 0) continue;
+    height[k] += (target[k] - height[k]) * weight[k];
   }
   return track;
 }
@@ -213,7 +219,7 @@ const BANDS = [
   [0.85, 1.05, 1], [1.05, 1.50, 0],
 ];
 
-export function buildTrackMesh(path, mesh, N) {
+function buildTrackMesh(path, mesh, N) {
   const P = PATH_POINTS, nb = BANDS.length;
   const verts = nb * P * 2;
   const pos = new Float32Array(verts * 3);
@@ -248,7 +254,9 @@ export function buildTrackMesh(path, mesh, N) {
   const y = new Float32Array(P);
   const SAMPLES = 13;
   for (let i = 0; i < P; i++) {
-    let hi = -1e9;
+    // Never below the smoothed grade: over water there is no ground under the
+    // bed at all, and the span has to hold its line.
+    let hi = path.h[i] * HEIGHT;
     for (let k = 0; k < SAMPLES; k++) {
       const u = -HALF_W + (2 * HALF_W * k) / (SAMPLES - 1);
       const h = sampleH(mesh, N, path.px[i] + rx[i] * u, path.pz[i] + rz[i] * u);
@@ -402,7 +410,7 @@ export function buildWorld(seed, cfg) {
   const track = carve(N, height, path);
   const mesh = buildMesh(N, band, height, volcanic);
   const trackMesh = buildTrackMesh(path, mesh, N);
-  return { N, band, elev: band, height, volcanic, track, path, mesh, trackMesh, points: PATH_POINTS };
+  return { N, elev: band, volcanic, track, path, mesh, trackMesh };
 }
 
 // Ground height in world units, bilinear over the corner grid so unicorns, the
