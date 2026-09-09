@@ -91,7 +91,10 @@ const state = {
 
 // A multiplayer lap is settled by photography, not by who has ridden more laps,
 // so it ignores the save entirely and everyone rides the same loadout. Tune here.
-const MP_GEAR = { maxZoom: 2, res: 1, filmTier: 1, shutterTier: 1 };
+// The top camera, because a match is settled by looking at the photographs and
+// tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
+// only makes the pictures sharp and the numbers bigger.
+const MP_GEAR = { maxZoom: 2, res: 3, filmTier: 1, shutterTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`

@@ -63,7 +63,8 @@
     h1 { font: 700 44px serif; margin: 0 0 10px }
     #card.t h1 { font-size: 6em; animation: w 1s infinite }
     @keyframes w { 50% { transform: translateY(-20px) } }
-    h2 { font-size: 14px; margin: 0 0 12px; font-weight: 400; color: #9fb6cc }
+    /* Top margin so stacked result cards do not run into each other. */
+    h2 { font-size: 14px; margin: 18px 0 12px; font-weight: 400; color: #9fb6cc }
     h1, h2 { text-align: center }
     #card img { width: 100%; display: block; margin-bottom: 12px; background: #000 }
     table { width: 100%; border-collapse: collapse; font-size: 12px }

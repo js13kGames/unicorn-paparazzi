@@ -18,9 +18,10 @@ const ID_W = 384, ID_H = 216;
 // megabytes. The film roll and results list scale the same image down in CSS, so
 // one canvas serves the preview and the saved file.
 const THUMB_H = 900;
-// What goes over the relay: small enough that a rival's shot is a few kilobytes,
-// big enough to see what they photographed.
-const WIRE_H = 180;
+// What goes over the relay. The results screen shows a rival's shot at card
+// width, so 320x180 was being upscaled 2x and looked it. Measured at ~24KB of
+// base64 at this size and quality, against a relay verified to pass 128KB.
+const WIRE_H = 540;
 
 // How much of the screen the frame takes. One value for every camera: it used to
 // climb with the sensor tier and reached the whole screen at the top, which left
@@ -85,7 +86,7 @@ export function createPhotoRig(gl, canvas, draw) {
                    0, 0, thumb.width, thumb.height);
     const url = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
     wctx.drawImage(thumb, 0, 0, wire.width, wire.height);
-    const small = wire.toDataURL('image/jpeg', 0.5);
+    const small = wire.toDataURL('image/jpeg', 0.8);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     draw(cam, fovy, true, ID_W, ID_H);

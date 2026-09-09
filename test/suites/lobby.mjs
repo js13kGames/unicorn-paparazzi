@@ -128,9 +128,12 @@ check('their photograph is the card, not a thumbnail',
       card(), (h) => h.includes('<img src="r.jpg"'));
 check('and their breakdown came off the wire with them',
       card(), (h) => h.includes('coral') && h.includes('900'));
-check('the loser is listed underneath', card(), (h) => h.includes('<b>you</b>'));
-check('and the winner is not listed twice',
-      card().split('rider bbbb').length - 1, 1);
+// Second place is a full card too, not a thumbnail and a number.
+check('the runner-up gets a card of their own, ranked',
+      card(), (h) => h.includes('<h2>2. you</h2>'));
+check('with their own photograph on it', card(), (h) => h.includes('<img src="hi.jpg">'));
+check('and their own breakdown under it', card(), (h) => h.includes('+400'));
+check('nobody is listed twice', card().split('rider bbbb').length - 1, 1);
 
 // --- you won ---
 results([{ i: 'bbbb2222', n: 100, p: 'r.jpg', b: [] }], 0);
@@ -149,11 +152,16 @@ check('while a subject header is ruled off instead',
 
 // --- your roll, on the same screen ---
 results([{ i: 'bbbb2222', n: 100, p: 'r.jpg', b: [] }], 0, 1);
-check('My photos swaps the winner for your roll',
+check('My Photos swaps the cards for your roll',
       card(), (h) => h.includes('data-i="0"') && h.includes('data-i="1"') && !h.includes('winner'));
-check('and the button turns into the way back', card(), (h) => h.includes('>Result<'));
-check('the standings still show, now including you',
-      card(), (h) => h.includes('rider bbbb') && h.includes('<b>you</b>'));
+check('and it is titled after the button that opened it',
+      card(), (h) => h.includes('<h1>My Photos</h1>'));
+check('the button turns into the way back', card(), (h) => h.includes('>Results<'));
+// The whole point of the view: yours, and only yours.
+check('and no rival appears on it at all',
+      card(), (h) => !h.includes('rider bbbb') && !h.includes('r.jpg'));
+check('your own roll is best first',
+      card().indexOf('data-i="1"') < card().indexOf('data-i="0"'));
 click('mine');
 check('the toggle reports itself as the -1 pick', picked, -1);
 

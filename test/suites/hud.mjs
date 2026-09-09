@@ -116,7 +116,7 @@ ui.showResults({ bank: 1260 }, scored, 'You completed the lap.',
                (i) => { picked = i; }, () => { shopped = true; });
 const list = nodes.card.innerHTML;
 const order = [...list.matchAll(/data-i="(\d)"/g)].map((m) => +m[1]);
-check('results list is sorted worst to best', order.join(','), '1,2,0');
+check('results list is sorted best to worst', order.join(','), '0,2,1');
 check('results list shows every shot', order.length, scored.length);
 check('a frame with nothing big enough is labelled', list, (s) => s.includes('No clear unicorns'));
 check('bonuses appear in the row summary', list, (s) => s.includes('2 colours'));

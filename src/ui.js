@@ -146,7 +146,7 @@ export function photoCard(url, rows, heading, total) {
 // The breakdown for one of your own shots, reached by clicking a row in the roll.
 export function showPhoto(scored, onBack) {
   panel(
-    '<h1>SCORE</h1>' +
+    '<h1>My Photos</h1>' +
     photoCard(scored.url, scored.b, scored.total + ' points', scored.total) +
     '<p class="hint"><button id="back">Back</button></p>'
   );
@@ -157,12 +157,15 @@ export function showPhoto(scored, onBack) {
 //
 //   solo                  your roll, the bank, and the way to the shop
 //   match, still riding   who is not in yet, and nothing to read
-//   match, everyone in    the winning photograph, then the standings
+//   match, everyone in    every rider's best photograph, ranked
 //
-// `mine` is a sub-view rather than a mode: on a match result it swaps the winner
-// for your own roll, which is the same list solo shows.
+// The two match views are named after the buttons that swap them, so "Results"
+// and "My Photos" each earn their keep twice. `mine` is that swap: a sub-view,
+// not a mode of its own.
 export function showResults(state, scored, reason, onPick, onNext, rivals, waiting, mine) {
-  const order = scored.map((s, i) => i).sort((a, b) => scored[a].total - scored[b].total);
+  // Best first. It used to run worst-first so you ended on your best shot, but
+  // this is a scoreboard now and the interesting one belongs at the top.
+  const order = scored.map((s, i) => i).sort((a, b) => scored[b].total - scored[a].total);
   let rows = '';
   for (const i of order) {
     const s = scored[i];
@@ -177,11 +180,9 @@ export function showResults(state, scored, reason, onPick, onNext, rivals, waiti
 
   // Solo: exactly what it always was.
   if (waiting === undefined) {
-    panel('<h1>SCORE</h1><h2>' + reason + '  ·  bank ' + state.bank + '</h2>' + roll +
+    panel('<h1>My Photos</h1><h2>' + reason + '  ·  bank ' + state.bank + '</h2>' + roll +
           '<p class="hint"><button id="shop">Shop</button> — click a shot</p>');
   } else {
-    // Everyone who rode, best first, with your own lap folded in so the
-    // comparison is on one ladder rather than two.
     // Your own entry has to carry a photograph and a breakdown like everyone
     // else's, or winning would show a blank card. Rivals send their best shot;
     // this picks yours the same way endRun does, but at full thumbnail size
@@ -190,22 +191,18 @@ export function showResults(state, scored, reason, onPick, onNext, rivals, waiti
     const all = [{ i: 'you', n: scored.reduce((a, s) => a + s.total, 0), me: 1,
                    p: best ? best.url : '', b: best ? best.b : [] }, ...rivals];
     all.sort((a, b) => b.n - a.n);
-    const top = all[0];
-    let board = '';
-    for (const r of all.slice(mine ? 0 : 1)) {
-      board += row3('class="rule"', r.p,
-                    r.me ? '<b>you</b>' : '<span class="dim">' + who(r.i) + '</span>', r.n);
-    }
+    let cards = '';
+    all.forEach((r, i) => {
+      cards += photoCard(r.p, r.b, (i ? i + 1 + '. ' : 'winner ') +
+                         (r.me ? 'you' : who(r.i)), r.n);
+    });
     // Both buttons sit on every match screen, the waiting one included. A rider
     // who types the code mid-lap joins the roster and never reports, so `waiting`
     // can stall for good -- nobody may be trapped on a screen with no way out.
     panel(
-      '<h1>SCORE</h1>' +
-      (waiting ? '<h2>waiting for ' + waiting + '</h2>'
-       : (mine ? roll
-          : photoCard(top.p, top.b, 'winner ' + (top.me ? 'you' : who(top.i)), top.n)) +
-         '<table>' + board + '</table>') +
-      '<p class="hint"><button id="mine">' + (mine ? 'Result' : 'Photos') +
+      '<h1>' + (mine ? 'My Photos' : 'Results') + '</h1>' +
+      (waiting ? '<h2>waiting for ' + waiting + '</h2>' : mine ? roll : cards) +
+      '<p class="hint"><button id="mine">' + (mine ? 'Results' : 'My Photos') +
       '</button> <button id="shop">Rematch</button></p>'
     );
   }
