@@ -54,13 +54,16 @@ function loadSave() {
 
 const SAVE_VERSION = 3;
 
+// A multiplayer lap rides borrowed gear, so it must never write gear or bank back
+// into the save. One guard covers every call site.
 function persist() {
+  if (state.mp) return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: SAVE_VERSION,
       t: state.shutterTier,
      
-      g: state.go,
+      g: state.go, c: state.code,
       b: state.bank, z: state.maxZoom, r: state.res, f: state.filmTier,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
@@ -80,9 +83,26 @@ const state = {
   ready: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
   shutterTier: saved.t || 0,
+  code: '',              // the lobby we are in, '' when playing alone
+  host: 0,
   photos: [],
   scored: [],
 };
+
+// A multiplayer lap is settled by photography, not by who has ridden more laps,
+// so it ignores the save entirely and everyone rides the same loadout. Tune here.
+const MP_GEAR = { maxZoom: 2, res: 1, filmTier: 1, shutterTier: 1 };
+
+// The lobby code rode across the reload in the save. Clear the markers first --
+// while persist() still writes the REAL gear, because state.mp is not set yet --
+// so a stray refresh mid-lap drops out of multiplayer instead of re-entering it.
+const mpCode = saved.c || '';
+if (mpCode) {
+  state.go = 0;
+  persist();
+  Object.assign(state, MP_GEAR);
+  state.mp = 1;                    // from here persist() is a no-op
+}
 state.film = CONFIG.filmTiers[state.filmTier];
 
 // Every upgrade is a ladder: the tier values, the price of each step, the state
@@ -162,7 +182,6 @@ function primary() {
     state.mode = 'ride';
     ui.hidePanel();
     ui.setChrome(true);
-    net.go(seed);
     lock();
   } else if (state.mode === 'ride') {
     // Escape releases the pointer but leaves you riding, so a click has to hand
@@ -210,7 +229,9 @@ function takePhoto() {
 function endRun(reason) {
   state.mode = 'results';
   state.endReason = reason;
-  for (const s of state.scored) state.bank += s.total;
+  // Borrowed gear earns no money: a multiplayer lap would otherwise be the
+  // cheapest way to farm the shop.
+  if (!state.mp) for (const s of state.scored) state.bank += s.total;
   persist();
   // One result per rider per lap: the total, and the best single frame.
   let best = 0;
@@ -226,7 +247,13 @@ function endRun(reason) {
 
 function showResults() {
   state.mode = 'results';
-  ui.showResults(state, state.scored, state.endReason, showDetail, showShop, net.others());
+  const rivals = net.others();
+  // Everyone on the roster except the riders who have reported, and except us.
+  // A rider who closes the tab leaves the roster, so this reaches zero and the
+  // crown settles rather than waiting on someone who is never coming back.
+  const waiting = Math.max(0, net.lobby().length - rivals.length - 1);
+  ui.showResults(state, state.scored, state.endReason, showDetail,
+                 state.mp ? home : showShop, rivals, state.mp ? waiting : undefined);
 }
 
 function showDetail(i) {
@@ -236,7 +263,7 @@ function showDetail(i) {
 
 function showShop() {
   state.mode = 'shop';
-  ui.showShop(state, CONFIG, offers(), buy, ride, restart);
+  ui.showShop(state, CONFIG, offers(), buy, ride, restart, lobby);
 }
 
 function buy(i) {
@@ -256,33 +283,74 @@ function buy(i) {
 function ride() {
   state.go = 1;
   persist();
-  // The bare path, not reload(): a seed adopted from the hash must not stick to
-  // every later lap.
-  location.href = location.pathname;
+  home();
 }
+
+// The bare path, not reload(): a seed adopted from the hash must not stick to
+// every later lap, and dropping it is also how a multiplayer lap ends.
+const home = () => { location.href = location.pathname; };
 
 function restart() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* nothing to clear */ }
-  location.href = location.pathname;
+  home();
 }
 
-// Someone else started a lap. Take their seed through the same reload the shop's
-// "Ride again" uses -- the world has to be rebuilt either way, and the hash is
-// what carries the seed across it.
-function join(s) {
-  if (state.mode === 'ride') return;   // never yank a rider mid-lap
+// --- the lobby -----------------------------------------------------------
+
+// Open a room and sit in it. With no code we invent one and are the host; with a
+// code we are joining someone else's, which is also how "join another" hops
+// rooms -- net.connect lets go of the old one for us.
+function lobby(code) {
+  state.mode = 'lobby';
+  state.code = code || '' + (1000 + (Math.random() * 9000 | 0));
+  state.host = code ? 0 : 1;
+  net.connect(state.code, start, refresh);
+  refresh();
+}
+
+// The lap begins with a reload, because the world has to be rebuilt from the new
+// seed either way. The hash carries the seed across it and the save carries the
+// code, so everyone reconnects to the same room on the other side.
+function start(s) {
+  if (state.mode !== 'lobby') return;  // never yank a rider already on the track
   state.go = 1;
   persist();
   location.href = location.pathname + '#' + s;
 }
 
+// The host picks the seed and tells the room before taking it themselves.
+function host() {
+  const s = (Math.random() * 0x7fffffff) | 0;
+  net.go(s);
+  start(s);
+}
+
+// Walking out has to close the socket, or the host keeps counting a ghost.
+function leave() {
+  net.close();
+  state.code = '';
+  title();
+}
+
+function title() {
+  state.mode = 'title';
+  ui.showTitle(primary, lobby);
+}
+
+// Whatever screen is up, redraw it: the roster and the results board both move
+// on their own as riders arrive, finish and leave.
+function refresh() {
+  if (state.mode === 'lobby') {
+    ui.showLobby(state.code, state.host, net.lobby(), net.me(), host, lobby, leave);
+  } else if (state.mode === 'results') showResults();
+}
+
 // --- loop ----------------------------------------------------------------
 
-// A rival's result can land while you are still riding, or while the board is
-// already on screen; re-render in the latter case.
-net.connect(join, () => { if (state.mode === 'results') showResults(); });
-
 ui.setChrome(false);
+// A multiplayer lap rejoins the room its code names, so rivals' results land on
+// the board as they finish -- while you are still riding, or after.
+if (mpCode) net.connect(mpCode, start, refresh);
 // Three ways in. A first run, or one after "Start over" wipes the save, stops on
 // the title. "Ride again" leaves a one-shot marker and reloads to rebuild the
 // world, so it lands straight on the cart -- consuming the marker here means an
@@ -290,7 +358,7 @@ ui.setChrome(false);
 // a stray reload mid-lap costs the lap but not the bank.
 if (saved.g) { state.go = 0; persist(); primary(); ui.toast('click to look'); }
 else if (saved.v) showShop();
-else ui.showTitle();
+else title();
 
 // The simulation advances in whole steps of this and never in wall-clock time.
 // updateHerd draws from one RNG stream shared by the whole herd, from inside

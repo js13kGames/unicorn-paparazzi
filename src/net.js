@@ -1,67 +1,106 @@
-// The js13k relay is a dumb broadcast: one room per entry (the URL path), every
-// message reaches everyone else but never the sender, no server logic and no
-// authority. So this module is small on purpose -- two messages, trusting nothing.
+// The js13k relay hands any URL path its own isolated room, which is what makes a
+// join code cheap: the code IS the room, so nothing has to filter a shared
+// firehose and presence is per-lobby for free. Single player never connects.
 //
-//   {t:'g', s:seed}                  someone started a lap
-//   {t:'d', i:id, n:score, p:shot}   someone finished one
+//   {t:'h', i:id}                    I just arrived -- who is here?
+//   {t:'h', i:id, r:1}               a reply to that; r stops it echoing forever
+//   {t:'g', s:seed}                  the host started the lap
+//   {t:'d', i:id, n:score, p:shot}   someone finished it
 //
-// The relay interleaves its own control frames, which are bare strings rather than
-// JSON: '@id' is the id it gave us, '+id' a rider arriving, '-id' one leaving. Only
-// the last matters to us, and JSON.parse rejects the rest for free.
+// The relay interleaves its own control frames, which are bare strings rather
+// than JSON: '@id' is the id it gave us, '+id' a rider arriving, '-id' one
+// leaving. We act on the first and the last. '+id' is redundant -- an arriving
+// rider says hello for itself -- and JSON.parse drops it for free.
 //
 // Everything here is optional by construction. If the socket never opens, or the
-// relay is down, or we are offline, the game plays exactly as it did before: every
-// send is guarded and no failure path reaches the frame loop.
+// relay is down, or we are offline, the lobby simply stays empty: every send is
+// guarded and no failure path reaches the frame loop.
 
-// The relay room js13kgames issues per entry. Everyone who loads the page joins it.
-// Local play uses test/tools/relay.mjs instead -- see connect().
+// The room prefix js13kgames issued. A lobby appends '-' and its four digits.
 const RELAY = 'wss://relay.js13kgames.com/unicorn-paparazzi';
 
-// Our own id, so we can ignore our own traffic and so a '-id' frame names a rider
-// we actually have a row for. The relay hands us one on connect; until it does we
-// use a random stand-in, which is also what the local relay tool leaves us with.
+// Our own id. The relay issues one on connect; the random stand-in only matters
+// until that lands, and is what the local relay tool leaves us with.
 let ME = Math.random().toString(36).slice(2, 6);
 
+// Ids are strangers' text, so one length cap, applied everywhere an id enters --
+// otherwise the roster and the results board could disagree about who someone is.
+const key = (s) => s.slice(0, 8);
+
 let ws = null;
-const riders = new Map();          // id -> {n, p}, one entry per rider per lap
+const riders = new Map();          // id -> {n, p}, one result per rider per lap
+const here = new Set();            // everyone in the lobby, us included
 
 export const online = () => !!ws && ws.readyState === 1;
 export const others = () => [...riders].map(([i, r]) => ({ i, ...r }));
+export const lobby = () => [...here];
+export const me = () => key(ME);
 
-// onGo(seed) fires when someone else starts a lap; the caller decides whether to
-// adopt it, because only an idle player should be pulled into a new seed.
-// onDone() fires when a rival's result lands, so a visible scoreboard can refresh.
-export function connect(onGo, onDone) {
+// onGo(seed) fires when the host starts the lap. onChange() fires whenever the
+// roster or the results board moves, so whichever screen is up can redraw.
+export function connect(code, onGo, onChange) {
+  // Hopping to another code is a second connect, so the old room has to be let
+  // go of first -- otherwise you would still be broadcasting into a lobby you
+  // left, and still counting its riders as your own.
+  close();
   try {
-    // Served from a file or localhost: talk to test/tools/relay.mjs instead.
-    const url = /^(localhost|127|\[?::1)/.test(location.hostname)
-      ? 'ws://localhost:1313' : RELAY;
+    // Served from localhost: talk to test/tools/relay.mjs, which rooms by path
+    // the same way the real relay does.
+    const url = (/^(localhost|127|\[?::1)/.test(location.hostname)
+      ? 'ws://localhost:1313/' : RELAY + '-') + code;
     ws = new WebSocket(url);
   } catch (e) {
-    return;                        // no socket, no multiplayer, still a game
+    return;                        // no socket, no lobby, still a game
   }
   ws.onmessage = (e) => {
-    // Anything on the wire is a stranger's text. Parse defensively and check the
-    // shape before use -- a malformed payload must not throw inside a frame.
-    // The relay's control frames come first: it names us, and it tells us when a
-    // rider leaves so their row can come off the board. '+id' needs nothing -- an
-    // arriving rider has no score yet -- and falls through to the parse below.
-    if (e.data[0] === '@') { ME = e.data.slice(1); return; }
-    if (e.data[0] === '-') { if (riders.delete(e.data.slice(1, 9))) onDone(); return; }
+    // The relay names us before anything else arrives, so this is the earliest
+    // point at which we can say hello AS someone -- saying it on open would sign
+    // the message with the stand-in id, and then '-id' would name a rider the
+    // roster has no row for.
+    if (e.data[0] === '@') {
+      ME = e.data.slice(1);
+      here.add(key(ME));
+      send({ t: 'h', i: ME });
+      return onChange();
+    }
+    // A rider who leaves takes their roster row and their result with them.
+    if (e.data[0] === '-') {
+      const i = key(e.data.slice(1));
+      if (here.delete(i) | riders.delete(i)) onChange();
+      return;
+    }
+    // Anything else is a stranger's text. Parse defensively and check the shape
+    // before use -- a malformed payload must not throw inside a frame.
     let m;
     try { m = JSON.parse(e.data); } catch (err) { return; }
     if (!m || m.i === ME) return;
-    if (m.t === 'g' && typeof m.s === 'number') onGo(m.s | 0);
-    else if (m.t === 'd' && typeof m.i === 'string' && typeof m.n === 'number') {
-      riders.set(m.i.slice(0, 8), {
+    if (m.t === 'g' && typeof m.s === 'number') return onGo(m.s | 0);
+    if (typeof m.i !== 'string') return;
+    if (m.t === 'h') {
+      here.add(key(m.i));
+      // Answer an arrival so it learns about us, but never answer an answer.
+      if (!m.r) send({ t: 'h', i: ME, r: 1 });
+    } else if (m.t === 'd' && typeof m.n === 'number') {
+      const i = key(m.i);
+      here.add(i);                 // a result is proof of presence
+      riders.set(i, {
         n: Math.max(0, m.n | 0),
         // A data: URL and nothing else, so a hostile payload cannot become markup
         // or point the browser at someone else's server.
         p: typeof m.p === 'string' && /^data:image\/jpeg;base64,[\w+/=]+$/.test(m.p) ? m.p : '',
       });
-      onDone();
-    }
+    } else return;
+    onChange();
   };
+}
+
+// Leaving the lobby: the socket goes, and with it the roster the host is
+// counting. Without this, walking away leaves a ghost rider behind.
+export function close() {
+  if (ws) ws.close();
+  ws = null;
+  here.clear();
+  riders.clear();
 }
 
 const send = (o) => { if (online()) try { ws.send(JSON.stringify(o)); } catch (e) { /* dropped */ } };

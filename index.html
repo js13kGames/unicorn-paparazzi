@@ -82,11 +82,13 @@
     .neg { color: #ff8f6b }
     .big { font-size: 17px }
     .hint { margin-top: 14px; color: #7d93a9; font-size: 12px; text-align: center }
-    button {
+    button, input {
       background: #24405c; color: #dceaf7; border: 1px solid #ffffff33;
       padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px
     }
-    #go { background: none; font: 2em serif; color: #fff }
+    #j { width: 54px; text-align: center }
+    /* Scoped to the title card, so the shop's own Multiplayer button is spared. */
+    .t button { background: none; font: 2em serif; color: #fff }
     button:hover:not(:disabled) { background: #2f5478 }
     button:disabled { opacity: .35; cursor: default }
   </style>

@@ -37,10 +37,12 @@ const lost = run('ride', false);
 check('riding with the pointer lost re-locks', lost.lock === 1);
 check('and does not queue the shutter', !lost.shutter);
 
-// Starting a lap announces the seed, so idle players can join it.
+// Starting a lap used to shout its seed at every player in the game, and any idle
+// one was yanked onto it. Lobbies replaced that, so the title must stay quiet --
+// nothing about a single-player ride reaches the wire.
 const started = run('title', false);
-check('starting from the title announces the seed', started.announced === 4242);
-check('and riding does not re-announce', run('ride', true).announced === null);
+check('starting from the title tells nobody', started.announced === null);
+check('and neither does riding', run('ride', true).announced === null);
 
 // The normal case still works.
 const riding = run('ride', true);

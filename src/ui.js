@@ -62,13 +62,64 @@ export function hidePanel() {
   el.panel.className = '';
 }
 
-export function showTitle() {
-  // The class centres the title and the button in a full-height column.
-  panel('<h1>Unicorn Paparazzi</h1><button id="go">Start</button>', 't');
+// Every card that has its own buttons stops the click reaching #panel, which
+// otherwise reads any click in title mode as "start riding".
+function onCard(fn) {
+  el.card.onclick = (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    e.stopPropagation();
+    fn(b);
+  };
+}
+
+export function showTitle(onSolo, onMulti) {
+  // The class centres the title and the buttons in a full-height column.
+  panel('<h1>Unicorn Paparazzi</h1><button id="go">Solo</button>' +
+        '<p><button id="mp">Multiplayer</button></p>', 't');
+  onCard((b) => (b.id === 'mp' ? onMulti() : onSolo()));
+}
+
+// Everyone in the room, with the code big enough to read out loud. The roster is
+// live: net.js calls back on every arrival and departure and this redraws.
+export function showLobby(code, host, riders, mine, onStart, onJoin, onBack) {
+  let rows = '';
+  for (const i of riders) {
+    rows += row3('class="rule"', '',
+                 i === mine ? '<b>' + who(i) + ' (you)</b>' : '<span class="dim">' + who(i) + '</span>',
+                 '');
+  }
+  panel(
+    '<h1>' + code + '</h1>' +
+    '<h2>your code</h2>' +
+    '<table>' + rows + '</table>' +
+    '<p class="hint">' + (host
+      ? '<button id="start"' + (riders.length > 1 ? '' : ' disabled') +
+        '>Start Multiplayer Game</button>'
+      : 'waiting for the host') + '</p>' +
+    '<p class="hint">join <input id="j" maxlength="4"> ' +
+    '<button id="join">Join</button> <button id="back">Back</button></p>'
+  );
+  const join = () => { const v = document.getElementById('j').value; if (/^\d{4}$/.test(v)) onJoin(v); };
+  document.getElementById('j').onkeydown = (e) => {
+    e.stopPropagation();           // Space must type, not fire the shutter
+    if (e.key === 'Enter') join();
+  };
+  onCard((b) => (b.id === 'start' ? onStart() : b.id === 'back' ? onBack() : join()));
 }
 
 
 const NONE = 'No clear unicorns';
+// Both tables on the results screen are the same three columns -- a thumbnail, a
+// label, a score -- and the lobby roster is that shape with the picture missing.
+// One builder for all three: roadroller charges almost nothing for the second and
+// third call sites once it has seen the first.
+const row3 = (attrs, url, what, n) =>
+  '<tr ' + attrs + '><td class="th">' + (url ? '<img src="' + url + '">' : '') +
+  '</td><td>' + what + '</td><td class="n big"><b>' + n + '</b></td></tr>';
+// Ids are relay-issued gibberish; four characters is enough to tell riders apart
+// and short enough to read.
+const who = (i) => 'rider ' + i.slice(0, 4);
 const sign = (n) => (n > 0 ? '+' : '') + n;
 const cls = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'dim');
 
@@ -113,8 +164,12 @@ export function showPhoto(scored, index, count, onBack) {
   };
 }
 
-// Every shot on the roll, worst first, so the best one is what you end on.
-export function showResults(state, scored, reason, onPick, onShop, rivals) {
+// Every shot on the roll, worst first, so the best one is what you end on -- and
+// underneath it, when the lap was a multiplayer one, everybody else's.
+//
+// There is no separate versus screen. Single player is simply the case where no
+// rivals have reported, so the board below is skipped entirely.
+export function showResults(state, scored, reason, onPick, onNext, rivals, waiting) {
   const order = scored.map((s, i) => i).sort((a, b) => scored[a].total - scored[b].total);
   let rows = '';
   for (const i of order) {
@@ -123,8 +178,7 @@ export function showResults(state, scored, reason, onPick, onShop, rivals) {
       ? s.subjects.length + ' unicorn' + (s.subjects.length > 1 ? 's' : '') +
         (s.bonuses.length ? ' · ' + s.bonuses.map((b) => b.label).join(', ') : '')
       : NONE;
-    rows += '<tr class="row" data-i="' + i + '"><td class="th"><img src="' + s.url + '"></td>' +
-      '<td>' + what + '</td><td class="n big"><b>' + s.total + '</b></td></tr>';
+    rows += row3('class="row" data-i="' + i + '"', s.url, what, s.total);
   }
   if (!rows) rows = '<tr><td class="dim">No photographs.</td></tr>';
   // Everyone who rode this seed, best first, with your own lap folded in so the
@@ -134,23 +188,27 @@ export function showResults(state, scored, reason, onPick, onShop, rivals) {
     const mine = scored.reduce((a, s) => a + s.total, 0);
     const all = [{ i: 'you', n: mine, p: '', me: 1 }, ...rivals];
     all.sort((a, b) => b.n - a.n);
-    for (const r of all) {
-      board += '<tr class="rule"><td class="th">' +
-        (r.p ? '<img src="' + r.p + '">' : '') + '</td><td' +
-        (r.me ? '><b>' : ' class="dim">') + 'rider ' + r.i + (r.me ? '</b>' : '') +
-        '</td><td class="n big"><b>' + r.n + '</b></td></tr>';
-    }
-    board = '<h2>the same lap, ' + all.length + ' riders</h2><table>' + board + '</table>';
+    all.forEach((r, i) => {
+      // The crown is provisional while anyone is still out on the track, so it
+      // only says "winner" once the roster has nothing left to report.
+      const name = (r.me ? '<b>you</b>' : '<span class="dim">' + who(r.i) + '</span>') +
+        (i ? '' : ' <b class="pos">' + (waiting ? 'leader' : 'winner') + '</b>');
+      board += row3('class="rule"', r.p, name, r.n);
+    });
+    board = (waiting ? '<h2>riding: ' + waiting + '</h2>' : '') +
+      '<table>' + board + '</table>';
   }
   panel(
-    '<h1>ROLL DEVELOPED</h1>' +
-    '<h2>' + reason + '  ·  bank ' + state.bank + '</h2>' +
+    '<h1>SCORE</h1>' +
+    '<h2>' + reason + (waiting === undefined ? '  ·  bank ' + state.bank : '') + '</h2>' +
     '<table>' + rows + '</table>' + board +
-    '<p class="hint"><button id="shop">To the shop</button> — click a shot for detail.</p>'
+    // Both roads lead here: a solo lap opens the shop in place, a multiplayer one
+    // reloads into it, because its world and its borrowed gear are spent.
+    '<p class="hint"><button id="shop">Shop</button> — click a shot for detail.</p>'
   );
   el.card.onclick = (e) => {
     e.stopPropagation();
-    if (e.target.closest('#shop')) return onShop();
+    if (e.target.closest('#shop')) return onNext();
     const row = e.target.closest('.row');
     if (row) onPick(+row.dataset.i);
   };
@@ -164,7 +222,7 @@ function row(label, n, how) {
 
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
-export function showShop(state, cfg, offers, onBuy, onRide, onRestart) {
+export function showShop(state, cfg, offers, onBuy, onRide, onRestart, onMulti) {
   let rows = '';
   // Ladders are different lengths, so short ones have to be padded out to the
   // widest -- otherwise the row ends early and its rule stops short of the edge.
@@ -188,6 +246,9 @@ export function showShop(state, cfg, offers, onBuy, onRide, onRestart) {
     '<h2>bank ' + state.bank + '</h2>' +
     '<table>' + rows + '</table>' +
     '<p class="hint"><button id="ride">Ride again</button> ' +
+    // The shop is the only screen a returning player sees -- the title is behind
+    // a wiped save -- so the way into a lobby has to be here too.
+    '<button id="mp">Multiplayer</button> ' +
     '<button id="restart">Start over</button></p>'
   );
   el.card.onclick = (e) => {
@@ -195,6 +256,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onRestart) {
     if (!b) return;
     e.stopPropagation();
     if (b.id === 'ride') onRide();
+    else if (b.id === 'mp') onMulti();
     else if (b.id === 'restart') onRestart();
     else if (b.dataset.i !== undefined) onBuy(+b.dataset.i);
   };

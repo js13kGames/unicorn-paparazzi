@@ -84,19 +84,56 @@ check('a fresh player starts at zero everywhere',
 check('a camera tier beyond the ladder is clamped', restore({ r: 9 }).res, 3);
 check('and a legitimate top tier survives', restore({ r: 3 }).res, 3);
 
+// --- the multiplayer lap -------------------------------------------------
+// A multiplayer lap rides borrowed gear. Two things have to hold or it quietly
+// eats the player's save: the override must land, and nothing after it may write
+// gear back. Both are read out of the real source rather than reimplemented.
+const mpBlock = /^const MP_GEAR[\s\S]*?^}$/m.exec(src);
+check('the multiplayer boot block is still there to test', !!mpBlock);
+
+const mpBoot = (saved) => {
+  const state = { bank: 900, maxZoom: 0, res: 0, filmTier: 0, shutterTier: 0, go: 1, code: '' };
+  const writes = [];
+  new Function('saved', 'state', 'persist', mpBlock[0])(
+    saved, state, () => writes.push({ ...state }));
+  return { state, writes };
+};
+
+const solo = mpBoot({ v: VERSION, g: 1 });
+check('a solo lap is left completely alone',
+      !solo.state.mp && !solo.state.res && solo.writes.length === 0);
+
+const mp = mpBoot({ v: VERSION, g: 1, c: '4821' });
+check('a multiplayer lap is flagged as one', mp.state.mp === 1);
+check('and rides the fixed loadout, not the starter one',
+      mp.state.res > 0 && mp.state.filmTier > 0 && mp.state.maxZoom > 0);
+check('the markers are cleared, so a stray refresh drops out of multiplayer',
+      mp.state.go === 0 && mp.writes.length === 1);
+check('and that write went out BEFORE the gear was swapped, so it saved the real one',
+      !mp.writes[0].res && !mp.writes[0].maxZoom && mp.writes[0].bank === 900);
+
+// The guard is the whole defence: every later persist() -- finishing the lap,
+// buying nothing, anything -- must be a no-op for the rest of the page's life.
+const guard = /^function persist\(\) \{\n  if \(state\.mp\) return;$/m.test(src);
+check('persist() refuses to run at all once the lap is a multiplayer one', guard);
+
+// The code is what carries the lobby across the reload; without it on the wire
+// format, everyone would reconnect to nothing.
+check('the save carries the lobby code', /c: state\.code/.test(src));
+
 // --- which screen a load lands on --------------------------------------------
 // Three routes, and the one-shot `g` marker is what separates "Ride again"
 // (straight onto the cart) from an actual refresh (back to the shop).
-const bootLines = /^if \(saved\.g\)[\s\S]*?^else ui\.showTitle\(\);$/m.exec(src);
+const bootLines = /^if \(saved\.g\)[\s\S]*?^else title\(\);$/m.exec(src);
 check('the boot routing is still three branches', !!bootLines);
 
 const route = (saved) => {
   const hit = [];
   const state = {};
-  new Function('saved', 'state', 'persist', 'primary', 'showShop', 'ui', bootLines[0])(
+  new Function('saved', 'state', 'persist', 'primary', 'showShop', 'title', 'ui', bootLines[0])(
     saved, state,
     () => hit.push('persist'), () => hit.push('ride'), () => hit.push('shop'),
-    { showTitle: () => hit.push('title'), toast: () => {} });
+    () => hit.push('title'), { toast: () => {} });
   return { hit, go: state.go };
 };
 

@@ -6,10 +6,12 @@
 // protocol can be driven synchronously.
 
 const sent = [];
+let closed = 0;
 let sock = null;
 class FakeSocket {
   constructor(url) { this.url = url; this.readyState = 1; sock = this; }
   send(s) { sent.push(s); }
+  close() { this.readyState = 3; closed++; }
 }
 globalThis.WebSocket = FakeSocket;
 globalThis.location = { hostname: 'localhost' };
@@ -23,37 +25,62 @@ const check = (name, got, want = true) => {
   console.log((ok ? '  ok  ' : 'FAIL  ') + name.padEnd(58), ok ? '' : '-> ' + JSON.stringify(got));
 };
 
-const gone = [], dones = [];
-net.connect((s) => gone.push(s), () => dones.push(1));
+const gone = [], changes = [];
+net.connect('4821', (s) => gone.push(s), () => changes.push(1));
 const deliver = (data) => sock.onmessage({ data });
+const last = () => JSON.parse(sent[sent.length - 1]);
 
-check('a localhost page talks to the local relay tool', /localhost:1313/.test(sock.url));
-check('and reports itself online', net.online());
+check('the join code is the room the socket opens', /localhost:1313\/4821$/.test(sock.url));
+check('and it reports itself online', net.online());
 
-// Our own id is private, so read it off the wire and echo it back.
-net.done(500, 'data:image/jpeg;base64,abc');
-const ME = JSON.parse(sent[0]).i;
-check('done() puts our id on the wire', typeof ME === 'string' && ME.length > 0);
-deliver(sent[0]);
-check('our own echo is ignored', net.others().length, 0);
+// --- the handshake -------------------------------------------------------
+// The relay names the connection before anything else reaches us. That is the
+// earliest moment we can say hello AS someone, so it is when the hello goes out.
+check('nothing is said before the relay names us', sent.length, 0);
+deliver('@relay-issued-id');
+check('being named puts us on our own roster', net.lobby(), (l) => l.length === 1);
+check('and sends a hello signed with the issued id', last(), (m) => m.t === 'h' && m.i === 'relay-issued-id');
+check('which is not flagged as a reply, so others answer it', !('r' in last()));
 
-// --- what it refuses ---
+// A rider already in the room answers our hello. Their answer must not be
+// answered in turn, or two clients would talk forever.
+let n = sent.length;
+deliver('{"t":"h","i":"early-bird","r":1}');
+check('a rider already here joins the roster', net.lobby(), (l) => l.includes('early-bi'));
+check('and their reply is not replied to', sent.length, n);
+
+// Someone arriving after us says hello unprompted; that one we do answer.
+deliver('{"t":"h","i":"latecomer"}');
+check('a rider arriving later joins the roster too', net.lobby(), (l) => l.length === 3);
+check('and is told we are here', last(), (m) => m.t === 'h' && m.r === 1);
+
+// '+id' is redundant -- the arriving rider says hello for itself -- so it is left
+// to fall through the parse and be dropped.
+n = net.lobby().length;
+deliver('+someone-else');
+check('the relay arrival frame is ignored as redundant', net.lobby().length, n);
+
+// --- what it refuses -----------------------------------------------------
 for (const junk of ['', 'not json', '{', 'null', '[]', '{"t":"g"}', '{"t":"g","s":"4242"}',
-                    '{"t":"d","i":"bob"}', '{"t":"d","n":5}', '{"t":"d","i":7,"n":5}']) {
+                    '{"t":"h"}', '{"t":"h","i":7}', '{"t":"d","i":"bob"}',
+                    '{"t":"d","n":5}', '{"t":"d","i":7,"n":5}']) {
   deliver(junk);
 }
-check('malformed and wrong-typed payloads are all dropped', gone.length === 0 && net.others().length === 0);
+check('malformed and wrong-typed payloads are all dropped',
+      gone.length === 0 && net.others().length === 0 && net.lobby().length === 3);
 
-// --- what it accepts ---
+// --- what it accepts -----------------------------------------------------
 deliver('{"t":"g","s":4242}');
-check('a seed announcement is passed through', gone, (g) => g.length === 1 && g[0] === 4242);
+check('the host starting the lap is passed through', gone, (g) => g.length === 1 && g[0] === 4242);
 deliver('{"t":"g","s":99.7}');
 check('and a fractional seed is coerced to an int', gone[1], 99);
 
+const seenChanges = changes.length;
 deliver('{"t":"d","i":"bob","n":1200,"p":"data:image/jpeg;base64,AAaa09+/="}');
 check('a result is recorded', net.others(), (o) => o.length === 1 && o[0].i === 'bob' && o[0].n === 1200);
 check('and it carries the shot', net.others()[0].p, (p) => p.startsWith('data:image/jpeg;base64,'));
-check('the scoreboard callback fired', dones.length, 1);
+check('a result is proof of presence, so it fills the roster too', net.lobby(), (l) => l.includes('bob'));
+check('and the screen is told to redraw', changes.length > seenChanges);
 
 // A rival cannot smuggle markup or a foreign URL in through the image field.
 deliver('{"t":"d","i":"eve","n":1,"p":"<img onerror=alert(1)>"}');
@@ -73,40 +100,54 @@ deliver('{"t":"d","i":"bob","n":9999}');
 check('a rider repeating themselves does not appear twice', net.others().length, before);
 check('but their score does update', net.others().find((o) => o.i === 'bob').n, 9999);
 
-// --- the relay's own control frames ---
-// These are bare strings, not JSON, and they arrive interleaved with the traffic.
-const board = net.others().length;
-deliver('+someone-else');
-check('a rider arriving is not mistaken for a result', net.others().length, board);
-deliver('@relay-issued-id');
-net.done(10, '');
-check('the relay-issued id replaces our stand-in on the wire',
-      JSON.parse(sent[sent.length - 1]).i, 'relay-issued-id');
-
-deliver('{"t":"d","i":"leaver-and-then-some","n":300}');
-check('a rider is on the board before they leave',
-      net.others().some((o) => o.i === 'leaver-a'), true);
-deliver('-leaver-and-then-some');
-check('and leaving takes their row off it',
-      net.others().some((o) => o.i === 'leaver-a'), false);
-const quiet = dones.length;
+// --- leaving -------------------------------------------------------------
+// The one control frame we cannot do without: nothing else tells us a rider is
+// gone, and a results screen that waits on them would never stop waiting.
+check('the leaver is on both the roster and the board',
+      net.lobby().includes('bob') && net.others().some((o) => o.i === 'bob'));
+n = changes.length;
+deliver('-bob');
+check('leaving clears their roster row', net.lobby(), (l) => !l.includes('bob'));
+check('and their result', net.others(), (o) => !o.some((r) => r.i === 'bob'));
+check('and redraws whatever screen is up', changes.length > n);
+n = changes.length;
 deliver('-nobody-we-ever-heard-of');
-check('a stranger leaving does not redraw the board', dones.length, quiet);
+check('a stranger leaving changes nothing', changes.length, n);
+
+// The ids the truncation produces have to agree across all three sources, or a
+// leaver could never be matched to the row they left behind.
+deliver('{"t":"d","i":"aaaaaaaaaaaaaaaaaaaaaaaa","n":5}');
+deliver('-aaaaaaaaaaaaaaaaaaaaaaaa');
+check('a long id truncates the same way coming and going',
+      net.others().some((o) => o.i === 'aaaaaaaa'), false);
 
 // No forget() to test: every lap transition is a page reload, so the board cannot
 // outlive the lap that filled it.
 
-// --- the offline path ---
+// --- hopping to another lobby --------------------------------------------
+// Joining a different code is just another connect. The old room has to be let
+// go of, or you would keep broadcasting into a lobby you left and keep counting
+// its riders in the one you joined.
+check('there is something on the board before the hop',
+      net.lobby().length > 0 && net.others().length > 0);
+const wasClosed = closed;
+net.connect('1234', () => {}, () => {});
+check('the old room is closed', closed, wasClosed + 1);
+check('the new socket is the new room', /\/1234$/.test(sock.url));
+check('and neither its roster nor its board carries anyone over',
+      net.lobby().length === 0 && net.others().length === 0);
+
+// --- the offline path ----------------------------------------------------
 sock.readyState = 3;
 check('a closed socket reports offline', net.online(), false);
-const n = sent.length;
+n = sent.length;
 net.go(1);
 net.done(1, '');
 check('and sending on it is a no-op rather than a throw', sent.length, n);
 
 globalThis.WebSocket = class { constructor() { throw new Error('blocked'); } };
 let threw = false;
-try { net.connect(() => {}, () => {}); } catch (e) { threw = true; }
+try { net.connect('1234', () => {}, () => {}); } catch (e) { threw = true; }
 check('a socket that cannot even be constructed does not break the game', threw, false);
 check('and the game reports itself offline', net.online(), false);
 
