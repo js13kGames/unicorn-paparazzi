@@ -97,7 +97,7 @@ export function showLobby(code, host, riders, mine, onStart, onJoin, onBack) {
       ? '<button id="start"' + (riders.length > 1 ? '' : ' disabled') +
         '>Start Multiplayer Game</button>'
       : 'waiting for the host') + '</p>' +
-    '<p class="hint">join <input id="j" maxlength="4"> ' +
+    '<p class="hint">join <input id="j" size="4" maxlength="4"> ' +
     '<button id="join">Join</button> <button id="back">Back</button></p>'
   );
   const join = () => { const v = document.getElementById('j').value; if (/^\d{4}$/.test(v)) onJoin(v); };
@@ -120,56 +120,48 @@ const row3 = (attrs, url, what, n) =>
 // Ids are relay-issued gibberish; four characters is enough to tell riders apart
 // and short enough to read.
 const who = (i) => 'rider ' + i.slice(0, 4);
-const sign = (n) => (n > 0 ? '+' : '') + n;
-const cls = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'dim');
 
-// The breakdown for one shot, reached by clicking a row in the results list.
-export function showPhoto(scored, index, count, onBack) {
-  let rows = '';
-  if (!scored.subjects.length) {
-    rows = '<tr><td colspan="2" class="dim">' + NONE + '</td></tr>';
+// One photograph, big, with score.js's compact breakdown under it. This draws
+// your own shots and the winning shot alike -- and a rival's winning shot, whose
+// rows came off the wire already sanitised by net.js.
+//
+// A row whose label starts with a space is a detail of the row above it.
+export function photoCard(url, rows, heading, total) {
+  let body = '';
+  for (const [label, value] of rows) {
+    // A leading space means "detail of the row above": dim it and indent it,
+    // rather than ruling it off as a subject of its own.
+    const sub = label[0] === ' ';
+    body += '<tr class="' + (sub ? 'dim' : 'rule') + '"><td>' +
+      (sub ? '&nbsp;' : '') + label + '</td><td class="n">' + value + '</td></tr>';
   }
-  const pct = (v) => (v * 100).toFixed(0) + '%';
-  for (const s of scored.subjects) {
-    rows +=
-      '<tr class="rule"><td><b>' + s.colour + '</b>' +
-      (s.horns ? ' <span class="pos">' + (s.horns + 1) + ' horns</span>' : '') + '</td>' +
-      '<td class="n"><b>' + Math.round(s.subtotal) + '</b></td></tr>' +
-      row('size', s.size, (s.cov * 100).toFixed(1) + '% of frame × ' + scored.resBonus + ' sensor') +
-      (s.pose ? row('pose', s.pose, s.poseName) : '') +
-      (s.cropLoss > 0.5 ? row('cropped', -s.cropLoss, pct(s.cEdge) + ' of outline cut') : '') +
-      (s.envLoss > 0.5 ? row('scenery', -s.envLoss, pct(s.cEnv) + ' of outline') : '') +
-      (s.occLoss > 0.5 ? row('crowded', -s.occLoss, pct(s.cOcc) + ' of outline') : '');
-  }
-  let bon = '';
-  for (const b of scored.bonuses) {
-    bon += '<tr><td>' + b.label +
-      '</td><td class="n pos">×' + b.factor + '</td></tr>';
-  }
-  panel(
-    '<h1>PHOTO ' + (index + 1) + ' / ' + count + '</h1>' +
-    '<h2>' + scored.total + ' points</h2>' +
-    '<img src="' + scored.url + '" alt="">' +
-    '<table>' + rows +
-    (scored.composition ? '<tr class="rule"><td>composition</td><td class="n">' +
-      sign(scored.composition) + '</td></tr>' : '') +
-    bon +
-    '<tr class="rule big"><td><b>photo total</b></td><td class="n"><b>' +
-    scored.total + '</b></td></tr></table>' +
-    '<p class="hint"><button id="back">Back to the roll</button></p>'
-  );
-  el.card.onclick = (e) => {
-    e.stopPropagation();
-    if (e.target.closest('#back')) onBack();
-  };
+  if (!body) body = '<tr><td colspan="2" class="dim">' + NONE + '</td></tr>';
+  return '<h2>' + heading + '</h2>' +
+    (url ? '<img src="' + url + '">' : '') +
+    '<table>' + body +
+    '<tr class="rule big"><td><b>total</b></td><td class="n"><b>' + total +
+    '</b></td></tr></table>';
 }
 
-// Every shot on the roll, worst first, so the best one is what you end on -- and
-// underneath it, when the lap was a multiplayer one, everybody else's.
+// The breakdown for one of your own shots, reached by clicking a row in the roll.
+export function showPhoto(scored, onBack) {
+  panel(
+    '<h1>SCORE</h1>' +
+    photoCard(scored.url, scored.b, scored.total + ' points', scored.total) +
+    '<p class="hint"><button id="back">Back</button></p>'
+  );
+  onCard(onBack);
+}
+
+// The results screen, in three shapes:
 //
-// There is no separate versus screen. Single player is simply the case where no
-// rivals have reported, so the board below is skipped entirely.
-export function showResults(state, scored, reason, onPick, onNext, rivals, waiting) {
+//   solo                  your roll, the bank, and the way to the shop
+//   match, still riding   who is not in yet, and nothing to read
+//   match, everyone in    the winning photograph, then the standings
+//
+// `mine` is a sub-view rather than a mode: on a match result it swaps the winner
+// for your own roll, which is the same list solo shows.
+export function showResults(state, scored, reason, onPick, onNext, rivals, waiting, mine) {
   const order = scored.map((s, i) => i).sort((a, b) => scored[a].total - scored[b].total);
   let rows = '';
   for (const i of order) {
@@ -180,44 +172,50 @@ export function showResults(state, scored, reason, onPick, onNext, rivals, waiti
       : NONE;
     rows += row3('class="row" data-i="' + i + '"', s.url, what, s.total);
   }
-  if (!rows) rows = '<tr><td class="dim">No photographs.</td></tr>';
-  // Everyone who rode this seed, best first, with your own lap folded in so the
-  // comparison is on one ladder rather than two.
-  let board = '';
-  if (rivals && rivals.length) {
-    const mine = scored.reduce((a, s) => a + s.total, 0);
-    const all = [{ i: 'you', n: mine, p: '', me: 1 }, ...rivals];
+  if (!rows) rows = '<tr><td class="dim">' + NONE + '</td></tr>';
+  const roll = '<table>' + rows + '</table>';
+
+  // Solo: exactly what it always was.
+  if (waiting === undefined) {
+    panel('<h1>SCORE</h1><h2>' + reason + '  ·  bank ' + state.bank + '</h2>' + roll +
+          '<p class="hint"><button id="shop">Shop</button> — click a shot</p>');
+  } else {
+    // Everyone who rode, best first, with your own lap folded in so the
+    // comparison is on one ladder rather than two.
+    // Your own entry has to carry a photograph and a breakdown like everyone
+    // else's, or winning would show a blank card. Rivals send their best shot;
+    // this picks yours the same way endRun does, but at full thumbnail size
+    // rather than the small copy that had to fit on the wire.
+    const best = scored.reduce((a, s) => (a && a.total > s.total ? a : s), null);
+    const all = [{ i: 'you', n: scored.reduce((a, s) => a + s.total, 0), me: 1,
+                   p: best ? best.url : '', b: best ? best.b : [] }, ...rivals];
     all.sort((a, b) => b.n - a.n);
-    all.forEach((r, i) => {
-      // The crown is provisional while anyone is still out on the track, so it
-      // only says "winner" once the roster has nothing left to report.
-      const name = (r.me ? '<b>you</b>' : '<span class="dim">' + who(r.i) + '</span>') +
-        (i ? '' : ' <b class="pos">' + (waiting ? 'leader' : 'winner') + '</b>');
-      board += row3('class="rule"', r.p, name, r.n);
-    });
-    board = (waiting ? '<h2>riding: ' + waiting + '</h2>' : '') +
-      '<table>' + board + '</table>';
+    const top = all[0];
+    let board = '';
+    for (const r of all.slice(mine ? 0 : 1)) {
+      board += row3('class="rule"', r.p,
+                    r.me ? '<b>you</b>' : '<span class="dim">' + who(r.i) + '</span>', r.n);
+    }
+    // Both buttons sit on every match screen, the waiting one included. A rider
+    // who types the code mid-lap joins the roster and never reports, so `waiting`
+    // can stall for good -- nobody may be trapped on a screen with no way out.
+    panel(
+      '<h1>SCORE</h1>' +
+      (waiting ? '<h2>waiting for ' + waiting + '</h2>'
+       : (mine ? roll
+          : photoCard(top.p, top.b, 'winner ' + (top.me ? 'you' : who(top.i)), top.n)) +
+         '<table>' + board + '</table>') +
+      '<p class="hint"><button id="mine">' + (mine ? 'Result' : 'Photos') +
+      '</button> <button id="shop">Rematch</button></p>'
+    );
   }
-  panel(
-    '<h1>SCORE</h1>' +
-    '<h2>' + reason + (waiting === undefined ? '  ·  bank ' + state.bank : '') + '</h2>' +
-    '<table>' + rows + '</table>' + board +
-    // Both roads lead here: a solo lap opens the shop in place, a multiplayer one
-    // reloads into it, because its world and its borrowed gear are spent.
-    '<p class="hint"><button id="shop">Shop</button> — click a shot for detail.</p>'
-  );
   el.card.onclick = (e) => {
     e.stopPropagation();
     if (e.target.closest('#shop')) return onNext();
+    if (e.target.closest('#mine')) return onPick(-1);
     const row = e.target.closest('.row');
     if (row) onPick(+row.dataset.i);
   };
-}
-
-function row(label, n, how) {
-  return '<tr><td class="dim">&nbsp;&nbsp;' + label +
-    (how ? ' <span class="wk">' + how + '</span>' : '') +
-    '</td><td class="n ' + cls(n) + '">' + sign(Math.round(n)) + '</td></tr>';
 }
 
 // The run summary and the shop are one screen: you see what the roll earned and

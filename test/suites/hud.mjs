@@ -107,9 +107,9 @@ check('thumbnails carry their data url', nodes.roll.children[1].src, 'data:image
 
 // Results list: worst first, every shot present, clicking yields the right index
 const scored = [
-  { total: 900, url: 'a', subjects: [{}], bonuses: [] },
-  { total: 60,  url: 'b', subjects: [],   bonuses: [] },
-  { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colours' }] },
+  { total: 900, url: 'a', subjects: [{}], bonuses: [], b: [['azure', '900'], [' size', '+900']] },
+  { total: 60,  url: 'b', subjects: [],   bonuses: [], b: [] },
+  { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colours' }], b: [] },
 ];
 let picked = null, shopped = false;
 ui.showResults({ bank: 1260 }, scored, 'You completed the lap.',
@@ -128,9 +128,9 @@ check('the shop button reaches the shop', shopped, true);
 
 // Detail view must be able to get back
 let backed = false;
-ui.showPhoto(scored[0], 0, 3, () => { backed = true; });
+ui.showPhoto(scored[0], () => { backed = true; });
 check('detail view offers a way back', nodes.card.innerHTML, (s) => s.includes('id="back"'));
-nodes.card.onclick({ target: { closest: (q) => (q === '#back' ? {} : null) }, stopPropagation() {} });
+nodes.card.onclick({ target: { closest: (q) => (q === 'button' ? { id: 'back' } : null) }, stopPropagation() {} });
 check('back returns to the results list', backed, true);
 
 // toast surfaces through the hud line while it is live

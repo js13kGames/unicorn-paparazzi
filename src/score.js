@@ -46,7 +46,6 @@ export function scorePhoto(photo, cfg, state) {
       colour: COLOR_NAMES[s.color],
       colourIndex: s.color,
       poseName: POSE_NAMES[s.pose],
-      cov: coverage,
       horns: s.horns,
       // Normalised centroid, y flipped into image space (readPixels is bottom-up).
       cx: s.sx / s.n / photo.w - 0.5,
@@ -65,16 +64,41 @@ export function scorePhoto(photo, cfg, state) {
 
   return {
     url: photo.url,
-    // Carried so the breakdown can show the multiply it did, without taking cfg.
-    resBonus: bonus,
     subjects,
     composition,
-    base,
     bonuses,
     multiplier,
     total: Math.round(base * multiplier),
+    b: breakdown(subjects, composition, bonuses),
   };
 }
+
+// The one breakdown format in the game: a flat list of [label, value], both
+// already strings. It is what a photo's own screen draws, what the winner's card
+// draws, and -- because it is nothing but short strings -- what goes on the wire
+// so a rival's winning card can be drawn too.
+//
+// A leading space marks a detail row. One character, it survives the wire's
+// character whitelist, and it saves carrying a third field per row just to say
+// "indent me".
+function breakdown(subjects, composition, bonuses) {
+  const out = [];
+  for (const s of subjects) {
+    out.push([s.colour + (s.pose ? ' ' + s.poseName : ''), '' + Math.round(s.subtotal)]);
+    out.push([' size', sign(s.size)]);
+    if (s.pose) out.push([' pose', sign(s.pose)]);
+    // Cut by the frame, hidden behind scenery, blocked by another unicorn: three
+    // penalties that compound in order, but one number as far as the player is
+    // concerned. Sub-point losses read as "-0", which looks like a bug.
+    const loss = s.cropLoss + s.envLoss + s.occLoss;
+    if (loss > 0.5) out.push([' obscured', sign(-loss)]);
+  }
+  if (composition) out.push(['framing', sign(composition)]);
+  for (const b of bonuses) out.push([b.label, '×' + b.factor]);
+  return out;
+}
+
+const sign = (n) => (n > 0 ? '+' : '') + Math.round(n);
 
 // Spread: the average distance between subjects, as a fraction of the frame.
 // Herding everything into one corner is the mistake it punishes, and half a

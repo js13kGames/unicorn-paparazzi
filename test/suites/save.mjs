@@ -103,8 +103,17 @@ const solo = mpBoot({ v: VERSION, g: 1 });
 check('a solo lap is left completely alone',
       !solo.state.mp && !solo.state.res && solo.writes.length === 0);
 
-const mp = mpBoot({ v: VERSION, g: 1, c: '4821' });
+// `c` with no `g` is a lobby to go back to, not a lap to start. If this block
+// fired on it, the lobby would inherit state.mp -- and persist() being a no-op
+// would mean walking out of the lobby could never clear the code.
+const lobbyOnly = mpBoot({ v: VERSION, c: '4821', h: 1 });
+check('a lobby code with no lap marker starts no lap',
+      !lobbyOnly.state.mp && !lobbyOnly.state.res && lobbyOnly.writes.length === 0);
+
+const mp = mpBoot({ v: VERSION, g: 1, c: '4821', h: 1 });
 check('a multiplayer lap is flagged as one', mp.state.mp === 1);
+check('and restores which lobby it belongs to, and who hosted it',
+      mp.state.code === '4821' && mp.state.host === 1);
 check('and rides the fixed loadout, not the starter one',
       mp.state.res > 0 && mp.state.filmTier > 0 && mp.state.maxZoom > 0);
 check('the markers are cleared, so a stray refresh drops out of multiplayer',
@@ -120,6 +129,9 @@ check('persist() refuses to run at all once the lap is a multiplayer one', guard
 // The code is what carries the lobby across the reload; without it on the wire
 // format, everyone would reconnect to nothing.
 check('the save carries the lobby code', /c: state\.code/.test(src));
+// Without the host flag, everyone comes back from a rematch as a guest and
+// nobody can start the next lap.
+check('and who the host was', /h: state\.host/.test(src));
 
 // --- actually getting the page to reload ---------------------------------
 // Every lap transition is a reload, because the world has to be rebuilt. The
@@ -178,24 +190,57 @@ check('and drops the seed, so it does not stick to the next lap',
 const plain = navigate('home', 'index.html', 'home()');
 check('and it still reloads when there was no seed to drop', plain.reloads > 0);
 
+// --- what ends a lap -----------------------------------------------------
+// Solo, an empty roll ends the ride. In a match it must not: the first rider to
+// burn their film would be thrown off the track while the others kept shooting,
+// and they would not finish together.
+const endBlock = /^ {4}if \(lap >= 1\) endRun[\s\S]*?endRun\('Out of film\.'\);$/m.exec(src);
+check('the lap-end conditions are still there to test', !!endBlock);
+
+const ends = (lap, state) => {
+  let reason = null;
+  new Function('lap', 'state', 'endRun', endBlock[0])(lap, state, (r) => { reason = r; });
+  return reason;
+};
+
+check('solo, finishing the track ends the lap', ends(1, { film: 9 }) === 'Lap complete.');
+check('and so does running out of film', ends(0.3, { film: 0 }) === 'Out of film.');
+check('in a match, running out of film does NOT end the lap',
+      ends(0.3, { film: 0, mp: 1 }) === null);
+check('a match rider still stops at the end of the track',
+      ends(1, { film: 0, mp: 1 }) === 'Lap complete.');
+
 // --- which screen a load lands on --------------------------------------------
 // Three routes, and the one-shot `g` marker is what separates "Ride again"
 // (straight onto the cart) from an actual refresh (back to the shop).
 const bootLines = /^if \(saved\.g\)[\s\S]*?^else title\(\);$/m.exec(src);
-check('the boot routing is still three branches', !!bootLines);
+check('the boot routing is still there to test', !!bootLines);
 
 const route = (saved) => {
   const hit = [];
   const state = {};
-  new Function('saved', 'state', 'persist', 'primary', 'showShop', 'title', 'ui', bootLines[0])(
+  new Function('saved', 'state', 'persist', 'primary', 'showShop', 'title', 'lobby', 'ui',
+               bootLines[0])(
     saved, state,
     () => hit.push('persist'), () => hit.push('ride'), () => hit.push('shop'),
-    () => hit.push('title'), { toast: () => {} });
+    () => hit.push('title'), (c, h) => hit.push('lobby:' + c + ':' + (h || 0)),
+    { toast: () => {} });
   return { hit, go: state.go };
 };
 
-check('a fresh player lands on the title', route({}).hit, (h) => h.join() === 'title');
-check('a plain refresh lands on the shop', route({ v: VERSION }).hit, (h) => h.join() === 'shop');
+check('a fresh player lands on the title', route({}).hit.join() === 'title');
+
+// `c` without `g` is what Rematch and a mid-match refresh come back to: it means
+// "you belong to this lobby", not "a lap is starting".
+check('a lobby code alone lands back in that lobby',
+      route({ v: VERSION, c: '4821', h: 1 }).hit.join() === 'lobby:4821:1');
+check('and it carries whether you were the host',
+      route({ v: VERSION, c: '4821' }).hit.join() === 'lobby:4821:0');
+check('a lobby code outranks the shop, so a match is not silently left',
+      !route({ v: VERSION, b: 900, c: '4821' }).hit.includes('shop'));
+check('but the code alone never starts a lap',
+      !route({ v: VERSION, c: '4821' }).hit.includes('ride'));
+check('a plain refresh lands on the shop', route({ v: VERSION }).hit.join() === 'shop');
 const again = route({ v: VERSION, g: 1 });
 check('the ride marker lands on the cart', again.hit.includes('ride'), true);
 check('and the marker is consumed so the next refresh does not re-ride',

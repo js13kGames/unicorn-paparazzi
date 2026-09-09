@@ -5,7 +5,7 @@
 //   {t:'h', i:id}                    I just arrived -- who is here?
 //   {t:'h', i:id, r:1}               a reply to that; r stops it echoing forever
 //   {t:'g', s:seed}                  the host started the lap
-//   {t:'d', i:id, n:score, p:shot}   someone finished it
+//   {t:'d', i:id, n:score, p:shot, b:rows}   someone finished it
 //
 // The relay interleaves its own control frames, which are bare strings rather
 // than JSON: '@id' is the id it gave us, '+id' a rider arriving, '-id' one
@@ -26,6 +26,18 @@ let ME = Math.random().toString(36).slice(2, 6);
 // Ids are strangers' text, so one length cap, applied everywhere an id enters --
 // otherwise the roster and the results board could disagree about who someone is.
 const key = (s) => s.slice(0, 8);
+
+// A rival's breakdown is drawn as markup on the winner's card, so a rival
+// controls bytes that reach innerHTML. Filtered to a whitelist rather than an
+// escape list: whatever else is in it, what comes out can only be text. Length
+// and row count are capped too, because a hostile peer chooses those as well.
+//
+// \u00d7 is the multiplication sign a bonus row uses. Spelled as an escape, not
+// as itself: a non-ASCII byte inside a regex literal fails roadroller's
+// round-trip check at pack time.
+const clean = (v) => String(v == null ? '' : v).replace(/[^\w \u00d7+.-]/g, '').slice(0, 24);
+const rows = (v) => (Array.isArray(v) ? v : []).slice(0, 16)
+  .map((r) => [clean(r && r[0]), clean(r && r[1])]);
 
 let ws = null;
 const riders = new Map();          // id -> {n, p}, one result per rider per lap
@@ -88,6 +100,7 @@ export function connect(code, onGo, onChange) {
         // A data: URL and nothing else, so a hostile payload cannot become markup
         // or point the browser at someone else's server.
         p: typeof m.p === 'string' && /^data:image\/jpeg;base64,[\w+/=]+$/.test(m.p) ? m.p : '',
+        b: rows(m.b),
       });
     } else return;
     onChange();
@@ -106,4 +119,4 @@ export function close() {
 const send = (o) => { if (online()) try { ws.send(JSON.stringify(o)); } catch (e) { /* dropped */ } };
 
 export const go = (seed) => send({ t: 'g', s: seed });
-export const done = (n, p) => send({ t: 'd', i: ME, n, p });
+export const done = (n, p, b) => send({ t: 'd', i: ME, n, p, b });

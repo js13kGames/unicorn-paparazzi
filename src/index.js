@@ -63,7 +63,7 @@ function persist() {
       v: SAVE_VERSION,
       t: state.shutterTier,
      
-      g: state.go, c: state.code,
+      g: state.go, c: state.code, h: state.host,
       b: state.bank, z: state.maxZoom, r: state.res, f: state.filmTier,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
@@ -93,13 +93,16 @@ const state = {
 // so it ignores the save entirely and everyone rides the same loadout. Tune here.
 const MP_GEAR = { maxZoom: 2, res: 1, filmTier: 1, shutterTier: 1 };
 
-// The lobby code rode across the reload in the save. Clear the markers first --
-// while persist() still writes the REAL gear, because state.mp is not set yet --
-// so a stray refresh mid-lap drops out of multiplayer instead of re-entering it.
+// The save carries two separate facts. `c` alone means "you belong to this
+// lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
+// means a lap is starting right now. So only `g` is consumed here: dropping out
+// of the match entirely is something you have to actually ask for.
 const mpCode = saved.c || '';
-if (mpCode) {
+if (mpCode && saved.g) {
+  state.code = mpCode;
+  state.host = saved.h || 0;
   state.go = 0;
-  persist();
+  persist();                       // still the REAL gear: state.mp is not set yet
   Object.assign(state, MP_GEAR);
   state.mp = 1;                    // from here persist() is a no-op
 }
@@ -239,11 +242,16 @@ function endRun(reason) {
     if (state.scored[i].total > state.scored[best].total) best = i;
   }
   net.done(state.scored.reduce((a, s) => a + s.total, 0),
-           state.photos.length ? state.photos[best].small : '');
+           state.photos.length ? state.photos[best].small : '',
+           state.scored.length ? state.scored[best].b : []);
   ui.setChrome(false);
   document.exitPointerLock();
   showResults();
 }
+
+// A match result can be flipped between the winner and your own roll. It is one
+// screen with two faces, not a mode of its own.
+let ownRoll = 0;
 
 function showResults() {
   state.mode = 'results';
@@ -253,12 +261,15 @@ function showResults() {
   // crown settles rather than waiting on someone who is never coming back.
   const waiting = Math.max(0, net.lobby().length - rivals.length - 1);
   ui.showResults(state, state.scored, state.endReason, showDetail,
-                 state.mp ? home : showShop, rivals, state.mp ? waiting : undefined);
+                 state.mp ? home : showShop, rivals,
+                 state.mp ? waiting : undefined, ownRoll);
 }
 
 function showDetail(i) {
+  // -1 is the My photos / Result toggle rather than a shot.
+  if (i < 0) { ownRoll = !ownRoll; return showResults(); }
   state.mode = 'detail';
-  ui.showPhoto(state.scored[i], i, state.scored.length, showResults);
+  ui.showPhoto(state.scored[i], showResults);
 }
 
 function showShop() {
@@ -303,10 +314,12 @@ function restart() {
 // Open a room and sit in it. With no code we invent one and are the host; with a
 // code we are joining someone else's, which is also how "join another" hops
 // rooms -- net.connect lets go of the old one for us.
-function lobby(code) {
+function lobby(code, host) {
   state.mode = 'lobby';
   state.code = code || '' + (1000 + (Math.random() * 9000 | 0));
-  state.host = code ? 0 : 1;
+  // Taken rather than inferred: booting back into a lobby after a match has to
+  // restore whoever was host, and "was a code passed in" cannot tell you that.
+  state.host = code ? host || 0 : 1;
   net.connect(state.code, start, refresh);
   refresh();
 }
@@ -336,6 +349,7 @@ function host() {
 function leave() {
   net.close();
   state.code = '';
+  persist();               // and stop booting into a lobby that was walked out of
   title();
 }
 
@@ -364,6 +378,7 @@ if (mpCode) net.connect(mpCode, start, refresh);
 // actual refresh does not do the same. That refresh reopens the shop instead, so
 // a stray reload mid-lap costs the lap but not the bank.
 if (saved.g) { state.go = 0; persist(); primary(); ui.toast('click to look'); }
+else if (saved.c) lobby(saved.c, saved.h);
 else if (saved.v) showShop();
 else title();
 
@@ -415,8 +430,13 @@ function frame(now) {
   ui.updateHud(state, CONFIG, lap, clock);
 
   if (state.mode === 'ride') {
-    if (lap >= 1) endRun('You completed the lap.');
-    else if (state.film <= 0) endRun('You ran out of film.');
+    if (lap >= 1) endRun('Lap complete.');
+    // Solo, an empty roll ends the ride. In a match it must not: everyone rides
+    // the same track at the same speed off the same tick clock, so letting the
+    // cart run on with a dead shutter is what makes them all finish together --
+    // and what stops the first rider to burn their film being thrown off the
+    // track while the others are still shooting.
+    else if (!state.mp && state.film <= 0) endRun('Out of film.');
   }
 
   requestAnimationFrame(frame);

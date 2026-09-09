@@ -31,7 +31,9 @@ const click = (id) => {
   stopped = false;
   nodes.card.onclick({
     stopPropagation: () => { stopped = true; },
-    target: { closest: (sel) => (sel === 'button' ? { id } : null) },
+    // Cards route clicks two ways -- some read closest('button') and switch on
+    // the id, some ask for closest('#thing') directly. Answer both.
+    target: { closest: (sel) => (sel === 'button' || sel === '#' + id ? { id } : null) },
   });
 };
 
@@ -89,35 +91,76 @@ check('the code field keeps Space away from the shutter', swallowed);
 click('back');
 check('back leaves the lobby', seen.pop(), 'back');
 
-// --- the versus board ----------------------------------------------------
+// --- the match result ----------------------------------------------------
+// Three shapes, one function: solo, a match still waiting, and a match with
+// everyone in. The last is the one that shows a photograph rather than a row.
 const state = { bank: 700 };
-const shot = (n) => ({ total: n, url: '', subjects: [], bonuses: [] });
-const results = (rivals, waiting) =>
-  ui.showResults(state, [shot(100), shot(400)], 'You completed the lap.',
-                 () => {}, () => {}, rivals, waiting);
+const shot = (n, url) => ({ total: n, url, subjects: [], bonuses: [],
+                            b: [['azure', '' + n], [' size', '+' + n]] });
+let picked = null;
+const results = (rivals, waiting, mine) => {
+  picked = null;
+  ui.showResults(state, [shot(100, 'lo.jpg'), shot(400, 'hi.jpg')], 'You completed the lap.',
+                 (i) => { picked = i; }, () => {}, rivals, waiting, mine);
+};
 
 results(null, undefined);
 check('alone, there is no board at all and the bank still shows',
       card(), (h) => !h.includes('winner') && h.includes('bank 700'));
 check('and the way on is the shop', card(), (h) => h.includes('id="shop"'));
 
-// Our own two shots total 500, so a rival on 900 beats us and a rival on 100 does not.
-results([{ i: 'bbbb2222', n: 900, p: '' }], 1);
-check('a rival ahead of us takes the top row',
-      card(), (h) => h.indexOf('rider bbbb') < h.indexOf('<b>you</b>'));
-check('while riders are still out the crown is only provisional',
-      card(), (h) => h.includes('leader') && !h.includes('winner'));
-check('and it says how many are still on the track', card(), (h) => h.includes('riding: 1'));
+// --- still riding ---
+results([{ i: 'bbbb2222', n: 900, p: 'r.jpg', b: [] }], 1);
+check('while a rider is still out, the result is withheld',
+      card(), (h) => h.includes('waiting for 1') && !h.includes('winner'));
+check('and no scores are on show yet', card(), (h) => !h.includes('900'));
+// A rider who types the code mid-lap never reports, so waiting can stall for
+// good. Both ways off this screen have to work even then.
+check('but both ways out are still offered',
+      card(), (h) => h.includes('id="mine"') && h.includes('id="shop"'));
+check('and the exit is a rematch, never the shop',
+      card(), (h) => h.includes('Rematch') && !h.includes('Shop'));
 
-results([{ i: 'bbbb2222', n: 100, p: '' }], 0);
-check('once everyone is in the crown settles', card(), (h) => h.includes('winner'));
-check('and it sits on our row when we won',
-      card(), (h) => h.indexOf('<b>you</b>') < h.indexOf('rider bbbb'));
-check('a multiplayer lap shows no bank, because it never paid one',
-      card(), (h) => !h.includes('bank'));
-// The shop is where both kinds of lap end -- a multiplayer one reloads into it,
-// since its world and its borrowed gear are spent -- so the label is the same.
-check('and a multiplayer lap ends at the same door', card(), (h) => h.includes('id="shop"'));
+// --- a rival won ---
+results([{ i: 'bbbb2222', n: 900, p: 'r.jpg', b: [['coral', '900']] }], 0);
+check('the winner is named', card(), (h) => h.includes('winner rider bbbb'));
+check('their photograph is the card, not a thumbnail',
+      card(), (h) => h.includes('<img src="r.jpg"'));
+check('and their breakdown came off the wire with them',
+      card(), (h) => h.includes('coral') && h.includes('900'));
+check('the loser is listed underneath', card(), (h) => h.includes('<b>you</b>'));
+check('and the winner is not listed twice',
+      card().split('rider bbbb').length - 1, 1);
+
+// --- you won ---
+results([{ i: 'bbbb2222', n: 100, p: 'r.jpg', b: [] }], 0);
+check('winning says so', card(), (h) => h.includes('winner you'));
+// Your own entry used to be stubbed with no photo and no breakdown, so winning
+// showed a blank card.
+check('your own best shot is the photograph on it',
+      card(), (h) => h.includes('<img src="hi.jpg"'));
+check('and your own breakdown is under it', card(), (h) => h.includes('+400'));
+// The leading space on a label is the whole contract between score.js and this
+// renderer: it is what says "detail of the row above" rather than a subject.
+check('a detail row is dimmed and indented under its subject',
+      card(), (h) => h.includes('<tr class="dim"><td>&nbsp; size'));
+check('while a subject header is ruled off instead',
+      card(), (h) => h.includes('<tr class="rule"><td>azure'));
+
+// --- your roll, on the same screen ---
+results([{ i: 'bbbb2222', n: 100, p: 'r.jpg', b: [] }], 0, 1);
+check('My photos swaps the winner for your roll',
+      card(), (h) => h.includes('data-i="0"') && h.includes('data-i="1"') && !h.includes('winner'));
+check('and the button turns into the way back', card(), (h) => h.includes('>Result<'));
+check('the standings still show, now including you',
+      card(), (h) => h.includes('rider bbbb') && h.includes('<b>you</b>'));
+click('mine');
+check('the toggle reports itself as the -1 pick', picked, -1);
+
+results([{ i: 'bbbb2222', n: 100, p: '', b: [] }], 0);
+nodes.card.onclick({ stopPropagation() {},
+  target: { closest: (q) => (q === '.row' ? { dataset: { i: '1' } } : null) } });
+check('and a shot in the roll still opens on its index', picked, 1);
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

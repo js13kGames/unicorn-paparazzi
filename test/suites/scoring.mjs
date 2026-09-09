@@ -76,8 +76,6 @@ check('size is coverage x the tier bonus on the cheap camera',
       +s.size.toFixed(3), +(1600/(W*H)*1000).toFixed(3), 0.001);
 // standing scores nothing, which is what lets the breakdown suppress the row
 check('standing is the baseline and scores 0', s.pose, 0);
-check('the subject reports its coverage for the readout',
-      +s.cov.toFixed(6), +(1600/(W*H)).toFixed(6), 1e-6);
 check('uncropped subject takes no penalty', s.cropLoss, 0);
 
 
@@ -250,6 +248,49 @@ const mix = score([[TERRAIN,cx-40,cy,40,40,100],[3,cx+40,cy,40,40,100],[1,cx,cy,
 check('deductions sum to the subtotal',
       +(mix.size + mix.pose - mix.cropLoss - mix.envLoss - mix.occLoss).toFixed(6),
       +mix.subtotal.toFixed(6), 0.000001);
+
+// --- the compact breakdown ---------------------------------------------------
+// One format, drawn on a photo's own screen and on the winner's card, and sent
+// over the wire so a rival's winning card can be drawn too. A leading space on a
+// label means "detail of the row above"; that convention is the whole contract.
+const rowsOf = (sc) => sc.b.map((r) => r[0]);
+const valueOf = (sc, label) => (sc.b.find((r) => r[0] === label) || [])[1];
+
+herd.pose[0] = 0;
+const standing = score([[1,cx,cy,40,40]]);
+check('a subject heads its own group', standing.b[0][0], 'red', 0);
+check('and the group header is not marked as a detail',
+      standing.b[0][0][0] === ' ', false);
+check('size is always broken out', rowsOf(standing).includes(' size'), true);
+check('and it is marked as a detail of the subject above',
+      standing.b[1][0][0], ' ');
+// Standing is the baseline and scores nothing, so a row saying "+0" would be noise.
+check('standing shows no pose row', rowsOf(standing).includes(' pose'), false);
+
+herd.pose[0] = 3;
+const neighing = score([[1,cx,cy,40,40]]);
+check('a pose worth points gets its own row', rowsOf(neighing).includes(' pose'), true);
+check('and it carries the points, signed', valueOf(neighing, ' pose'), '+98');
+check('the pose is named in the subject header', neighing.b[0][0], 'red neighing', 0);
+herd.pose[0] = 0;
+
+// The three ways a subject can be spoiled are one number to the player.
+const clean1 = score([[1,cx,cy,40,40]]);
+check('an unspoiled subject has no obscured row',
+      rowsOf(clean1).includes(' obscured'), false);
+const spoiled = score([[TERRAIN,cx-40,cy,40,40,100],[1,cx,cy,40,40,128]]);
+check('scenery in the way shows up as one obscured row',
+      rowsOf(spoiled).filter((r) => r === ' obscured').length, 1);
+check('and it is a deduction', valueOf(spoiled, ' obscured')[0], '-');
+
+// Everything on the wire has to already be a string, or net.js could not filter it.
+check('every cell is a string',
+      spoiled.b.every((r) => r.length === 2 && typeof r[0] === 'string' && typeof r[1] === 'string'),
+      true);
+
+const bonused = score(row(6));
+check('bonuses ride along as multiply rows',
+      bonused.b.some((r) => r[1] === '\u00d72'), true);
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall ' + '' + 'checks passed');
 process.exit(fails ? 1 : 0);
