@@ -51,6 +51,7 @@ const sandbox = {
   addEventListener() {},
   requestAnimationFrame() { return 0; },
   devicePixelRatio: 1, innerWidth: 1280, innerHeight: 720,
+  location: { hash: '', reload() {} },
   localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
 };
 sandbox.window = sandbox;

@@ -47,7 +47,7 @@ export const CONFIG = {
 
 const canvas = document.getElementById('c');
 
-const seed = (Math.random() * 0x7fffffff) | 0;
+const seed = +location.hash.slice(1) || (Math.random() * 0x7fffffff) | 0;
 const world = buildWorld(seed, CONFIG);
 const herd = spawn(world, CONFIG, seed);
 const renderer = createRenderer(canvas, world, herd);
@@ -344,27 +344,42 @@ if (saved.g) { state.go = 0; persist(); primary(); ui.toast('click to look'); }
 else if (saved.v) showShop();
 else ui.showTitle();
 
+// The simulation advances in whole steps of this and never in wall-clock time.
+// updateHerd draws from one RNG stream shared by the whole herd, from inside
+// dt-gated branches, so the number and ORDER of draws -- and therefore every
+// unicorn -- is a function of the tick count and nothing else. Fixing the step is
+// what lets two machines at 60Hz and 144Hz ride an identical lap. `clock` is the
+// authoritative tick clock: it is always exactly tickCount * STEP.
+const STEP = 1 / 60;
+let acc = 0;
+
+function tick() {
+  clock += STEP;
+  distance += CONFIG.cartSpeed * STEP;
+  for (let i = lures.length - 1; i >= 0; i--) {
+    const l = lures[i];
+    if (l.until <= clock) { lures.splice(i, 1); continue; }
+    l.flight = Math.min(1, (clock - l.launched) / l.flightTime);
+    l.flying = l.flight < 1;
+    l.life = (l.until - clock) / CONFIG.lureLife;
+  }
+  updateHerd(herd, world, CONFIG, STEP, lures);
+}
+
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  // Capped so a long stall cannot spin this loop; the cost is that the dropped
+  // ticks are simply lost, which a networked lap would have to resync.
+  acc += Math.min(0.25, (now - last) / 1000);
   last = now;
+  while (state.mode === 'ride' && acc >= STEP) { tick(); acc -= STEP; }
 
-  if (state.mode === 'ride') {
-    clock += dt;
-    distance += CONFIG.cartSpeed * dt;
-    for (let i = lures.length - 1; i >= 0; i--) {
-      const l = lures[i];
-      if (l.until <= clock) { lures.splice(i, 1); continue; }
-      l.flight = Math.min(1, (clock - l.launched) / l.flightTime);
-      l.flying = l.flight < 1;
-      l.life = (l.until - clock) / CONFIG.lureLife;
-    }
-  }
-
-  updateHerd(herd, world, CONFIG, dt, lures);
   packInstances(herd, world);
   const lap = distance / world.path.length;
-  const p = pathAt(world.path, distance);
+  // The cart alone is smoothed across the leftover accumulator, so it does not
+  // judder on a display faster than the tick rate. Presentation only -- this
+  // never feeds back into the simulation.
+  const p = pathAt(world.path, distance + CONFIG.cartSpeed * acc);
   cam.x = p.x;
   // Ride the rails: the ground where there is ground, the span where there is not.
   cam.y = Math.max(elevAt(world, p.x, p.z), p.y) + CONFIG.eyeHeight;

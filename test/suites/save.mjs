@@ -25,6 +25,7 @@ function boot(stored) {
     },
     addEventListener(){}, requestAnimationFrame(){return 0;},
     devicePixelRatio:1, innerWidth:1280, innerHeight:720,
+    location: { hash: '', reload() {} },
     localStorage: {
       getItem: () => (stored === null ? null : JSON.stringify(stored)),
       setItem: (_, v) => { written = JSON.parse(v); }, removeItem(){},
