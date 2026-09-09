@@ -8,12 +8,11 @@ import { spawn, updateHerd, packInstances, buildModel, buildPoseTable, COLORS, P
 
 const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:+(process.env.SMOOTH||3),
               terrainDetail:+(process.env.DETAIL===undefined?0.35:process.env.DETAIL), trackRadiusFrac:.25, unicornDensity:+(process.env.DENSITY||0.003), adultChance:.75, driftChance:.08,
-              poseWeights:[.80,.10,.08,.02], weakRadius:26, strongRadius:70, lureLife:1e9, lurePull:0.7, lureSpeed:4, lureGather:5 };
+              poseWeights:[.80,.10,.08,.02], };
 const SEED = +(process.env.SEED || 12345);
 const world = buildWorld(SEED, cfg);
 const herd = spawn(world, cfg, SEED);
-export const LURES = [];
-export function settle(n){ for (let f=0; f<n; f++) updateHerd(herd, world, cfg, 1/60, LURES); packInstances(herd, world); }
+export function settle(n){ for (let f=0; f<n; f++) updateHerd(herd, world, cfg, 1/60); packInstances(herd, world); }
 settle(600);
 packInstances(herd, world);
 
@@ -128,22 +127,6 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
     }
   }
 
-  // --- lure beacons (mirrors render.js buildLures, unfogged) ---
-  for (const l of LURES) {
-    const c = l.strong ? [255,240,150] : [190,235,255];
-    const hgt = l.strong ? 8 : 5, gy = elevAt(world, l.x, l.z) + 0.1, r = 0.85;
-    for (let f2=0; f2<4; f2++) {
-      const a0 = f2*Math.PI/2, a1 = a0+Math.PI/2;
-      const A=[l.x, gy+hgt, l.z], B=[l.x+Math.cos(a0)*r, gy, l.z+Math.sin(a0)*r], C=[l.x+Math.cos(a1)*r, gy, l.z+Math.sin(a1)*r];
-      const P0=proj(...A),P1=proj(...B),P2=proj(...C);
-      // In the ID pass a beacon paints the lure sentinel, exactly as render.js
-      // does -- otherwise its colour decodes as some nonexistent unicorn id.
-      const fc = idMode ? [254, 255, Math.min(255, P0[3]/256*255)]
-                        : [c[0]*0.9, c[1]*0.9, c[2]*0.9];
-      tri(P0,P1,P2, fc,fc,fc, 0,0,0);   // distance 0 == unfogged, as the game now draws it
-    }
-  }
-  const BEACON = 1;
 
   // --- unicorns ---
   const inst = herd.instances;

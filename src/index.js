@@ -16,14 +16,6 @@ export const CONFIG = {
   trackRadiusFrac: 0.25,
   filmTiers: [5, 20, 30, 40, 50],   // TESTING: first tier is 5, not 15
   shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive
-  weakRadius: 26,        // tiles the cheap lure reaches
-  strongRadius: 70,      // the expensive one sweeps wide enough to stage all six
-  lureLife: 45,          // seconds it works for, once it lands
-  lureSpeed: 4,          // lured unicorns move this much faster than a wander
-  lurePull: 0.7,         // chance a unicorn in range steps with the lure
-  lureGather: 5,         // attracted unicorns mill about within this radius
-  throwSpeed: 62,        // launch speed; a 45 deg throw carries about 190 units
-  gravity: 20,
   cartSpeed: 8,           // world units per second
   eyeHeight: 2.4,
   baseFov: Math.PI / 3,
@@ -42,7 +34,6 @@ export const CONFIG = {
   cropK: 2.5,
   envK: 2.0,
   occK: 0.9,
-  baitPenalty: 200,      // for letting a lure into the shot
 };
 
 const canvas = document.getElementById('c');
@@ -70,18 +61,11 @@ function persist() {
      
       g: state.go,
       b: state.bank, z: state.maxZoom, r: state.res, f: state.filmTier,
-      a: state.weak, s: state.strong,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
 
 const saved = loadSave();
-
-// Older saves held seven-element colour arrays; those migrate to the two
-// counters, and any save from before this version gets the starter lures back.
-// Bank and upgrades are kept either way.
-const stock = (n, starter) =>
-  saved.v === SAVE_VERSION && typeof n === 'number' ? n : starter;
 
 const state = {
   mode: 'title',
@@ -91,8 +75,6 @@ const state = {
   // resBonus, which is a NaN score rather than a visible failure.
   res: Math.min(saved.r || 0, 3),
   filmTier: saved.f || 0,
-  weak: stock(saved.a, 2),
-  strong: stock(saved.s, 0),
   zoom: 0,
   ready: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
@@ -101,7 +83,6 @@ const state = {
   scored: [],
 };
 state.film = CONFIG.filmTiers[state.filmTier];
-const lures = [];
 
 // Every upgrade is a ladder: the tier values, the price of each step, the state
 // key holding how far up it you are, and a suffix for the values. p[i] buys
@@ -115,24 +96,15 @@ const LADDERS = [
   ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
 ];
 
-// Lures are consumables, not ladders: buy as many as you like.
-const LURES = [['🪝 weak', 120, 'weak'], ['🧲 strong', 400, 'strong']];
-
-function offers() {
-  const o = LADDERS.map(([label, v, p, key, sfx]) => ({
-    label, v, p, sfx, at: state[key], price: p[state[key]],
-    buy: () => state[key]++,
-  }));
-  for (const [label, price, key] of LURES) {
-    o.push({ label, price, have: state[key], buy: () => state[key]++ });
-  }
-  return o;
-}
+const offers = () => LADDERS.map(([label, v, p, key, sfx]) => ({
+  label, v, p, sfx, at: state[key], price: p[state[key]],
+  buy: () => state[key]++,
+}));
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 let distance = 0;
 let shutterQueued = false;
-let clock = 0;          // seconds of ride time, used for lure lifetimes
+let clock = 0;          // seconds of ride time, always tickCount * STEP
 
 // Start the ride looking along the track rather than at a random compass point.
 {
@@ -180,52 +152,6 @@ for (const g of ['gesturestart', 'gesturechange', 'gestureend']) {
   addEventListener(g, (e) => e.preventDefault());
 }
 
-// Lures land well up the track, not where you are standing. The cart never
-// stops, so a lure dropped beside you is useless: by the time anything has
-// walked in you are a couple of hundred units past it. Thrown ahead, the cart
-// arrives just as the herd does, which turns the lure into a planning tool --
-// you are baiting the stretch of track you are about to ride through.
-const KINDS = ['weak', 'strong'];
-
-function throwLure(kind) {
-  if (state.mode !== 'ride') return;
-  const name = KINDS[kind];
-  if (!state[name]) {
-    // ui.toast('no ' + name + ' — buy some after the lap');
-    return;
-  }
-  state[name]--;
-  // Thrown where you are actually pointing, and the pitch sets the range: flat
-  // throws land close and are wasted, because the cart will be well past them
-  // before anything has walked in. Aim up the track and lob it.
-  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-  const v = CONFIG.throwSpeed;
-  const vx = -Math.sin(cam.yaw) * cp * v, vz = -Math.cos(cam.yaw) * cp * v, vy = sp * v;
-
-  // Step the arc until it meets the ground, so hills and valleys catch it.
-  const dt = 0.05;
-  let t = 0, x = cam.x, y = cam.y, z = cam.z;
-  while (t < 12) {
-    t += dt;
-    x = cam.x + vx * t;
-    // Kinematics :)
-    y = cam.y + vy * t - 0.5 * CONFIG.gravity * t * t;
-    z = cam.z + vz * t;
-    if (y <= elevAt(world, x, z)) break;
-  }
-
-  lures.push({
-    x, z,
-    fx: cam.x, fz: cam.z, fy: cam.y,
-    vx, vy, vz,
-    launched: clock, flightTime: t,
-    until: clock + t + CONFIG.lureLife,
-    strong: kind === 1,
-  });
-  ui.toast(name + ' — ' +
-    Math.round(Math.hypot(x - cam.x, z - cam.z)) + ' out');
-}
-
 // Chrome rejects this promise if the lock was exited very recently, and an
 // unhandled rejection would show up as a console error.
 const lock = () => Promise.resolve(canvas.requestPointerLock()).catch(() => {});
@@ -256,15 +182,12 @@ document.addEventListener('pointerlockchange', () => {
 canvas.addEventListener('click', primary);
 document.getElementById('panel').addEventListener('click', primary);
 addEventListener('keydown', (e) => {
-  // Leave the browser's own shortcuts alone -- cmd+2 is a tab switch, and
-  // without this it would throw a lure on the way past.
+  // Leave the browser's own shortcuts alone: cmd+- is a page zoom, and without
+  // this it would work the lens on the way past.
   if (e.metaKey || e.ctrlKey) return;
   if (e.code === 'Space') { e.preventDefault(); primary(); return; }
-  // 1 throws a weak lure, 2 a strong one.
-  const n = e.code.startsWith('Digit') ? +e.code.slice(5) : 0;
-  if (n === 1 || n === 2) throwLure(n - 1);
   // +/- work the zoom as well as the wheel, which is awkward on a trackpad.
-  else if (e.key === '+' || e.key === '=') state.zoom = Math.min(state.maxZoom, state.zoom + 1);
+  if (e.key === '+' || e.key === '=') state.zoom = Math.min(state.maxZoom, state.zoom + 1);
   else if (e.key === '-') state.zoom = Math.max(0, state.zoom - 1);
 });
 
@@ -356,14 +279,7 @@ let acc = 0;
 function tick() {
   clock += STEP;
   distance += CONFIG.cartSpeed * STEP;
-  for (let i = lures.length - 1; i >= 0; i--) {
-    const l = lures[i];
-    if (l.until <= clock) { lures.splice(i, 1); continue; }
-    l.flight = Math.min(1, (clock - l.launched) / l.flightTime);
-    l.flying = l.flight < 1;
-    l.life = (l.until - clock) / CONFIG.lureLife;
-  }
-  updateHerd(herd, world, CONFIG, STEP, lures);
+  updateHerd(herd, world, CONFIG, STEP);
 }
 
 let last = performance.now();
@@ -385,7 +301,6 @@ function frame(now) {
   cam.y = Math.max(elevAt(world, p.x, p.z), p.y) + CONFIG.eyeHeight;
   cam.z = p.z;
 
-  renderer.buildLures(lures, (x, z) => elevAt(world, x, z), clock, CONFIG.gravity);
   const f = viewFrame(fov(), canvas.width / canvas.height);
   state.fx = f.fx; state.fy = f.fy;
   renderer.draw(cam, f.fov);

@@ -261,22 +261,7 @@ function rollPose(r, weights) {
   return 0;
 }
 
-// Lures gather every colour; they differ only in reach. The strong one has to
-// stay wide: at the weak radius only about five unicorns are in range, so six
-// distinct colours in one frame is arithmetically impossible and the rainbow bonus
-// would be unreachable.
-function lureFor(lures, x, z, cfg) {
-  let best = null, bd = Infinity;
-  for (const l of lures) {
-    if (l.flying) continue;              // still in the air, not yet working
-    const r = l.strong ? cfg.strongRadius : cfg.weakRadius;
-    const d = (l.x - x) * (l.x - x) + (l.z - z) * (l.z - z);
-    if (d < r * r && d < bd) { bd = d; best = l; }
-  }
-  return best;
-}
-
-export function updateHerd(h, world, cfg, dt, lures) {
+export function updateHerd(h, world, cfg, dt) {
   const rnd = h.rnd;
   const N = world.N;
   for (let i = 0; i < h.n; i++) {
@@ -290,33 +275,13 @@ export function updateHerd(h, world, cfg, dt, lures) {
 
     // Only a standing unicorn wanders; the other poses are stationary.
     if (h.pose[i] === 0) {
-      // Resolved once per frame rather than per step: it sets the pace as well
-      // as the direction, and a unicorn answering a lure moves at a canter. At
-      // walking pace nothing on the far edge of a rainbow lure could ever arrive
-      // before the lure burned out.
-      const l = lures.length ? lureFor(lures, h.x[i], h.z[i], cfg) : null;
-      // Only a unicorn still travelling counts as lured. One that has arrived
-      // inside the gather radius drops back to a wander -- otherwise it keeps
-      // the canter but picks random directions, and promptly flings itself back
-      // out of the group it just joined.
-      let pull = null;
-      if (l) {
-        const ax = l.x - h.x[i], az = l.z - h.z[i];
-        if (ax * ax + az * az > cfg.lureGather * cfg.lureGather) pull = l;
-      }
-      h.step[i] += (dt * (pull ? cfg.lureSpeed : 1)) / STEP_TIME;
+      h.step[i] += dt / STEP_TIME;
       while (h.step[i] >= 1) {
         h.step[i] -= 1;
         h.fromX[i] = h.toX[i];
         h.fromZ[i] = h.toZ[i];
         // One tile up, down or sideways -- the same +1/0/-1 walk the terrain uses.
-        let dx = ((rnd() * 3) | 0) - 1, dz = ((rnd() * 3) | 0) - 1;
-        // Mostly, but not always -- a herd that beelines in lockstep looks wrong,
-        // and the stragglers are what make a lured group photograph well.
-        if (pull && rnd() < cfg.lurePull) {
-          dx = Math.sign(pull.x - h.toX[i]);
-          dz = Math.sign(pull.z - h.toZ[i]);
-        }
+        const dx = ((rnd() * 3) | 0) - 1, dz = ((rnd() * 3) | 0) - 1;
         const nx = h.toX[i] + dx, nz = h.toZ[i] + dz;
         const gi = (nz | 0) * N + (nx | 0);
         const ok = nx > 1 && nz > 1 && nx < N - 1 && nz < N - 1 && world.elev[gi] >= 0;

@@ -185,79 +185,6 @@ export function createRenderer(canvas, world, herd) {
   gl.vertexAttribDivisor(hIq, 1);
   gl.bindVertexArray(null);
 
-  // Thrown lures: a handful of little ground pyramids, rebuilt each frame with
-  // the terrain program. An invisible mechanic is a broken one.
-  const MAX_LURES = 12, LURE_VERTS = MAX_LURES * 12;
-  const lurePos = new Float32Array(LURE_VERTS * 3);
-  const lureCol = new Uint8Array(LURE_VERTS * 4);
-  const lureNrm = new Int8Array(LURE_VERTS * 4);
-  const lurePosBuf = buffer(gl, lurePos, gl.DYNAMIC_DRAW);
-  const lureColBuf = buffer(gl, lureCol, gl.DYNAMIC_DRAW);
-  const lureNrmBuf = buffer(gl, lureNrm, gl.DYNAMIC_DRAW);
-  const lureVao = vao(gl, [
-    [P, lurePosBuf, 3, gl.FLOAT, false],
-    [C, lureColBuf, 4, gl.UNSIGNED_BYTE, true],
-    [NM, lureNrmBuf, 4, gl.BYTE, true],
-  ]);
-  let lureCount = 0;
-
-  function buildLures(lures, groundAt, time, gravity) {
-    lureCount = Math.min(lures.length, MAX_LURES);
-    for (let i = 0; i < lureCount; i++) {
-      const l = lures[i];
-      const c = l.strong ? [255, 240, 150] : [190, 235, 255];
-      // The strong lure stands taller, so its reach reads from the cart.
-      let h = l.strong ? 8 : 5;
-      let y = groundAt(l.x, l.z) + 0.1;
-      let x = l.x, z = l.z, r = 0.85;
-
-      if (l.flying) {
-        // The real trajectory, so what you watch is where it will land. Small in
-        // the air so it reads as a thrown object, not the beacon it becomes.
-        const t = l.flight * l.flightTime;
-        x = l.fx + l.vx * t;
-        z = l.fz + l.vz * t;
-        y = l.fy + l.vy * t - 0.5 * gravity * t * t;
-        h = 1.1;
-        r = 0.35;
-      }
-      // Shrinks as it burns out, so its remaining life is visible on the lure.
-      const life = l.life === undefined ? 1 : l.life;
-      h *= 0.3 + 0.7 * life;
-      const spin = time * 1.5 + i;
-      for (let f = 0; f < 4; f++) {
-        const a0 = spin + (f * Math.PI) / 2, a1 = a0 + Math.PI / 2;
-        const v = (i * 12 + f * 3) * 3, k = (i * 12 + f * 3) * 4;
-        const pts = [
-          x, y + h, z,
-          x + Math.cos(a0) * r, y, z + Math.sin(a0) * r,
-          x + Math.cos(a1) * r, y, z + Math.sin(a1) * r,
-        ];
-        for (let q = 0; q < 9; q++) lurePos[v + q] = pts[q];
-        for (let q = 0; q < 3; q++) {
-          lureCol[k + q * 4] = c[0]; lureCol[k + q * 4 + 1] = c[1];
-          lureCol[k + q * 4 + 2] = c[2]; lureCol[k + q * 4 + 3] = 255;
-          lureNrm[k + q * 4] = Math.cos((a0 + a1) / 2) * 90;
-          lureNrm[k + q * 4 + 1] = 80;
-          lureNrm[k + q * 4 + 2] = Math.sin((a0 + a1) / 2) * 90;
-        }
-      }
-    }
-    if (!lureCount) return;
-    const n3 = lureCount * 36, n4 = lureCount * 48;
-    gl.bindBuffer(gl.ARRAY_BUFFER, lurePosBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, lurePos, 0, n3);
-    gl.bindBuffer(gl.ARRAY_BUFFER, lureColBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, lureCol, 0, n4);
-    gl.bindBuffer(gl.ARRAY_BUFFER, lureNrmBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, lureNrm, 0, n4);
-  }
-
-  const poseTex = dataTexture(gl, PARTS * 4, POSE_ROWS, buildPoseTable());
-  const palette = new Float32Array(COLORS.flat());
-
-  // w/h default to the canvas, but the photo rig renders the ID pass into a
-  // small offscreen buffer at the same aspect, so it must pass its own.
   function draw(cam, fovy, idPass, w, h) {
     w = w || canvas.width;
     h = h || canvas.height;
@@ -287,18 +214,6 @@ export function createRenderer(canvas, world, herd) {
     gl.disable(gl.CULL_FACE);
     gl.bindVertexArray(trackVao);
     gl.drawElements(gl.TRIANGLES, world.trackMesh.count, gl.UNSIGNED_INT, 0);
-    if (lureCount) {
-      // Drawn in the ID pass too, so the scorer can see your bait in the shot.
-      // Lures land at the fog limit, so at the scenery's fog setting the beacon
-      // is washed to exactly the sky colour. It is a gameplay marker, not
-      // scenery -- draw it unfogged so you can actually see where it went.
-      gl.uniform1f(tp.u.fog, 1e9);
-      gl.uniform2f(tp.u.sentinel, 254 / 255, 1); // 65534 = your own bait
-      gl.bindVertexArray(lureVao);
-      gl.drawArrays(gl.TRIANGLES, 0, lureCount * 12);
-      gl.uniform1f(tp.u.fog, FOG_DISTANCE);
-      gl.uniform2f(tp.u.sentinel, 1, 1);
-    }
     gl.enable(gl.CULL_FACE);
 
     gl.useProgram(hp);
@@ -328,5 +243,5 @@ export function createRenderer(canvas, world, herd) {
     gl.bindVertexArray(null);
   }
 
-  return { gl, draw, buildLures };
+  return { gl, draw };
 }

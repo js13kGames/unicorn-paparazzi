@@ -72,10 +72,7 @@ export function scorePhoto(photo, cfg, state) {
     base,
     bonuses,
     multiplier,
-    // A flat toll, applied after the multiplier: showing your bait costs 200
-    // points, not 200 times whatever the colour bonus was.
-    bait: photo.bait ? cfg.baitPenalty : 0,
-    total: Math.max(0, Math.round(base * multiplier) - (photo.bait ? cfg.baitPenalty : 0)),
+    total: Math.round(base * multiplier),
   };
 }
 

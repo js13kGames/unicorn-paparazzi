@@ -1,4 +1,4 @@
-// The film counter and lure belt broke because nothing ever asserted what they
+// The film counter and the belt broke because nothing ever asserted what they
 // render. Stub the DOM, drive ui.js, and read back what it actually writes.
 const nodes = {};
 const anims = {};
@@ -21,7 +21,7 @@ const cfg = {
 };
 const state = {
   film: 12, filmTier: 0, res: 0, zoom: 0, maxZoom: 0, ready: 0,
-  photos: [{}, {}, {}], weak: 2, strong: 0, fx: 1, fy: 1,
+  photos: [{}, {}, {}], fx: 1, fy: 1,
 };
 // index.js recomputes the frame every tick and hands it to the hud on `state`;
 // do the same here so the viewfinder is driven by the real geometry.
@@ -44,7 +44,7 @@ ui.updateHud(state, cfg, 0.4, 0);
 
 const film = nodes.film.innerHTML;
 console.log('  film box  : ' + JSON.stringify(film));
-console.log('  lure belt : ' + JSON.stringify(nodes.belt.innerHTML.replace(/<[^>]+>/g, '')));
+console.log('  belt      : ' + JSON.stringify(nodes.belt.innerHTML.replace(/<[^>]+>/g, '')));
 console.log('');
 
 check('film box shows film remaining', film, (s) => /\b12\b/.test(s));
@@ -56,11 +56,7 @@ state.film = 2; ui.updateHud(state, cfg, 0.4, 0);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
 state.film = 12;
 
-// Two lure counters, in the bottom belt, each showing the key that throws it.
 const belt = nodes.belt.innerHTML;
-check('belt shows the weak lure key and count', belt, (t) => /class="k">1<\/b>🪝 2/.test(t));
-check('belt shows the strong lure key and count', belt, (t) => /class="k">2<\/b>🧲 0/.test(t));
-check('an empty lure slot is dimmed', belt, (t) => /class="no">.*?🧲 0/.test(t));
 check('belt still reports resolution and zoom', belt, (t) => /🔍 low 1×/.test(t));
 
 // The flash fired once and then stuck on, because a reflow restarts a CSS

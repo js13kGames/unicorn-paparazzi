@@ -19,7 +19,7 @@ const R = reach(0.002,1);
 for (const seed of [12345, 777, 42]) {
   const w = buildWorld(seed, cfg);
   const h = spawn(w, cfg, seed);
-  for (let i=0;i<600;i++) updateHerd(h, w, cfg, 1/60, []);
+  for (let i=0;i<600;i++) updateHerd(h, w, cfg, 1/60);
   packInstances(h, w);
   let none=0, samples=0; const counts=[];
   for (let d=0; d<w.path.length; d+=4) {

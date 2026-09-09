@@ -2,8 +2,7 @@ import { buildWorld } from '../.mirror/terrain.mjs';
 import { spawn, updateHerd, packInstances, buildModel, buildPoseTable, PARTS, POSE_ROWS, COLOR_NAMES, POSE_NAMES } from '../.mirror/unicorn.mjs';
 const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
               trackRadiusFrac:.25, unicornDensity:.003, driftChance:.08,
-              poseWeights:[.80,.10,.08,.02], weakRadius:26, strongRadius:70,
-              lureSpeed:4, lurePull:.7, lureGather:5 };
+              poseWeights:[.80,.10,.08,.02], weakRadius:26, strongRadius:70, };
 const w = buildWorld(12345, cfg);
 const h = spawn(w, cfg, 12345);
 console.log('herd size', h.n);
@@ -16,7 +15,7 @@ const pt = buildPoseTable();
 console.log('pose table floats', pt.length, 'expected', POSE_ROWS*PARTS*16, 'finite', pt.every(Number.isFinite));
 // simulate 60s
 let t0=Date.now();
-for (let f=0; f<3600; f++) updateHerd(h, w, cfg, 1/60, []);
+for (let f=0; f<3600; f++) updateHerd(h, w, cfg, 1/60);
 packInstances(h, w);
 console.log('60s sim ms', Date.now()-t0);
 const pc = {}; for (let i=0;i<h.n;i++) pc[POSE_NAMES[h.pose[i]]]=(pc[POSE_NAMES[h.pose[i]]]||0)+1;

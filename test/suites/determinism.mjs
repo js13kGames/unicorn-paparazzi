@@ -30,8 +30,8 @@ const check = (name, got, want) => {
 
 const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
               trackRadiusFrac:.25, unicornDensity:.003, driftChance:.08,
-              poseWeights:[.80,.10,.08,.02], weakRadius:26, strongRadius:70,
-              lureLife:45, lureSpeed:4, lurePull:0.7, lureGather:5, cartSpeed:8 };
+              poseWeights:[.80,.10,.08,.02],
+              cartSpeed:8 };
 const w = buildWorld(4242, cfg);
 
 // --- the shipped frame loop, driven by a fake clock -----------------------
@@ -103,14 +103,9 @@ const hash = (h) => {
   return a;
 };
 
-// `at` inserts a lure on that tick, the way a tick-stamped network message would.
-function run(steps, lure, at) {
+function run(steps) {
   const h = spawn(w, cfg, 4242);
-  const lures = [];
-  for (let n = 0; n < steps; n++) {
-    if (n === at) lures.push({ ...lure, launched: n * STEP, flight: 1, flying: false });
-    updateHerd(h, w, cfg, STEP, lures);
-  }
+  for (let n = 0; n < steps; n++) updateHerd(h, w, cfg, STEP);
   return hash(h);
 }
 
@@ -123,10 +118,9 @@ check('a different tick count does not', run(601) !== plain, true);
 // wall-clock second, since a client can be a tick behind for a frame.
 function rideTo(durs, target) {
   const h = spawn(w, cfg, 4242);
-  const lures = [];
   let n = 0;
   drive(stamps(durs), { mode: 'ride' }, STEP, () => {
-    if (n < target) { updateHerd(h, w, cfg, STEP, lures); n++; }
+    if (n < target) { updateHerd(h, w, cfg, STEP); n++; }
   });
   return { at: n, hash: hash(h) };
 }
@@ -140,20 +134,13 @@ check('and so does a client with a terrible frame rate', nasty.hash, slow.hash);
 // The old behaviour, kept as the control: variable dt over the same total time.
 function drifted(steps) {
   const h = spawn(w, cfg, 4242);
-  const pattern = [1 / 30, 1 / 120, 1 / 45, 1 / 90];
+  const jit = [1 / 30, 1 / 120, 1 / 45, 1 / 90];
   let t = 0, i = 0;
-  while (t < steps * STEP) { const dt = pattern[i++ % 4]; updateHerd(h, w, cfg, dt, []); t += dt; }
+  while (t < steps * STEP) { const dt = jit[i++ % 4]; updateHerd(h, w, cfg, dt); t += dt; }
   return hash(h);
 }
 check('wall-clock dt over the same ten seconds diverges (the old bug)',
       drifted(600) !== plain, true);
-
-// --- lures are an input, so they have to land on the same tick ------------
-const LURE = { x: 250, z: 250, strong: true, until: 1e9 };
-const baited = run(600, LURE, 120);
-check('a lure on the same tick lands the same herd', run(600, LURE, 120), baited);
-check('a lure one tick later does not', run(600, LURE, 121) !== baited, true);
-check('and a lure changes the herd at all', baited !== plain, true);
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

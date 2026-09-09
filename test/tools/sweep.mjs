@@ -2,7 +2,7 @@ import { buildWorld, pathAt } from '../.mirror/terrain.mjs';
 import { spawn } from '../.mirror/unicorn.mjs';
 const base = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
                trackRadiusFrac:.25, unicornDensity:.003, adultChance:.75,
-               poseWeights:[.80,.10,.08,.02], lureSpeed:4 };
+               poseWeights:[.80,.10,.08,.02] };
 const SEEDS = [12345,777,42,20260907,5,99,1,2,3,404];
 
 function evaluate(drift, radius) {

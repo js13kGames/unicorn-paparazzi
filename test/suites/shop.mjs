@@ -15,7 +15,6 @@ const ui = await import('../.mirror/ui.mjs');
 const cfg = {
   zoomLevels: [1, 2, 4, 8, 16], resNames: ['low', 'med', 'high', 'ultra'],
   filmTiers: [15, 20, 30, 40, 50], shutterTiers: [0.8, 0.55, 0.35, 0.2],
-  weakRadius: 26, strongRadius: 70,
 };
 
 // The same shape src/index.js offers() builds, without booting the game.
@@ -25,14 +24,9 @@ const LADDERS = [
   ['film', cfg.filmTiers, [300, 700, 1400, 2400], 'filmTier', ''],
   ['speed', cfg.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
 ];
-const offersFor = (st) => {
-  const o = LADDERS.map(([label, v, p, key, sfx]) => ({
-    label, v, p, sfx, at: st[key], price: p[st[key]],
-  }));
-  o.push({ label: '🪝 weak', price: 120, radius: 26, have: st.weak });
-  o.push({ label: '🧲 strong', price: 400, radius: 70, have: st.strong });
-  return o;
-};
+const offersFor = (st) => LADDERS.map(([label, v, p, key, sfx]) => ({
+  label, v, p, sfx, at: st[key], price: p[st[key]],
+}));
 
 let fails = 0;
 const check = (name, got, want) => {
@@ -43,7 +37,7 @@ const check = (name, got, want) => {
 };
 
 const render = (st) => {
-  const state = { bank: 2140, weak: 2, strong: 0,
+  const state = { bank: 2140,
                   maxZoom: 0, res: 0, filmTier: 0, shutterTier: 0, ...st };
   ui.showShop(state, cfg, offersFor(state), () => {}, () => {}, () => {});
   return nodes.card.innerHTML;
@@ -95,16 +89,11 @@ const maxed = render({ maxZoom: 4, res: 3, filmTier: 4, shutterTier: 3, bank: 99
 check('a maxed ladder has no button at all', maxed, (h) => !/data-i="[0-3]"/.test(h));
 check('and every one of its tiers reads as owned', maxed,
       (h) => cfg.resNames.every((v) => h.includes('<b class="pos">' + v + '</b>')));
-check('the lures are still buyable when everything else is maxed', maxed,
-      (h) => /data-i="4"/.test(h) && /data-i="5"/.test(h));
-
-// --- lure rows ---
-check('lure rows show what you own', mid, (h) => /×2<\/td>/.test(h));
-check('lure rows carry their price', mid, (h) => /data-i="4"[^>]*>120</.test(h));
+check('a maxed shop offers nothing at all', maxed, (h) => !/data-i=/.test(h));
 
 // --- clicking ---
 let bought = null, rode = false, restarted = false;
-const state = { bank: 2140, weak: 2, strong: 0,
+const state = { bank: 2140,
                 maxZoom: 1, res: 0, filmTier: 0, shutterTier: 0 };
 ui.showShop(state, cfg, offersFor(state), (i) => { bought = i; },
             () => { rode = true; }, () => { restarted = true; });
@@ -112,8 +101,6 @@ const click = (attrs) => nodes.card.onclick({
   target: { closest: (q) => (q === 'button' ? attrs : null) }, stopPropagation() {} });
 click({ dataset: { i: '2' } });
 check('clicking a rung buys that ladder', bought, 2);
-click({ dataset: { i: '5' } });
-check('clicking a lure buys the lure', bought, 5);
 click({ id: 'ride', dataset: {} });
 check('ride again still fires', rode, true);
 click({ id: 'restart', dataset: {} });

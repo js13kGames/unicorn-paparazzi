@@ -80,7 +80,7 @@ export function createPhotoRig(gl, canvas, draw) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     const subjects = tally(pixels, ID_W, ID_H, herd);
-    return { url, w: ID_W, h: ID_H, subjects, bait: subjects.bait };
+    return { url, w: ID_W, h: ID_H, subjects };
   }
 
   return { capture };
@@ -92,9 +92,6 @@ export function createPhotoRig(gl, canvas, draw) {
 // Scenery's sentinel id. The herd is a few hundred animals, so real ids never
 // come near it.
 export const TERRAIN = 65535;
-export const LURE = 65534;
-// A stray pixel of bait should not cost 200 points; this is a visible lure.
-const LURE_FLOOR = 0.0004;
 // Blue carries distance/256, so one step is about a unit. A neighbour only
 // counts as occluding if it is genuinely nearer -- a unicorn always borders the
 // ground it is standing on, and the gaps between its legs are all terrain, so
@@ -107,12 +104,10 @@ export function tally(px, W, H, herd, rect) {
   const at = (x, y) => { const o = (y * W + x) * 4; return px[o] | (px[o + 1] << 8); };
   const depth = (x, y) => px[(y * W + x) * 4 + 2];
   const seen = new Map();
-  let bait = 0;
   for (let y = r.y0; y < y1; y++) {
     for (let x = r.x0; x < x1; x++) {
       const o = (y * W + x) * 4;
       const id = px[o] | (px[o + 1] << 8);
-      if (id === LURE) { bait++; continue; }
       if (!id || id === TERRAIN) continue;
       const cx = x - r.x0, cy = y - r.y0;
       let s = seen.get(id);
@@ -149,6 +144,5 @@ export function tally(px, W, H, herd, rect) {
       }
     }
   }
-  seen.bait = bait / (r.w * r.h) >= LURE_FLOOR;
   return seen;
 }

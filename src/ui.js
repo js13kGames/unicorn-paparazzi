@@ -33,15 +33,10 @@ export function updateHud(state, cfg, lap, clock) {
     '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
   const z = cfg.zoomLevels[state.zoom];
-  // The belt is the lure inventory: what you own, and the key that throws it.
   el.belt.innerHTML =
-    slot(1, '🪝', state.weak) + slot(2, '🧲', state.strong) +
     '<i>🔍 ' + cfg.resNames[state.res] + ' ' + z + '×' +
     (state.maxZoom ? ' <b class="k">+</b><b class="k">-</b>' : '') + '</i>';
 }
-
-const slot = (key, icon, n) =>
-  '<i class="' + (n ? '' : 'no') + '"><b class="k">' + key + '</b>' + icon + ' ' + n + '</i>';
 
 
 let toastUntil = 0;
@@ -108,8 +103,6 @@ export function showPhoto(scored, index, count, onBack) {
     (scored.composition ? '<tr class="rule"><td>composition</td><td class="n">' +
       sign(scored.composition) + '</td></tr>' : '') +
     bon +
-    (scored.bait ? '<tr><td class="neg">a lure is in shot</td><td class="n neg">-' +
-      scored.bait + '</td></tr>' : '') +
     '<tr class="rule big"><td><b>photo total</b></td><td class="n"><b>' +
     scored.total + '</b></td></tr></table>' +
     '<p class="hint"><button id="back">Back to the roll</button></p>'
@@ -157,20 +150,13 @@ function row(label, n, how) {
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
 export function showShop(state, cfg, offers, onBuy, onRide, onRestart) {
-  let rows = '', kit = '';
+  let rows = '';
   // Ladders are different lengths, so short ones have to be padded out to the
   // widest -- otherwise the row ends early and its rule stops short of the edge.
-  const wide = Math.max(...offers.map((o) => (o.v ? o.v.length : 0)));
+  const wide = Math.max(...offers.map((o) => o.v.length));
   offers.forEach((o, i) => {
     const price = (n) => '<small class="wk">' + n + '</small><br>';
-    if (!o.v) {
-      // A consumable: one row, buy as many as you like.
-      kit += '<tr class="rule"><td>' + o.label + '</td>' +
-        '<td class="n">×' + o.have + '</td><td class="n"><button data-i="' + i + '"' +
-        (state.bank >= o.price ? '' : ' disabled') + '>' + o.price + '</button></td></tr>';
-      return;
-    }
-    // A ladder: everything you own, the rung you can buy, and what is beyond.
+    // Everything you own, the rung you can buy, and what is beyond.
     let cells = '';
     o.v.forEach((v, t) => {
       const label = v + o.sfx;
@@ -185,7 +171,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onRestart) {
   panel(
     '<h1>SHOP</h1>' +
     '<h2>bank ' + state.bank + '</h2>' +
-    '<table>' + rows + '</table><table>' + kit + '</table>' +
+    '<table>' + rows + '</table>' +
     '<p class="hint"><button id="ride">Ride again</button> ' +
     '<button id="restart">Start over</button></p>'
   );
