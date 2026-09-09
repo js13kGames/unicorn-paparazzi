@@ -286,9 +286,12 @@ function ride() {
   home();
 }
 
-// The bare path, not reload(): a seed adopted from the hash must not stick to
-// every later lap, and dropping it is also how a multiplayer lap ends.
-const home = () => { location.href = location.pathname; };
+// Drop the seed, then reload. Assigning the bare path instead LOOKS like it
+// reloads and does not: a URL that differs only in its fragment is a
+// same-document navigation, so coming back from a lap at #4242 would have
+// scrolled and stayed put. Clearing the hash first is also what stops a seed
+// adopted for one lap sticking to every later one.
+const home = () => { location.hash = ''; location.reload(); };
 
 function restart() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* nothing to clear */ }
@@ -315,7 +318,11 @@ function start(s) {
   if (state.mode !== 'lobby') return;  // never yank a rider already on the track
   state.go = 1;
   persist();
-  location.href = location.pathname + '#' + s;
+  // Same trap as home(): setting href to pathname + '#' + s only changes the
+  // fragment, which the browser handles in-document and never reloads. The lap
+  // does not begin until the world is rebuilt, so ask for the reload outright.
+  location.hash = s;
+  location.reload();
 }
 
 // The host picks the seed and tells the room before taking it themselves.

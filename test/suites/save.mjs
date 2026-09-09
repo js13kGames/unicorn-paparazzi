@@ -121,6 +121,63 @@ check('persist() refuses to run at all once the lap is a multiplayer one', guard
 // format, everyone would reconnect to nothing.
 check('the save carries the lobby code', /c: state\.code/.test(src));
 
+// --- actually getting the page to reload ---------------------------------
+// Every lap transition is a reload, because the world has to be rebuilt. The
+// trap: a URL that differs from the current one ONLY in its fragment is a
+// same-document navigation, so assigning location.href looks like a reload and
+// silently is not. This stub models that rule, so the bug it caused -- "Start
+// Multiplayer Game" doing nothing at all -- cannot come back.
+const fakeLocation = (href) => {
+  const [path, hash = ''] = href.split('#');
+  const loc = {
+    pathname: path, reloads: 0,
+    get hash() { return loc._h ? '#' + loc._h : ''; },
+    set hash(v) { loc._h = String(v).replace(/^#/, ''); },
+    get href() { return loc.pathname + loc.hash; },
+    // Assigning href only reloads when the result is not a bare fragment change.
+    set href(v) {
+      const [p2, h2 = ''] = String(v).split('#');
+      if (p2 !== loc.pathname) loc.reloads++;   // a real navigation
+      loc.pathname = p2;
+      loc._h = h2;
+    },
+    reload() { loc.reloads++; },
+  };
+  loc._h = hash;
+  return loc;
+};
+
+const navBlock = (name) => {
+  const m = new RegExp('^(?:const ' + name + ' = |function ' + name + ')[\\s\\S]*?^(?:};|})$', 'm').exec(src);
+  if (!m) throw new Error('no ' + name + ' to test');
+  return m[0];
+};
+
+const navigate = (name, from, call) => {
+  const location = fakeLocation(from);
+  const state = { mode: 'lobby' };
+  new Function('location', 'state', 'persist',
+               navBlock(name) + ';' + call)(location, state, () => {});
+  return location;
+};
+
+// The one the player actually hit: the lobby lives at the bare path, so the lap
+// used to be started by a fragment change that never reloaded anything.
+const started = navigate('start', 'index.html', 'start(4242)');
+check('starting a multiplayer lap really reloads', started.reloads > 0);
+check('and carries the seed across in the hash', started.hash === '#4242', started.hash);
+
+// Coming back from a lap, the URL DOES carry a seed, so dropping it is once again
+// a fragment-only change -- and once again not a reload.
+const back = navigate('home', 'index.html#4242', 'home()');
+check('leaving a lap really reloads', back.reloads > 0);
+check('and drops the seed, so it does not stick to the next lap',
+      !+back.hash.slice(1), back.hash);
+
+// The plain case has always worked, because the target URL was byte-identical.
+const plain = navigate('home', 'index.html', 'home()');
+check('and it still reloads when there was no seed to drop', plain.reloads > 0);
+
 // --- which screen a load lands on --------------------------------------------
 // Three routes, and the one-shot `g` marker is what separates "Ride again"
 // (straight onto the cart) from an actual refresh (back to the shop).
