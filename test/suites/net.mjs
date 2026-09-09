@@ -73,6 +73,26 @@ deliver('{"t":"d","i":"bob","n":9999}');
 check('a rider repeating themselves does not appear twice', net.others().length, before);
 check('but their score does update', net.others().find((o) => o.i === 'bob').n, 9999);
 
+// --- the relay's own control frames ---
+// These are bare strings, not JSON, and they arrive interleaved with the traffic.
+const board = net.others().length;
+deliver('+someone-else');
+check('a rider arriving is not mistaken for a result', net.others().length, board);
+deliver('@relay-issued-id');
+net.done(10, '');
+check('the relay-issued id replaces our stand-in on the wire',
+      JSON.parse(sent[sent.length - 1]).i, 'relay-issued-id');
+
+deliver('{"t":"d","i":"leaver-and-then-some","n":300}');
+check('a rider is on the board before they leave',
+      net.others().some((o) => o.i === 'leaver-a'), true);
+deliver('-leaver-and-then-some');
+check('and leaving takes their row off it',
+      net.others().some((o) => o.i === 'leaver-a'), false);
+const quiet = dones.length;
+deliver('-nobody-we-ever-heard-of');
+check('a stranger leaving does not redraw the board', dones.length, quiet);
+
 // No forget() to test: every lap transition is a page reload, so the board cannot
 // outlive the lap that filled it.
 
