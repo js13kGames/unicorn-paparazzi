@@ -1,55 +1,43 @@
-const CACHE_NAME = 'chromazoa-v1';
-const urlsToCache = [
-  './index.html',
-  './main.js'
-];
+// Offline support for the GitHub Pages build. Not part of the jam zip -- that is
+// a single self-contained index.html -- so nothing here costs bytes.
+//
+// This was cache-first against a cache name that never changed, which meant the
+// first build a browser ever saw was the only build it would ever run: every
+// later fix was invisible, forever, with no way for a player to get past it.
+// Network-first fixes that. The cache is now only a fallback for being offline.
+const CACHE = 'unicorn-paparazzi';
+const ASSETS = ['./index.html', './main.js'];
 
-// Install event - cache all assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-      .then(() => self.skipWaiting()) // Activate immediately
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS))
+      .catch(() => {})            // a failed precache must not block activation
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
     caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames
-            .filter((name) => name !== CACHE_NAME)
-            .map((name) => caches.delete(name))
-        );
-      })
-      .then(() => self.clients.claim()) // Take control immediately
+      .then((names) => Promise.all(names.filter((n) => n !== CACHE).map((n) => caches.delete(n))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch event - cache-first strategy
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version if available
-        if (response) {
-          return response;
+// Network first: always prefer a fresh build, fall back to the cache only when
+// the network genuinely cannot answer.
+self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
+  e.respondWith(
+    fetch(e.request)
+      .then((res) => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
         }
-        // Otherwise fetch from network
-        return fetch(event.request)
-          .then((response) => {
-            // Cache the new response for future use
-            if (response && response.status === 200) {
-              const responseToCache = response.clone();
-              caches.open(CACHE_NAME)
-                .then((cache) => {
-                  cache.put(event.request, responseToCache);
-                });
-            }
-            return response;
-          });
+        return res;
       })
+      .catch(() => caches.match(e.request))
   );
 });

@@ -185,6 +185,11 @@ export function createRenderer(canvas, world, herd) {
   gl.vertexAttribDivisor(hIq, 1);
   gl.bindVertexArray(null);
 
+  const poseTex = dataTexture(gl, PARTS * 4, POSE_ROWS, buildPoseTable());
+  const palette = new Float32Array(COLORS.flat());
+
+  // w/h default to the canvas, but the photo rig renders the ID pass into a
+  // small offscreen buffer at the same aspect, so it must pass its own.
   function draw(cam, fovy, idPass, w, h) {
     w = w || canvas.width;
     h = h || canvas.height;
