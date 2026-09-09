@@ -7,7 +7,7 @@ import { tally } from '../.mirror/photo.mjs';
 import { scorePhoto } from '../.mirror/score.mjs';
 import { COLOR_NAMES } from '../.mirror/unicorn.mjs';
 
-const cfg = { poseWeights:[.80,.10,.08,.02], resFactor:[720/4320,1080/4320,2160/4320,1], minCoverage:0.002, resNames:['720p','1080p','4K','8K'], cropK:2.5, envK:2.0, occK:0.9 };
+const cfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000], minCoverage:0.002, resNames:['low','med','high','ultra'], cropK:2.5, envK:2.0, occK:0.9 };
 const st = { res: 0 };
 
 // Aim each shot at the nearest unicorn, the way a player would.

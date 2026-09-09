@@ -1,4 +1,4 @@
-import { mulberry32, hash, fbm } from './rng.js';
+import { hash, fbm } from './rng.js';
 
 // World units: 1 tile = 1 unit across, 1 elevation band = HEIGHT units tall.
 export const HEIGHT = 1.9;
@@ -112,18 +112,6 @@ function addDetail(seed, N, height, amp) {
 
 // --- the track -----------------------------------------------------------
 
-// Periodic radius wobble: sines are exactly periodic in theta, so the loop closes.
-function wobble(seed, theta) {
-  const rnd = mulberry32(seed ^ 0x5eed);
-  let s = 0, norm = 0;
-  for (let k = 1; k <= 4; k++) {
-    const amp = 1 / k, phase = rnd() * Math.PI * 2;
-    s += amp * Math.sin(k * theta + phase);
-    norm += amp;
-  }
-  return s / norm;
-}
-
 function generateTrack(seed, N, band, cfg) {
   const cx = N / 2, cz = N / 2;
   const baseR = N * cfg.trackRadiusFrac;
@@ -132,7 +120,7 @@ function generateTrack(seed, N, band, cfg) {
 
   for (let i = 0; i < PATH_POINTS; i++) {
     const t = (i / PATH_POINTS) * Math.PI * 2;
-    const r = baseR * (1 + 0.2 * wobble(seed, t));
+    const r = baseR * (1 + 0.2 * Math.sin(3 * t + seed));
     px[i] = cx + Math.cos(t) * r;
     pz[i] = cz + Math.sin(t) * r;
     const gx = Math.min(N - 1, Math.max(0, Math.round(px[i])));

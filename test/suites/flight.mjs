@@ -57,26 +57,38 @@ check('yaw changes where it lands',
       Math.hypot(ahead.x - side.x, ahead.z - side.z) > 100, true);
 
 // --- still inert while airborne, still gathers after landing ---
-const h = spawn(w, cfg, 12345);
-for (let i = 0; i < 300; i++) updateHerd(h, w, cfg, 1/60, []);
-const X = h.x[0] + 30, Z = h.z[0];
-const lure = { x:X, z:Z, fx:h.x[0], fz:h.z[0], fy:5, launched:0, flightTime:3.0,
-               strong:true, until: 3.0 + cfg.lureLife };
-const near = () => { let n=0; for (let i=0;i<h.n;i++) if (Math.hypot(h.x[i]-X,h.z[i]-Z)<12) n++; return n; };
-const n0 = near();
-const before = h.x.slice(), beforeZ = h.z.slice();
-let clock = 0, movedInFlight = 0;
-for (let f = 0; f < 60 * 40; f++) {
-  clock += 1/60;
-  lure.flight = Math.min(1, clock / lure.flightTime);
-  lure.flying = lure.flight < 1;
-  updateHerd(h, w, cfg, 1/60, [lure]);
-  if (Math.abs(clock - 2.5) < 1/120) {
-    for (let i=0;i<h.n;i++) if (Math.hypot(h.x[i]-before[i], h.z[i]-beforeZ[i]) > 3) movedInFlight++;
+//
+// "Inert" is measured against the herd's own wandering, not an absolute distance.
+// It used to allow 3 units of drift in the 2.5s before touchdown, which is almost
+// exactly how far a standing unicorn wanders anyway (max 3.03 on this seed), so
+// any reseeding of the herd flipped the result. Running the same simulation with
+// and without the lure isolates the lure's contribution instead.
+function fly(withLure) {
+  const h = spawn(w, cfg, 12345);
+  for (let i = 0; i < 300; i++) updateHerd(h, w, cfg, 1/60, []);
+  const X = h.x[0] + 30, Z = h.z[0];
+  const lure = { x:X, z:Z, fx:h.x[0], fz:h.z[0], fy:5, launched:0, flightTime:3.0,
+                 strong:true, until: 3.0 + cfg.lureLife };
+  const near = () => { let n=0; for (let i=0;i<h.n;i++) if (Math.hypot(h.x[i]-X,h.z[i]-Z)<12) n++; return n; };
+  const n0 = near();
+  let clock = 0, airborne = null;
+  for (let f = 0; f < 60 * 40; f++) {
+    clock += 1/60;
+    lure.flight = Math.min(1, clock / lure.flightTime);
+    lure.flying = lure.flight < 1;
+    updateHerd(h, w, cfg, 1/60, withLure ? [lure] : []);
+    // Snapshot mid-flight, half a second before it lands.
+    if (Math.abs(clock - 2.5) < 1/120) airborne = h.x.slice();
   }
+  return { n0, near: near(), airborne };
 }
-check('nothing is hauled in while the lure is in the air', movedInFlight === 0);
-check('the herd gathers once it lands (' + n0 + ' -> ' + near() + ')', near() > n0 + 5);
+const withLure = fly(true), without = fly(false);
+check('nothing is hauled in while the lure is in the air',
+      withLure.airborne.every((x, i) => x === without.airborne[i]));
+check('the herd gathers once it lands (' + withLure.n0 + ' -> ' + withLure.near + ')',
+      withLure.near > withLure.n0 + 5);
+// ...and the gathering is the lure's doing, not the wander's.
+check('a herd with no lure does not gather', without.near <= without.n0 + 5);
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

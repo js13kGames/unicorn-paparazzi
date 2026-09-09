@@ -13,15 +13,24 @@ globalThis.document = { getElementById: node, createElement: () => node('tmp') }
 globalThis.performance = { now: () => 1000 };
 
 const ui = await import('../.mirror/ui.mjs');
+const { frame } = await import('../.mirror/photo.mjs');
 
 const cfg = {
-  zoomLevels: [1, 2, 4, 8, 16], resNames: ['720p', '1080p', '4K', '8K'],
-  filmTiers: [15, 20, 30, 40, 50], resCrop: [0.55, 0.7, 0.85, 1.0],
+  zoomLevels: [1, 2, 4, 8, 16], resNames: ['low', 'med', 'high', 'ultra'],
+  filmTiers: [15, 20, 30, 40, 50],
 };
 const state = {
   film: 12, filmTier: 0, res: 0, zoom: 0, maxZoom: 0, ready: 0,
-  photos: [{}, {}, {}], weak: 2, strong: 0,
+  photos: [{}, {}, {}], weak: 2, strong: 0, fx: 1, fy: 1,
 };
+// index.js recomputes the frame every tick and hands it to the hud on `state`;
+// do the same here so the viewfinder is driven by the real geometry.
+const FOV = Math.PI / 3;
+const setFrame = (winAspect) => {
+  const f = frame(FOV, winAspect);
+  state.fx = f.fx; state.fy = f.fy;
+};
+setFrame(16 / 9);
 
 let fails = 0;
 const check = (name, got, want) => {
@@ -52,7 +61,7 @@ const belt = nodes.belt.innerHTML;
 check('belt shows the weak lure key and count', belt, (t) => /class="k">1<\/b>🪝 2/.test(t));
 check('belt shows the strong lure key and count', belt, (t) => /class="k">2<\/b>🧲 0/.test(t));
 check('an empty lure slot is dimmed', belt, (t) => /class="no">.*?🧲 0/.test(t));
-check('belt still reports resolution and zoom', belt, (t) => /🔍 720p 1×/.test(t));
+check('belt still reports resolution and zoom', belt, (t) => /🔍 low 1×/.test(t));
 
 // The flash fired once and then stuck on, because a reflow restarts a CSS
 // transition but not a CSS animation. It must now fire on EVERY shot.
@@ -61,14 +70,30 @@ check('flash fires on the first shot', anims.flash, 1);
 ui.flash(); ui.flash(); ui.flash();
 check('flash fires on every later shot too', anims.flash, 4);
 
-// The viewfinder is the photograph now, so it must track the sensor tier.
+// The viewfinder outlines the photograph, and the photograph is now the same
+// shape on every camera. The inset used to shrink per tier and reach 0 at the
+// top, which put the outline on the screen edge and left nowhere to watch a
+// unicorn walk in from; buying a camera must not move the frame at all.
 const insets = [];
-for (let r = 0; r < 4; r++) { state.res = r; ui.updateHud(state, cfg, 0.4, 0); insets.push(nodes.vf.style.inset); }
-state.res = 0;
+for (let r = 0; r < 4; r++) { state.res = r; setFrame(16 / 9); ui.updateHud(state, cfg, 0.4, 0); insets.push(nodes.vf.style.inset); }
+state.res = 0; setFrame(16 / 9);
 console.log('        viewfinder inset per tier: ' + insets.join('  '));
 const nums = insets.map(parseFloat);   // '15.0%' > '7.5%' is false as a string
-check('viewfinder shrinks its inset as the sensor grows',
-      nums[0] > nums[1] && nums[1] > nums[2] && nums[2] > nums[3] && nums[3] === 0, true);
+check('viewfinder does not move when you buy a camera',
+      nums.every((n) => n === nums[0]), true);
+check('and always keeps a margin off the screen edge', nums[0] > 0, true);
+
+// ...and it now needs an inset per axis, because the frame is a fixed 16:9
+// rectangle that the window shape no longer stretches.
+const shapes = [];
+for (const a of [16 / 9, 4 / 3, 21 / 9, 9 / 16]) {
+  setFrame(a); ui.updateHud(state, cfg, 0.4, 0);
+  shapes.push(a.toFixed(2) + ' -> ' + nodes.vf.style.inset);
+}
+setFrame(16 / 9);
+console.log('        viewfinder inset per window shape: ' + shapes.join('   '));
+check('viewfinder carries a vertical and a horizontal inset',
+      shapes.every((s) => /^\S+ -> [\d.]+% [\d.]+%$/.test(s)), true);
 
 // The shutter recharges, so a burst of identical frames is not the best play.
 state.ready = 5;
@@ -91,13 +116,13 @@ const scored = [
   { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colours' }] },
 ];
 let picked = null, shopped = false;
-ui.showResults({ won: false, bank: 1260, catalogued: new Set() }, scored, 'You completed the lap.',
+ui.showResults({ bank: 1260 }, scored, 'You completed the lap.',
                (i) => { picked = i; }, () => { shopped = true; });
 const list = nodes.card.innerHTML;
 const order = [...list.matchAll(/data-i="(\d)"/g)].map((m) => +m[1]);
 check('results list is sorted worst to best', order.join(','), '1,2,0');
 check('results list shows every shot', order.length, scored.length);
-check('a frame with nothing big enough is labelled', list, (s) => s.includes('nothing big enough'));
+check('a frame with nothing big enough is labelled', list, (s) => s.includes('No clear unicorns'));
 check('bonuses appear in the row summary', list, (s) => s.includes('2 colours'));
 check('bank is shown', list, (s) => s.includes('1260'));
 nodes.card.onclick({ target: { closest: (q) => (q === '.row' ? { dataset: { i: '2' } } : null) }, stopPropagation() {} });

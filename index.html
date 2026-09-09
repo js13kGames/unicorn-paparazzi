@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>Unicorn Safari</title>
+  <title>Unicorn Paparazzi</title>
   <meta name="theme-color" content="#9ec7f2">
   <style>
     /* Deliberately lean: this stylesheet rides inside the compressed payload,
@@ -50,36 +50,44 @@
     #track { left: 10px; right: 10px; bottom: 10px; height: 4px; background: #0004 }
     #bar { height: 100%; width: 0; background: #fff }
 
-    #panel { inset: 0; display: none; place-items: center; background: #0b1a2ad9; pointer-events: auto }
+    #panel { inset: 0; display: none; place-items: center; background: #ff8f6bb3; pointer-events: auto }
     #panel.on { display: grid }
     #card {
       width: min(720px, 92vw); max-height: 88vh; overflow: auto; touch-action: pan-y;
       background: #16273b; border: 1px solid #ffffff26; padding: 18px 20px
     }
-    h1 { font: 30px/1.2 cursive; margin: 0 0 10px }
+    #card.t {
+      background: none; border: 0; width: 100vw;
+      display: flex; flex-direction: column; align-items: center
+    }
+    h1 { font: 700 44px serif; margin: 0 0 10px }
+    #card.t h1 { font-size: 6em; animation: w 1s infinite }
+    @keyframes w { 50% { transform: translateY(-20px) } }
     h2 { font-size: 14px; margin: 0 0 12px; font-weight: 400; color: #9fb6cc }
+    h1, h2 { text-align: center }
     #card img { width: 100%; display: block; margin-bottom: 12px; background: #000 }
-    ul { margin: 6px 0 0; padding-left: 18px; color: #c3d3e2 }
     table { width: 100%; border-collapse: collapse; font-size: 12px }
     td { padding: 3px 0 }
     td.n { text-align: right; font-variant-numeric: tabular-nums }
     td.th { width: 92px; padding-right: 10px }
-    td.th img { width: 100%; display: block }
     tr.row { cursor: pointer }
     tr.row:hover td { background: #ffffff12 }
     .rule td { border-top: 1px solid #ffffff26; padding-top: 8px }
+    /* One height for every ladder row, whether or not it carries a price tag,
+       and every tier sitting on the same line. */
+    .g td { height: 44px; vertical-align: bottom }
     .dim { color: #8ea6bd }
     .wk { color: #64798e }
     .pos { color: #8fe0a0 }
     .neg { color: #ff8f6b }
     .big { font-size: 17px }
-    .hint { margin-top: 14px; color: #7d93a9; font-size: 12px }
-    button, .btn {
+    .hint { margin-top: 14px; color: #7d93a9; font-size: 12px; text-align: center }
+    button {
       background: #24405c; color: #dceaf7; border: 1px solid #ffffff33;
-      padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px;
-      text-decoration: none; display: inline-block
+      padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px
     }
-    button:hover:not(:disabled), .btn:hover { background: #2f5478 }
+    #go { background: none; font: 2em serif; color: #fff }
+    button:hover:not(:disabled) { background: #2f5478 }
     button:disabled { opacity: .35; cursor: default }
   </style>
 </head>

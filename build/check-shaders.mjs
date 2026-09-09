@@ -136,5 +136,34 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'src'))) {
   }
 }
 
+// And the same accident again, one level out: a SCREAMING_CASE constant that is
+// referenced but never declared or imported. `RES_PX` sat in the shop label for a
+// release and threw a ReferenceError the moment the shop opened, because nothing
+// resolves a bare identifier until the line runs.
+{
+let seen = 0;
+for (const f of fs.readdirSync(path.join(__dirname, '..', 'src'))) {
+  const body = fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8')
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/`[^`]*`|'[^'\n]*'|"[^"\n]*"/g, "''");
+  const declared = new Set();
+  // One statement can bind several: `const A = 0, B = 1;` and `const [A, B] = …`.
+  for (const m of body.matchAll(/\b(?:const|let|var)\s+([^;=\n]+(?:=[^;\n]*,[^;\n]*)*)/g)) {
+    for (const n of m[1].matchAll(/\b[A-Z][A-Z0-9_]+\b/g)) declared.add(n[0]);
+  }
+  for (const g of ['JSON', 'NaN', 'Infinity']) declared.add(g);
+  for (const m of body.matchAll(/import\s*\{([^}]*)\}/g)) {
+    for (const n of m[1].split(',')) declared.add(n.trim().split(/\s+as\s+/).pop());
+  }
+  // `x.FOO` and `FOO:` are properties, not references to a binding.
+  for (const m of body.matchAll(/(\.?)\b([A-Z][A-Z0-9_]{2,})\b\s*(:?)/g)) {
+    if (m[1] || m[3]) continue;
+    seen++;
+    if (!declared.has(m[2])) check(f + ': ' + m[2] + ' is declared or imported', false);
+  }
+}
+console.log('  (' + seen + ' constant references, all resolved)');
+}
+
 console.log(fails ? '\n' + fails + ' FAILED' : '\nshaders and Math usage ok');
 process.exit(fails ? 1 : 0);

@@ -2,7 +2,7 @@
 
 export function context(canvas) {
   const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
-  if (!gl) throw new Error('WebGL2 required');
+  if (!gl) throw new Error('no gl');
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
   return gl;

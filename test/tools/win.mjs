@@ -9,7 +9,7 @@ import { tally } from '../.mirror/photo.mjs';
 import { scorePhoto } from '../.mirror/score.mjs';
 
 const CART = 8, LIFE = 45;
-const scfg = { poseWeights:[.80,.10,.08,.02], resFactor:[720/4320,1080/4320,2160/4320,1],
+const scfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000],
                minCoverage:0.002, cropK:2.5, envK:2.0, occK:0.9, baitPenalty:200 };
 
 let bestD = 0, bestA = 0, bestN = 0;

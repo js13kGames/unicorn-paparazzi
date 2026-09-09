@@ -1,18 +1,11 @@
 import { COLOR_NAMES, POSE_NAMES } from './unicorn.js';
 
-// The four rule-of-thirds power points, in a frame normalised to [-0.5, 0.5].
 const HORNS = ['', 'bicorn', 'tricorn', 'quadricorn'];
-
-const THIRDS = [[-1 / 6, -1 / 6], [1 / 6, -1 / 6], [-1 / 6, 1 / 6], [1 / 6, 1 / 6]];
-// Worst case distances, used to normalise each composition term to [0, 1].
-const MAX_CENTRE = Math.SQRT1_2;              // corner to centre, ~0.707
-const MAX_THIRD = Math.hypot(1 / 3, 1 / 3);   // corner to its nearest third
 
 export function scorePhoto(photo, cfg, state) {
   const total = photo.w * photo.h;
-  const res = cfg.resFactor[state.res];
+  const bonus = cfg.resBonus[state.res];
   const common = Math.max(...cfg.poseWeights);
-  const sensorPx = res * 4320 * res * 4320 * (photo.w / photo.h);
   const subjects = [];
 
   for (const [id, s] of photo.subjects) {
@@ -21,13 +14,11 @@ export function scorePhoto(photo, cfg, state) {
     // dozen distant specks hand out a huge colour-variety multiplier.
     if (coverage < cfg.minCoverage) continue;
 
-    // Size counts the unicorn's ACTUAL pixels, not its share of the frame, which
-    // is what makes a bigger sensor worth buying: the same shot at 8K simply has
-    // more unicorn in it. `res` is the tier's height over 4320, so
-    //   sqrt(coverage) * res  ==  sqrt(subjectPixels / 8K pixels)
-    // exactly -- the aspect ratio cancels, so this holds at any window shape.
-    // A unicorn filling an 8K frame still scores 100, as specified.
-    const size = Math.min(100, 100 * Math.sqrt(coverage) * res);
+    // Share of the frame, paid at this sensor's rate -- which is what makes a
+    // bigger camera worth buying. The top tier is worth 6x the bottom, not 36x:
+    // squaring the ladder would drown the pose and composition terms, which top
+    // out at 100 each.
+    const size = coverage * bonus;
     // Rarer poses are worth more, measured against the commonest one -- so
     // merely standing about, which is what they do 80% of the time, earns
     // nothing at all.
@@ -55,9 +46,7 @@ export function scorePhoto(photo, cfg, state) {
       colour: COLOR_NAMES[s.color],
       colourIndex: s.color,
       poseName: POSE_NAMES[s.pose],
-      // What the size term is actually counting: unicorn pixels in a photograph
-      // of this sensor's real dimensions.
-      px: Math.round(coverage * sensorPx),
+      cov: coverage,
       horns: s.horns,
       // Normalised centroid, y flipped into image space (readPixels is bottom-up).
       cx: s.sx / s.n / photo.w - 0.5,
@@ -76,6 +65,8 @@ export function scorePhoto(photo, cfg, state) {
 
   return {
     url: photo.url,
+    // Carried so the breakdown can show the multiply it did, without taking cfg.
+    resBonus: bonus,
     subjects,
     composition,
     base,
@@ -88,36 +79,24 @@ export function scorePhoto(photo, cfg, state) {
   };
 }
 
-// One subject wants the middle of the frame. Two to four want the rule of
-// thirds -- there are exactly four power points, so each can own one. Beyond
-// that the thirds test breaks down: matching every subject to its *nearest*
-// point lets six animals piled on one corner score full marks, which is not a
-// composition. A crowd is judged as a crowd instead -- centred as a group, and
-// spread across the frame rather than heaped.
+// Spread: the average distance between subjects, as a fraction of the frame.
+// Herding everything into one corner is the mistake it punishes, and half a
+// frame apart on average is full marks. A single subject has no pairs, so it is
+// judged on how centred it is instead -- dead centre 100, corner 0.
 function compose(subjects) {
-  const n = subjects.length;
-  if (!n) return 0;
-  if (n === 1) {
+  if (subjects.length === 1) {
     const s = subjects[0];
-    return Math.round(100 * Math.max(0, 1 - Math.hypot(s.cx, s.cy) / MAX_CENTRE));
+    return Math.round(100 * (1 - Math.hypot(s.cx, s.cy) / Math.SQRT1_2));
   }
-  if (n > THIRDS.length) {
-    let mx = 0, my = 0;
-    for (const s of subjects) { mx += s.cx; my += s.cy; }
-    mx /= n; my /= n;
-    let spread = 0;
-    for (const s of subjects) spread += Math.hypot(s.cx - mx, s.cy - my);
-    spread = Math.min(1, spread / n / 0.25);
-    const balance = Math.max(0, 1 - Math.hypot(mx, my) / MAX_CENTRE);
-    return Math.round(100 * balance * (0.35 + 0.65 * spread));
+  let sum = 0, pairs = 0;
+  for (const a of subjects) {
+    for (const b of subjects) {
+      if (a === b) continue;
+      sum += Math.hypot(a.cx - b.cx, a.cy - b.cy);
+      pairs++;
+    }
   }
-  let sum = 0;
-  for (const s of subjects) {
-    let best = Infinity;
-    for (const [tx, ty] of THIRDS) best = Math.min(best, Math.hypot(s.cx - tx, s.cy - ty));
-    sum += Math.max(0, 1 - best / MAX_THIRD);
-  }
-  return Math.round((100 * sum) / n);
+  return pairs ? Math.min(100, Math.round((200 * sum) / pairs)) : 0;
 }
 
 function bonusList(subjects) {
@@ -132,7 +111,7 @@ function bonusList(subjects) {
     out.push({ label: colours.size + ' colours', factor: colours.size });
   }
   if (colours.size === 6) {
-    out.push({ label: 'RAINBOW', factor: 2, rainbow: true });
+    out.push({ label: 'RAINBOW', factor: 2 });
   }
   return out;
 }

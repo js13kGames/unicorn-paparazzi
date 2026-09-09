@@ -83,7 +83,7 @@ if (!injected.size) {
   process.exit(1);
 }
 
-if (err && /WebGL2 required/.test(err.message)) {
+if (err && /no gl/.test(err.message)) {
   console.log('  reached the WebGL2 context call — everything before it ran clean');
   process.exit(0);
 }

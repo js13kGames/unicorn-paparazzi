@@ -1,7 +1,7 @@
 import { tally, TERRAIN } from '../.mirror/photo.mjs';
 import { scorePhoto } from '../.mirror/score.mjs';
 
-const cfg = { poseWeights:[.80,.10,.08,.02], resFactor:[720/4320,1080/4320,2160/4320,1], resCrop:[0.55,0.7,0.85,1.0], minCoverage:0.002, resNames:['720p','1080p','4K','8K'], cropK:2.5, envK:2.0, occK:0.9 };
+const cfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000], minCoverage:0.002, resNames:['low','med','high','ultra'], cropK:2.5, envK:2.0, occK:0.9 };
 const st = { res: 0 };
 const W = 320, H = 180;
 
@@ -39,24 +39,45 @@ const note = (s) => console.log('        ' + s);
 
 const cx = (W-40)/2|0, cy = (H-40)/2|0;
 
-// --- composition ---
-check('1 subject dead centre -> composition 100', score([[1,cx,cy,40,40]]).composition, 100);
-check('1 subject at corner -> composition < 30', score([[1,4,4,40,40]]).composition < 30, true);
+// --- composition: average distance between subjects ---
+// A lone subject has no pairs, so it is judged on how centred it is instead.
+check('1 subject dead centre -> composition 100', score([[1,cx,cy,40,40]]).composition, 100, 1);
+// (a 40px box in the corner still has its centroid 20px in, so this is not the
+// mathematical corner -- hence 30, not 0)
+check('1 subject in the corner -> composition low',
+      score([[1,4,4,40,40]]).composition < 30, true);
 check('1 subject off-centre scores below centred',
       score([[1,cx+60,cy,40,40]]).composition < 100, true);
-
-const tA = Math.round(W/3)-20, tB = Math.round(2*W/3)-20;
-const ty1 = Math.round(H/3)-20, ty2 = Math.round(2*H/3)-20;
-const thirds = score([[1,tA,ty1,40,40],[2,tB,ty2,40,40]]).composition;
-const stacked = score([[1,cx-22,cy,40,40],[2,cx+22,cy,40,40]]).composition;
-check('2 subjects on thirds beat 2 centre-stacked', thirds > stacked, true);
-note('thirds ' + thirds + '  vs centre-stacked ' + stacked);
+note('lone: centred ' + score([[1,cx,cy,40,40]]).composition +
+     '  off-centre ' + score([[1,cx+60,cy,40,40]]).composition +
+     '  corner ' + score([[1,4,4,40,40]]).composition);
+// Two subjects far apart beat two touching, wherever they sit in the frame.
+const apart = score([[1,20,cy,40,40],[2,W-60,cy,40,40]]).composition;
+const together = score([[1,cx-22,cy,40,40],[2,cx+22,cy,40,40]]).composition;
+check('2 subjects far apart beat 2 side by side', apart > together, true);
+note('far apart ' + apart + '  vs side by side ' + together);
+// Edges are not part of the rule any more: sliding a well-separated pair into
+// the corner of the frame must not change the score.
+const centredPair = score([[1,cx-70,cy,40,40],[2,cx+70,cy,40,40]]).composition;
+const shiftedPair = score([[1,4,4,40,40],[2,144,4,40,40]]).composition;
+check('the same separation scores the same anywhere in frame',
+      centredPair, shiftedPair, 1);
+// It is a mean over pairs, so a third subject dumped on top of the first
+// dilutes the spread rather than adding to it.
+// (kept clear of the 100 cap, or dilution would not be visible)
+const two = score([[1,cx-40,cy,40,40],[2,cx+40,cy,40,40]]).composition;
+const twoPlusClone = score([[1,cx-40,cy,40,40],[2,cx+40,cy,40,40],[3,cx-36,cy,40,40]]).composition;
+check('a subject piled on another dilutes the spread', twoPlusClone < two, true);
+note('2 spread ' + two + '  vs the same 2 plus a clone ' + twoPlusClone);
 
 // --- per-subject terms ---
 const s = score([[1,cx,cy,40,40]]).subjects[0];
-check('size follows sqrt(coverage) x tier at 720p',
-      +s.size.toFixed(3), +(100*Math.sqrt(1600/(W*H))*(720/4320)).toFixed(3), 0.001);
+check('size is coverage x the tier bonus on the cheap camera',
+      +s.size.toFixed(3), +(1600/(W*H)*1000).toFixed(3), 0.001);
+// standing scores nothing, which is what lets the breakdown suppress the row
 check('standing is the baseline and scores 0', s.pose, 0);
+check('the subject reports its coverage for the readout',
+      +s.cov.toFixed(6), +(1600/(W*H)).toFixed(6), 1e-6);
 check('uncropped subject takes no penalty', s.cropLoss, 0);
 
 
@@ -68,11 +89,21 @@ herd.pose[0] = 0;
 
 
 // --- resolution multiplier ---
-const at720 = score([[1,cx,cy,40,40]]).subjects[0].size;
+const atLow = score([[1,cx,cy,40,40]]).subjects[0].size;
 st.res = 3;
-const at8k = score([[1,cx,cy,40,40]]).subjects[0].size;
-check('8K size score is 6x 720p (4320/720)', +(at8k/at720).toFixed(3), 6, 0.001);
-check('full-frame unicorn at 8K caps at 100', score([[1,0,0,W,H]]).subjects[0].size, 100);
+const atTop = score([[1,cx,cy,40,40]]).subjects[0].size;
+check('the top tier scores 6x the bottom', +(atTop/atLow).toFixed(3), 6, 0.001);
+check('a unicorn filling the top-tier frame scores the whole bonus',
+      score([[1,0,0,W,H]]).subjects[0].size, 6000);
+// the user's worked example: the smallest subject that counts is worth 2 points
+// on the cheap camera, and twelve on the best.
+st.res = 0;
+const floorSub = score([[1,cx,cy,11,11]]).subjects[0];
+check('a subject just over the 0.2% floor scores about 2 at the bottom',
+      +floorSub.size.toFixed(1), 2, 0.2);
+st.res = 3;
+check('the same subject scores 6x that at the top',
+      +score([[1,cx,cy,11,11]]).subjects[0].size.toFixed(1), +(floorSub.size*6).toFixed(1), 0.1);
 st.res = 0;
 
 // --- speck floor ---
@@ -88,7 +119,7 @@ check('1 colour -> no multiplier', score(row(1)).multiplier, 1);
 check('2 colours -> x2', score(row(2)).multiplier, 2);
 check('3 colours -> x3', score(row(3)).multiplier, 3);
 check('6 colours -> x6 then x2 rainbow = x12', score(row(6)).multiplier, 12);
-check('6 colours flags the rainbow win', score(row(6)).bonuses.some(b=>b.rainbow), true);
+check('6 colours still earns the rainbow bonus', score(row(6)).bonuses.some(b=>b.label==='RAINBOW'), true);
 check('same colour twice is still x1',
       score([[1,40,cy,40,40],[7,200,cy,40,40]]).multiplier, 1);
 
@@ -120,8 +151,8 @@ herd.pose[0] = 0;
 // --- composition for a crowd ---
 // six piled into one corner must not score like six spread across the frame
 const clump = score([0,1,2,3,4,5].map((k)=>[k+1, 30+k*6, 20+k*4, 26, 26])).composition;
-const spread = score([[1,30,20,26,26],[2,150,20,26,26],[3,270,20,26,26],
-                      [4,30,130,26,26],[5,150,130,26,26],[6,270,130,26,26]]).composition;
+const spread = score([[1,20,20,26,26],[2,Math.round(W/2)-13,20,26,26],[3,W-46,20,26,26],
+                      [4,20,H-46,26,26],[5,Math.round(W/2)-13,H-46,26,26],[6,W-46,H-46,26,26]]).composition;
 console.log('        6 clumped ' + clump + '  vs  6 spread ' + spread);
 check('a crowd spread across the frame beats a heap', spread > clump + 20, true);
 
@@ -133,13 +164,13 @@ check('the occluder keeps its full area', occl.subjects.get(2).n, 1800);
 
 // --- absolute pixels, not frame fraction ---
 st.res = 3;
-check('a unicorn filling an 8K frame scores exactly 100',
-      score([[1,0,0,W,H]]).subjects[0].size, 100);
+check('a unicorn filling a top-tier frame scores exactly the bonus',
+      score([[1,0,0,W,H]]).subjects[0].size, 6000);
 // same subject, same screen size, every tier: score must track sensor height
 const abs = [];
 for (let r = 0; r < 4; r++) { st.res = r; abs.push(score([[1,cx,cy,40,40]]).subjects[0].size); }
 st.res = 0;
-console.log('        size at 720p/1080p/4K/8K: ' + abs.map(v=>v.toFixed(2)).join(' / '));
+console.log('        size at low/med/high/ultra: ' + abs.map(v=>v.toFixed(2)).join(' / '));
 check('size is proportional to sensor height',
       abs.map(v => +(v/abs[0]).toFixed(2)).join(','), '1,1.5,3,6');
 

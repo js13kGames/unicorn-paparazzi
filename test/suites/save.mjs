@@ -33,7 +33,7 @@ function boot(stored) {
   sandbox.window = sandbox; sandbox.globalThis = sandbox;
   let err = null;
   try { vm.runInNewContext(script, sandbox, { timeout: 60000 }); } catch (e) { err = e; }
-  if (!err || !/WebGL2 required/.test(err.message)) throw err || new Error('expected the GL stop');
+  if (!err || !/no gl/.test(err.message)) throw err || new Error('expected the GL stop');
   return sandbox;
 }
 

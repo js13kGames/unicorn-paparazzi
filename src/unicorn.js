@@ -263,7 +263,7 @@ function rollPose(r, weights) {
 
 // Lures gather every colour; they differ only in reach. The strong one has to
 // stay wide: at the weak radius only about five unicorns are in range, so six
-// distinct colours in one frame is arithmetically impossible and the rainbow win
+// distinct colours in one frame is arithmetically impossible and the rainbow bonus
 // would be unreachable.
 function lureFor(lures, x, z, cfg) {
   let best = null, bd = Infinity;

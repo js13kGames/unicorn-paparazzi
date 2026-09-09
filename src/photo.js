@@ -5,69 +5,82 @@
 // frame each one fills, whether any is clipped by an edge, and where its centre
 // of mass sits. Every term in the scoring rubric falls out of that one buffer.
 
-const ID_HEIGHT = 240;   // readPixels at photo resolution would stall for 100ms+
+// The photograph is a fixed shape whatever the window is doing. It used to
+// follow the canvas, which meant the same shot scored twice as much in a
+// half-width window: vertical fov is fixed, so a subject's pixels track the
+// buffer HEIGHT while the frame area is width x height, and coverage came out
+// proportional to 1/aspect.
+export const PHOTO_ASPECT = 16 / 9;
+// Exactly 16:9, which no integer width at the old 240 could be. readPixels at
+// real photo resolution would stall for 100ms+.
+const ID_W = 384, ID_H = 216;
 // Big enough to be worth downloading, small enough that a 50-shot roll is a few
 // megabytes. The film roll and results list scale the same image down in CSS, so
 // one canvas serves the preview and the saved file.
-const THUMB_HEIGHT = 900;
+const THUMB_H = 900;
+
+// How much of the screen the frame takes. One value for every camera: it used to
+// climb with the sensor tier and reached the whole screen at the top, which left
+// the best camera in the game with no margin to see a unicorn coming.
+export const FRAME_SHARE = 0.7;
+
+// The photograph's own vertical fov is the real one; the screen shows that
+// frustum plus the frame's margin, and opens up further when the window is
+// narrower than the photograph, so the whole frame always stays on screen.
+// fx/fy are the frame's share of the canvas: viewfinder outline and thumbnail
+// source rectangle both come from them.
+export function frame(fovy, winAspect) {
+  const tp = Math.tan(fovy / 2);
+  const ts = tp * Math.max(1 / FRAME_SHARE, PHOTO_ASPECT / winAspect);
+  const fy = tp / ts;
+  return { fov: 2 * Math.atan(ts), fy, fx: (fy * PHOTO_ASPECT) / winAspect };
+}
 
 export function createPhotoRig(gl, canvas, draw) {
   const tex = gl.createTexture();
   const depth = gl.createRenderbuffer();
   const fbo = gl.createFramebuffer();
-  let idW = 0, idH = ID_HEIGHT, pixels = null;
+  const pixels = new Uint8Array(ID_W * ID_H * 4);
 
   const thumb = document.createElement('canvas');
+  thumb.width = Math.round(THUMB_H * PHOTO_ASPECT);
+  thumb.height = THUMB_H;
   const tctx = thumb.getContext('2d');
 
-  // The ID buffer must frame identically to what the player saw, so it tracks
-  // the canvas aspect rather than a fixed 16:9.
-  function resize(aspect) {
-    const w = Math.max(120, Math.min(854, Math.round(ID_HEIGHT * aspect)));
-    if (w === idW) return;
-    idW = w;
-    pixels = new Uint8Array(idW * idH * 4);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, idW, idH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, idW, idH);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    thumb.height = THUMB_HEIGHT;
-    thumb.width = Math.round(THUMB_HEIGHT * aspect);
-  }
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ID_W, ID_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, ID_W, ID_H);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
   // Must run inside the same frame as the visible draw, while the drawing buffer
   // is still intact -- that is what lets us skip preserveDrawingBuffer.
   //
-  // `crop` is the sensor's linear share of the screen: a cheap camera photographs
-  // a small rectangle out of the middle of what you can see, a good one takes the
-  // lot. The ID pass still renders the whole canvas and the crop is applied when
-  // tallying, so one framebuffer serves every tier.
-  function capture(cam, fovy, herd, crop) {
-    resize(canvas.width / canvas.height);
-
-    const cw = canvas.width * crop, ch = canvas.height * crop;
+  // fx/fy locate the frame within the canvas, so the thumbnail is cut from
+  // exactly the rectangle the viewfinder was outlining. The ID pass renders the
+  // photo's own frustum, so it needs no crop at all: the buffer IS the
+  // photograph, and nothing about it depends on the window.
+  // `res` is the camera tier, and it sets the JPEG quality: the cheap camera
+  // develops a heavily compressed photograph. Cosmetic by construction -- the ID
+  // pass below reads the GL buffer, never the JPEG, so no score can move.
+  function capture(cam, fovy, herd, fx, fy, res) {
+    const cw = canvas.width * fx, ch = canvas.height * fy;
     tctx.drawImage(canvas, (canvas.width - cw) / 2, (canvas.height - ch) / 2, cw, ch,
                    0, 0, thumb.width, thumb.height);
-    const url = thumb.toDataURL('image/jpeg', 0.85);
+    const url = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    draw(cam, fovy, true, idW, idH);
-    gl.readPixels(0, 0, idW, idH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    draw(cam, fovy, true, ID_W, ID_H);
+    gl.readPixels(0, 0, ID_W, ID_H, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    const rw = Math.round(idW * crop), rh = Math.round(idH * crop);
-    const rect = {
-      x0: Math.round((idW - rw) / 2), y0: Math.round((idH - rh) / 2), w: rw, h: rh,
-    };
-    const subjects = tally(pixels, idW, idH, herd, rect);
-    return { url, w: rw, h: rh, subjects, bait: subjects.bait };
+    const subjects = tally(pixels, ID_W, ID_H, herd);
+    return { url, w: ID_W, h: ID_H, subjects, bait: subjects.bait };
   }
 
   return { capture };

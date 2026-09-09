@@ -1,7 +1,7 @@
 import { buildWorld, pathAt, elevAt } from './terrain.js';
 import { createRenderer } from './render.js';
 import { spawn, updateHerd, packInstances } from './unicorn.js';
-import { createPhotoRig } from './photo.js';
+import { createPhotoRig, frame as viewFrame } from './photo.js';
 import { scorePhoto } from './score.js';
 import * as ui from './ui.js';
 
@@ -14,7 +14,7 @@ export const CONFIG = {
   driftChance: 0.08,      // chance a unicorn wears an off-biome colour
   poseWeights: [0.80, 0.10, 0.08, 0.02],
   trackRadiusFrac: 0.25,
-  filmTiers: [15, 20, 30, 40, 50],
+  filmTiers: [5, 20, 30, 40, 50],   // TESTING: first tier is 5, not 15
   shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive
   weakRadius: 26,        // tiles the cheap lure reaches
   strongRadius: 70,      // the expensive one sweeps wide enough to stage all six
@@ -28,13 +28,13 @@ export const CONFIG = {
   eyeHeight: 2.4,
   baseFov: Math.PI / 3,
   zoomLevels: [1, 2, 4, 8, 16],
-  resNames: ['720p', '1080p', '4K', '8K'],
-  // Sensor height over 4320, so the size term is literally "pixels of unicorn
-  // out of an 8K frame". Not hand-tuned -- these are the real tier dimensions.
-  resFactor: [720 / 4320, 1080 / 4320, 2160 / 4320, 1],
-  // Linear share of the screen each sensor photographs. A cheap camera crops
-  // tightly, which is a real cost: harder to fit a group, easier to clip a leg.
-  resCrop: [0.55, 0.7, 0.85, 1.0],
+  // Deliberately not pixel counts: the photograph is the same size at every tier,
+  // so naming them 720p..8K promised a resolution nothing in the pipeline has.
+  resNames: ['low', 'med', 'high', 'ultra'],
+  // What one frame-share of unicorn is worth on each sensor: 1 / 1.5 / 3 / 6 of
+  // the base rate. Size is coverage x this, so a subject filling a tenth of the
+  // frame scores 100 on the cheapest camera and 600 on the best.
+  resBonus: [1000, 1500, 3000, 6000],
   // Fraction of the frame a unicorn must fill to be counted as a subject.
   minCoverage: 0.002,
   // How steeply a cut outline costs you. Crop and scenery decay exponentially;
@@ -54,7 +54,7 @@ const renderer = createRenderer(canvas, world, herd);
 const photoRig = createPhotoRig(renderer.gl, canvas, renderer.draw);
 
 // Namespaced per the jam's shared-origin rule, and never localStorage.clear().
-const SAVE_KEY = 'u13k_snap';
+const SAVE_KEY = 'u13k_uni_saf';
 
 function loadSave() {
   try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; }
@@ -68,8 +68,9 @@ function persist() {
       v: SAVE_VERSION,
       t: state.shutterTier,
      
+      g: state.go,
       b: state.bank, z: state.maxZoom, r: state.res, f: state.filmTier,
-      a: state.weak, s: state.strong, w: state.won,
+      a: state.weak, s: state.strong,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
@@ -86,50 +87,45 @@ const state = {
   mode: 'title',
   bank: saved.b || 0,
   maxZoom: saved.z || 0,
-  res: saved.r || 0,
+  // Clamped: a save from a build with more tiers would index off the end of
+  // resBonus, which is a NaN score rather than a visible failure.
+  res: Math.min(saved.r || 0, 3),
   filmTier: saved.f || 0,
   weak: stock(saved.a, 2),
   strong: stock(saved.s, 0),
-  won: !!saved.w,
   zoom: 0,
   ready: 0,
+  fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
   shutterTier: saved.t || 0,
   photos: [],
   scored: [],
-  catalogued: new Set(),
 };
 state.film = CONFIG.filmTiers[state.filmTier];
 const lures = [];
 
-const ZOOM_PRICE = [400, 900, 1800, 3200];
-const RES_PRICE = [500, 1200, 2600];
-const FILM_PRICE = [300, 700, 1400, 2400];
-const SHUTTER_PRICE = [250, 700, 1600];
+// Every upgrade is a ladder: the tier values, the price of each step, the state
+// key holding how far up it you are, and a suffix for the values. p[i] buys
+// tier i+1, so p is always one shorter than v. The shop draws the whole ladder
+// -- the old list showed only the next rung, so nothing on screen ever said
+// what camera you were actually carrying.
+const LADDERS = [
+  ['zoom', CONFIG.zoomLevels, [400, 900, 1800, 3200], 'maxZoom', '×'],
+  ['photo', CONFIG.resNames, [500, 1200, 2600], 'res', ''],
+  ['film', CONFIG.filmTiers, [300, 700, 1400, 2400], 'filmTier', ''],
+  ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
+];
+
+// Lures are consumables, not ladders: buy as many as you like.
+const LURES = [['🪝 weak', 120, 'weak'], ['🧲 strong', 400, 'strong']];
 
 function offers() {
-  const o = [];
-  if (state.maxZoom < 4) {
-    o.push({ label: CONFIG.zoomLevels[state.maxZoom + 1] + '× zoom lens',
-             price: ZOOM_PRICE[state.maxZoom], buy: () => state.maxZoom++ });
+  const o = LADDERS.map(([label, v, p, key, sfx]) => ({
+    label, v, p, sfx, at: state[key], price: p[state[key]],
+    buy: () => state[key]++,
+  }));
+  for (const [label, price, key] of LURES) {
+    o.push({ label, price, have: state[key], buy: () => state[key]++ });
   }
-  if (state.res < 3) {
-    const r = state.res + 1;
-    o.push({ label: CONFIG.resNames[r] + ' resolution — ' + RES_PX[r] + 'px tall, ' +
-             (RES_PX[r] / RES_PX[0]).toFixed(1) + '× the size score of 720p',
-             price: RES_PRICE[state.res], buy: () => state.res++ });
-  }
-  if (state.filmTier < 4) {
-    o.push({ label: CONFIG.filmTiers[state.filmTier + 1] + '-shot film roll',
-             price: FILM_PRICE[state.filmTier], buy: () => state.filmTier++ });
-  }
-  if (state.shutterTier < 3) {
-    o.push({ label: 'Motor drive — ' + CONFIG.shutterTiers[state.shutterTier + 1] + 's per frame', price: SHUTTER_PRICE[state.shutterTier],
-             buy: () => state.shutterTier++ });
-  }
-  o.push({ label: 'Weak lure — gathers within ' + CONFIG.weakRadius,
-           price: 120, buy: () => state.weak++ });
-  o.push({ label: 'Strong lure — gathers within ' + CONFIG.strongRadius,
-           price: 400, buy: () => state.strong++ });
   return o;
 }
 
@@ -152,6 +148,9 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+// The photograph's own vertical fov. What the screen shows is derived from it
+// per frame, so the window's shape changes how much you can see AROUND the
+// frame and nothing about the frame itself.
 const fov = () => CONFIG.baseFov / CONFIG.zoomLevels[state.zoom];
 state.zoom = Math.min(state.zoom, state.maxZoom);
 
@@ -176,6 +175,7 @@ addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // Safari sends pinch as its own gesture events rather than ctrl+wheel.
+// TODO: Is this necessary???
 for (const g of ['gesturestart', 'gesturechange', 'gestureend']) {
   addEventListener(g, (e) => e.preventDefault());
 }
@@ -191,7 +191,7 @@ function throwLure(kind) {
   if (state.mode !== 'ride') return;
   const name = KINDS[kind];
   if (!state[name]) {
-    ui.toast('no ' + name + ' — buy some after the lap');
+    // ui.toast('no ' + name + ' — buy some after the lap');
     return;
   }
   state[name]--;
@@ -208,6 +208,7 @@ function throwLure(kind) {
   while (t < 12) {
     t += dt;
     x = cam.x + vx * t;
+    // Kinematics :)
     y = cam.y + vy * t - 0.5 * CONFIG.gravity * t * t;
     z = cam.z + vz * t;
     if (y <= elevAt(world, x, z)) break;
@@ -225,18 +226,32 @@ function throwLure(kind) {
     Math.round(Math.hypot(x - cam.x, z - cam.z)) + ' out');
 }
 
+// Chrome rejects this promise if the lock was exited very recently, and an
+// unhandled rejection would show up as a console error.
+const lock = () => Promise.resolve(canvas.requestPointerLock()).catch(() => {});
+
 function primary() {
   if (state.mode === 'title') {
     state.mode = 'ride';
     ui.hidePanel();
     ui.setChrome(true);
-    // Chrome rejects this promise if the lock was exited very recently, and an
-    // unhandled rejection would show up as a console error.
-    Promise.resolve(canvas.requestPointerLock()).catch(() => {});
+    lock();
   } else if (state.mode === 'ride') {
-    shutterQueued = true;
+    // Escape releases the pointer but leaves you riding, so a click has to hand
+    // the mouse back. Without this it fell through to the shutter, and the only
+    // way to look around again was to spend a frame of film.
+    if (document.pointerLockElement === canvas) shutterQueued = true;
+    else lock();
   }
 }
+
+// Losing the pointer is otherwise invisible -- you find out by taking a photo
+// you did not mean to take.
+document.addEventListener('pointerlockchange', () => {
+  if (state.mode === 'ride' && document.pointerLockElement !== canvas) {
+    ui.toast('click to look');
+  }
+});
 
 canvas.addEventListener('click', primary);
 document.getElementById('panel').addEventListener('click', primary);
@@ -260,13 +275,11 @@ function takePhoto() {
   state.ready = clock + CONFIG.shutterTiers[state.shutterTier];
   state.film--;
   ui.flash();
-  const photo = photoRig.capture(cam, fov(), herd, CONFIG.resCrop[state.res]);
+  const photo = photoRig.capture(cam, fov(), herd, state.fx, state.fy, state.res);
   const scored = scorePhoto(photo, CONFIG, state);
   state.photos.push(photo);
   state.scored.push(scored);
   ui.addThumb(photo.url);
-  for (const s of scored.subjects) state.catalogued.add(s.colourIndex);
-  if (scored.bonuses.some((b) => b.rainbow)) state.won = true;
 }
 
 function endRun(reason) {
@@ -296,7 +309,9 @@ function showShop() {
 
 function buy(i) {
   const o = offers()[i];
-  if (!o || state.bank < o.price) return;
+  // A maxed ladder has no price at all, and `bank < undefined` is false -- so
+  // without the second test it would sell you a tier past the top of the ladder.
+  if (!o || !o.price || state.bank < o.price) return;
   state.bank -= o.price;
   o.buy();
   persist();
@@ -307,6 +322,7 @@ function buy(i) {
 // save already holds everything that carries over, so a reload is both cheaper
 // in bytes and less likely to leak GPU resources than tearing the scene down.
 function ride() {
+  state.go = 1;
   persist();
   location.reload();
 }
@@ -319,7 +335,14 @@ function restart() {
 // --- loop ----------------------------------------------------------------
 
 ui.setChrome(false);
-ui.showTitle();
+// Three ways in. A first run, or one after "Start over" wipes the save, stops on
+// the title. "Ride again" leaves a one-shot marker and reloads to rebuild the
+// world, so it lands straight on the cart -- consuming the marker here means an
+// actual refresh does not do the same. That refresh reopens the shop instead, so
+// a stray reload mid-lap costs the lap but not the bank.
+if (saved.g) { state.go = 0; persist(); primary(); ui.toast('click to look'); }
+else if (saved.v) showShop();
+else ui.showTitle();
 
 let last = performance.now();
 function frame(now) {
@@ -348,7 +371,9 @@ function frame(now) {
   cam.z = p.z;
 
   renderer.buildLures(lures, (x, z) => elevAt(world, x, z), clock, CONFIG.gravity);
-  renderer.draw(cam, fov());
+  const f = viewFrame(fov(), canvas.width / canvas.height);
+  state.fx = f.fx; state.fy = f.fy;
+  renderer.draw(cam, f.fov);
 
   // The capture reads the drawing buffer, so it has to happen in this same
   // frame, right after the visible draw.
