@@ -16,17 +16,19 @@ const check = (n, ok, d) => { if (!ok) fails++; console.log((ok ? '  ok  ' : 'FA
 const body = /function primary\(\) \{\n([\s\S]*?)\n\}/.exec(src);
 check('primary() is still there to test', !!body);
 
-// `lock` and `shutterQueued` are module-level in index.js; supply them here.
-const primary = new Function('state', 'ui', 'document', 'canvas', 'lock',
+// `lock`, `net`, `seed` and `shutterQueued` are module-level in index.js; supply
+// them here.
+const primary = new Function('state', 'ui', 'document', 'canvas', 'lock', 'net', 'seed',
   'let shutterQueued;\n' + body[1] + '\nreturn shutterQueued;');
 
 function run(mode, locked) {
   const canvas = {};
-  const calls = { lock: 0, hidePanel: 0, chrome: null };
+  const calls = { lock: 0, hidePanel: 0, chrome: null, announced: null };
   const state = { mode };
   const ui = { hidePanel: () => calls.hidePanel++, setChrome: (v) => { calls.chrome = v; } };
   const doc = { pointerLockElement: locked ? canvas : null };
-  const shutter = primary(state, ui, doc, canvas, () => calls.lock++);
+  const net = { go: (s) => { calls.announced = s; } };
+  const shutter = primary(state, ui, doc, canvas, () => calls.lock++, net, 4242);
   return { ...calls, shutter: shutter === true, mode: state.mode };
 }
 
@@ -34,6 +36,11 @@ function run(mode, locked) {
 const lost = run('ride', false);
 check('riding with the pointer lost re-locks', lost.lock === 1);
 check('and does not queue the shutter', !lost.shutter);
+
+// Starting a lap announces the seed, so idle players can join it.
+const started = run('title', false);
+check('starting from the title announces the seed', started.announced === 4242);
+check('and riding does not re-announce', run('ride', true).announced === null);
 
 // The normal case still works.
 const riding = run('ride', true);

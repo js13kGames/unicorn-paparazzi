@@ -4,6 +4,7 @@ import { spawn, updateHerd, packInstances } from './unicorn.js';
 import { createPhotoRig, frame as viewFrame } from './photo.js';
 import { scorePhoto } from './score.js';
 import * as ui from './ui.js';
+import * as net from './net.js';
 
 export const CONFIG = {
   mapSize: 500,
@@ -161,6 +162,7 @@ function primary() {
     state.mode = 'ride';
     ui.hidePanel();
     ui.setChrome(true);
+    net.go(seed);
     lock();
   } else if (state.mode === 'ride') {
     // Escape releases the pointer but leaves you riding, so a click has to hand
@@ -210,6 +212,13 @@ function endRun(reason) {
   state.endReason = reason;
   for (const s of state.scored) state.bank += s.total;
   persist();
+  // One result per rider per lap: the total, and the best single frame.
+  let best = 0;
+  for (let i = 1; i < state.scored.length; i++) {
+    if (state.scored[i].total > state.scored[best].total) best = i;
+  }
+  net.done(state.scored.reduce((a, s) => a + s.total, 0),
+           state.photos.length ? state.photos[best].small : '');
   ui.setChrome(false);
   document.exitPointerLock();
   showResults();
@@ -217,7 +226,7 @@ function endRun(reason) {
 
 function showResults() {
   state.mode = 'results';
-  ui.showResults(state, state.scored, state.endReason, showDetail, showShop);
+  ui.showResults(state, state.scored, state.endReason, showDetail, showShop, net.others());
 }
 
 function showDetail(i) {
@@ -247,15 +256,31 @@ function buy(i) {
 function ride() {
   state.go = 1;
   persist();
-  location.reload();
+  // The bare path, not reload(): a seed adopted from the hash must not stick to
+  // every later lap.
+  location.href = location.pathname;
 }
 
 function restart() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* nothing to clear */ }
-  location.reload();
+  location.href = location.pathname;
+}
+
+// Someone else started a lap. Take their seed through the same reload the shop's
+// "Ride again" uses -- the world has to be rebuilt either way, and the hash is
+// what carries the seed across it.
+function join(s) {
+  if (state.mode === 'ride') return;   // never yank a rider mid-lap
+  state.go = 1;
+  persist();
+  location.href = location.pathname + '#' + s;
 }
 
 // --- loop ----------------------------------------------------------------
+
+// A rival's result can land while you are still riding, or while the board is
+// already on screen; re-render in the latter case.
+net.connect(join, () => { if (state.mode === 'results') showResults(); });
 
 ui.setChrome(false);
 // Three ways in. A first run, or one after "Start over" wipes the save, stops on

@@ -18,6 +18,9 @@ const ID_W = 384, ID_H = 216;
 // megabytes. The film roll and results list scale the same image down in CSS, so
 // one canvas serves the preview and the saved file.
 const THUMB_H = 900;
+// What goes over the relay: small enough that a rival's shot is a few kilobytes,
+// big enough to see what they photographed.
+const WIRE_H = 180;
 
 // How much of the screen the frame takes. One value for every camera: it used to
 // climb with the sensor tier and reached the whole screen at the top, which left
@@ -47,6 +50,14 @@ export function createPhotoRig(gl, canvas, draw) {
   thumb.height = THUMB_H;
   const tctx = thumb.getContext('2d');
 
+  // A second, tiny copy of every shot, encoded once at capture time because the
+  // thumb canvas is overwritten by the next photograph. Only the best one is ever
+  // sent, but by then the pixels are long gone.
+  const wire = document.createElement('canvas');
+  wire.width = Math.round(WIRE_H * PHOTO_ASPECT);
+  wire.height = WIRE_H;
+  const wctx = wire.getContext('2d');
+
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ID_W, ID_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -73,6 +84,8 @@ export function createPhotoRig(gl, canvas, draw) {
     tctx.drawImage(canvas, (canvas.width - cw) / 2, (canvas.height - ch) / 2, cw, ch,
                    0, 0, thumb.width, thumb.height);
     const url = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
+    wctx.drawImage(thumb, 0, 0, wire.width, wire.height);
+    const small = wire.toDataURL('image/jpeg', 0.5);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     draw(cam, fovy, true, ID_W, ID_H);
@@ -80,7 +93,7 @@ export function createPhotoRig(gl, canvas, draw) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     const subjects = tally(pixels, ID_W, ID_H, herd);
-    return { url, w: ID_W, h: ID_H, subjects };
+    return { url, small, w: ID_W, h: ID_H, subjects };
   }
 
   return { capture };

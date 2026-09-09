@@ -114,7 +114,7 @@ export function showPhoto(scored, index, count, onBack) {
 }
 
 // Every shot on the roll, worst first, so the best one is what you end on.
-export function showResults(state, scored, reason, onPick, onShop) {
+export function showResults(state, scored, reason, onPick, onShop, rivals) {
   const order = scored.map((s, i) => i).sort((a, b) => scored[a].total - scored[b].total);
   let rows = '';
   for (const i of order) {
@@ -127,10 +127,25 @@ export function showResults(state, scored, reason, onPick, onShop) {
       '<td>' + what + '</td><td class="n big"><b>' + s.total + '</b></td></tr>';
   }
   if (!rows) rows = '<tr><td class="dim">No photographs.</td></tr>';
+  // Everyone who rode this seed, best first, with your own lap folded in so the
+  // comparison is on one ladder rather than two.
+  let board = '';
+  if (rivals && rivals.length) {
+    const mine = scored.reduce((a, s) => a + s.total, 0);
+    const all = [{ i: 'you', n: mine, p: '', me: 1 }, ...rivals];
+    all.sort((a, b) => b.n - a.n);
+    for (const r of all) {
+      board += '<tr class="rule"><td class="th">' +
+        (r.p ? '<img src="' + r.p + '">' : '') + '</td><td' +
+        (r.me ? '><b>' : ' class="dim">') + 'rider ' + r.i + (r.me ? '</b>' : '') +
+        '</td><td class="n big"><b>' + r.n + '</b></td></tr>';
+    }
+    board = '<h2>the same lap, ' + all.length + ' riders</h2><table>' + board + '</table>';
+  }
   panel(
     '<h1>ROLL DEVELOPED</h1>' +
     '<h2>' + reason + '  ·  bank ' + state.bank + '</h2>' +
-    '<table>' + rows + '</table>' +
+    '<table>' + rows + '</table>' + board +
     '<p class="hint"><button id="shop">To the shop</button> — click a shot for detail.</p>'
   );
   el.card.onclick = (e) => {

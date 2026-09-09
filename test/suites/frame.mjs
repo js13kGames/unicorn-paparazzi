@@ -8,9 +8,19 @@
 // canvas at all.
 
 const ctx = { drawImage() {} };
+// createPhotoRig makes two canvases: the full thumbnail, then the small copy that
+// goes over the relay. Only the first one's quality tracks the camera tier.
 const jpeg = [];
-const fakeThumb = { getContext: () => ctx, toDataURL: (t, q) => { jpeg.push(q); return 'data:,'; }, width: 0, height: 0 };
-globalThis.document = { createElement: () => fakeThumb };
+let made = 0;
+globalThis.document = {
+  createElement: () => {
+    const isThumb = made++ % 2 === 0;
+    return {
+      getContext: () => ctx, width: 0, height: 0,
+      toDataURL: (t, q) => { if (isThumb) jpeg.push(q); return 'data:image/jpeg;base64,x'; },
+    };
+  },
+};
 
 const { frame, PHOTO_ASPECT, FRAME_SHARE, createPhotoRig } = await import('../.mirror/photo.mjs');
 
