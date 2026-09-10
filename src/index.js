@@ -15,7 +15,7 @@ export const CONFIG = {
   driftChance: 0.08,      // chance a unicorn wears an off-biome colour
   poseWeights: [0.80, 0.10, 0.08, 0.02],
   trackRadiusFrac: 0.25,
-  filmTiers: [5, 20, 30, 40, 50],   // TESTING: first tier is 5, not 15
+  filmTiers: [10, 20, 30, 40, 50],
   shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive
   cartSpeed: 8,           // world units per second
   eyeHeight: 2.4,
@@ -63,7 +63,7 @@ function persist() {
       v: SAVE_VERSION,
       t: state.shutterTier,
      
-      g: state.go, c: state.code, h: state.host,
+      g: state.go, c: state.code, h: state.host, n: state.name,
       b: state.bank, z: state.maxZoom, r: state.res, f: state.filmTier,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
@@ -85,6 +85,7 @@ const state = {
   shutterTier: saved.t || 0,
   code: '',              // the lobby we are in, '' when playing alone
   host: 0,
+  name: saved.n || '',   // what other riders see us called
   photos: [],
   scored: [],
 };
@@ -94,7 +95,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { maxZoom: 2, res: 3, filmTier: 1, shutterTier: 1 };
+const MP_GEAR = { maxZoom: 2, res: 3, filmTier: 0, shutterTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -325,7 +326,7 @@ function lobby(code, host) {
   // Taken rather than inferred: booting back into a lobby after a match has to
   // restore whoever was host, and "was a code passed in" cannot tell you that.
   state.host = code ? host || 0 : 1;
-  net.connect(state.code, start, refresh);
+  net.connect(state.code, state.name, start, refresh);
   refresh();
 }
 
@@ -350,6 +351,14 @@ function host() {
   start(s);
 }
 
+// The name outlives the lobby: it is yours, not the room's, so it goes in the
+// save and rides the reload into the lap with everything else.
+function rename(v) {
+  state.name = v;
+  persist();
+  net.setName(v);
+}
+
 // Walking out has to close the socket, or the host keeps counting a ghost.
 function leave() {
   net.close();
@@ -367,7 +376,8 @@ function title() {
 // on their own as riders arrive, finish and leave.
 function refresh() {
   if (state.mode === 'lobby') {
-    ui.showLobby(state.code, state.host, net.lobby(), net.me(), host, lobby, leave);
+    ui.showLobby(state.code, state.host, net.lobby(), state.name,
+                 host, lobby, leave, rename);
   } else if (state.mode === 'results') showResults();
 }
 
@@ -376,7 +386,7 @@ function refresh() {
 ui.setChrome(false);
 // A multiplayer lap rejoins the room its code names, so rivals' results land on
 // the board as they finish -- while you are still riding, or after.
-if (mpCode) net.connect(mpCode, start, refresh);
+if (mpCode) net.connect(mpCode, state.name, start, refresh);
 // Three ways in. A first run, or one after "Start over" wipes the save, stops on
 // the title. "Ride again" leaves a one-shot marker and reloads to rebuild the
 // world, so it lands straight on the cart -- consuming the marker here means an

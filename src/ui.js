@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const el = { hud: $('hud'), film: $('film'), bar: $('bar'),
              flash: $('flash'), panel: $('panel'), card: $('card'), vf: $('vf'),
-             roll: $('roll'), belt: $('belt') };
+             roll: $('roll') };
 
 // The roll of shots so far, newest nearest the counter. Column-reverse in CSS
 // means appending puts the newest on top and older ones clip off the bottom.
@@ -17,7 +17,6 @@ export function setChrome(visible) {
   el.roll.style.display = d;
   el.vf.style.display = d;
   el.film.style.display = d;
-  el.belt.style.display = visible ? 'flex' : 'none';
 }
 
 export function updateHud(state, cfg, lap, clock) {
@@ -28,14 +27,10 @@ export function updateHud(state, cfg, lap, clock) {
   el.bar.style.width = (Math.min(1, lap) * 100).toFixed(1) + '%';
   el.hud.textContent = 'lap ' + Math.floor(Math.min(1, lap) * 100) + '%' +
     (performance.now() < toastUntil ? '  ·  ' + el.hud.dataset.msg : '');
-  el.film.innerHTML = '🎞 <b>' + state.film + '</b><br><small>' +
+  el.film.innerHTML = 'Film Remaining <b>' + state.film + '</b><br><small>' +
     (clock < state.ready ? '⏳' : state.photos.length + '/' + cfg.filmTiers[state.filmTier]) +
     '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
-  const z = cfg.zoomLevels[state.zoom];
-  el.belt.innerHTML =
-    '<i>🔍 ' + cfg.resNames[state.res] + ' ' + z + '×' +
-    (state.maxZoom ? ' <b class="k">+</b><b class="k">-</b>' : '') + '</i>';
 }
 
 
@@ -82,13 +77,11 @@ export function showTitle(onSolo, onMulti) {
 
 // Everyone in the room, with the code big enough to read out loud. The roster is
 // live: net.js calls back on every arrival and departure and this redraws.
-export function showLobby(code, host, riders, mine, onStart, onJoin, onBack) {
+export function showLobby(code, host, riders, name, onStart, onJoin, onBack, onName) {
+  // net.js hands these over ready to draw, yours already reading "You!", so
+  // there is nothing here to work out about who is who.
   let rows = '';
-  for (const i of riders) {
-    rows += row3('class="rule"', '',
-                 i === mine ? '<b>' + who(i) + ' (you)</b>' : '<span class="dim">' + who(i) + '</span>',
-                 '');
-  }
+  for (const nm of riders) rows += row3('class="rule"', '', nm, '');
   panel(
     '<h1>' + code + '</h1>' +
     '<h2>your code</h2>' +
@@ -99,21 +92,29 @@ export function showLobby(code, host, riders, mine, onStart, onJoin, onBack) {
       ? '<button id="start"' + (riders.length > 1 ? '' : ' disabled') +
         '>Start Multiplayer Game</button>'
       : 'waiting for the host') + '</p>' +
+    '<p class="hint">name <input id="n" maxlength="12" value="' + name + '"></p>' +
     '<p class="hint">' + (host
       ? 'join <input id="j" size="4" maxlength="4"> <button id="join">Join</button> '
       : '') + '<button id="back">Back</button></p>'
   );
-  const join = () => { const v = document.getElementById('j').value; if (/^\d{4}$/.test(v)) onJoin(v); };
-  // Only the host has the field to wire up, and only the host can reach join().
-  if (host) document.getElementById('j').onkeydown = (e) => {
-    e.stopPropagation();           // Space must type, not fire the shutter
+  const field = (id) => document.getElementById(id) || {};
+  const join = () => { const v = field('j').value; if (/^\d{4}$/.test(v)) onJoin(v); };
+  // One handler for the whole card rather than one per field: every key typed in
+  // here must stay out of the game's own listeners, or Space fires the shutter.
+  el.card.onkeydown = (e) => {
+    e.stopPropagation();
     if (e.key === 'Enter') join();
   };
+  // On change, not on every keystroke: this reaches the wire and the save.
+  field('n').onchange = (e) => onName(e.target.value);
   onCard((b) => (b.id === 'start' ? onStart() : b.id === 'back' ? onBack() : join()));
 }
 
 
 const NONE = 'No clear unicorns';
+// Only the first three need naming; every later index falls through to 'th',
+// which is right all the way to 20th.
+const ORD = ['st', 'nd', 'rd'];
 // Both tables on the results screen are the same three columns -- a thumbnail, a
 // label, a score -- and the lobby roster is that shape with the picture missing.
 // One builder for all three: roadroller charges almost nothing for the second and
@@ -121,9 +122,6 @@ const NONE = 'No clear unicorns';
 const row3 = (attrs, url, what, n) =>
   '<tr ' + attrs + '><td class="th">' + (url ? '<img src="' + url + '">' : '') +
   '</td><td>' + what + '</td><td class="n big"><b>' + n + '</b></td></tr>';
-// Ids are relay-issued gibberish; four characters is enough to tell riders apart
-// and short enough to read.
-const who = (i) => 'rider ' + i.slice(0, 4);
 
 // One photograph, big, with score.js's compact breakdown under it. This draws
 // your own shots and the winning shot alike -- and a rival's winning shot, whose
@@ -192,13 +190,12 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
     // this picks yours the same way endRun does, but at full thumbnail size
     // rather than the small copy that had to fit on the wire.
     const best = scored.reduce((a, s) => (a && a.total > s.total ? a : s), null);
-    const all = [{ i: 'you', n: scored.reduce((a, s) => a + s.total, 0), me: 1,
+    const all = [{ name: 'You!', n: scored.reduce((a, s) => a + s.total, 0),
                    p: best ? best.url : '', b: best ? best.b : [] }, ...rivals];
     all.sort((a, b) => b.n - a.n);
     let cards = '';
     all.forEach((r, i) => {
-      cards += photoCard(r.p, r.b, (i ? i + 1 + '. ' : 'winner ') +
-                         (r.me ? 'you' : who(r.i)), r.n);
+      cards += photoCard(r.p, r.b, i + 1 + (ORD[i] || 'th') + ' place: ' + r.name, r.n);
     });
     // Both buttons sit on every match screen, the waiting one included. A rider
     // who types the code mid-lap joins the roster and never reports, so `waiting`

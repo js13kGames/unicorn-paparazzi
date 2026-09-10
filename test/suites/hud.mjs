@@ -1,5 +1,4 @@
-// The film counter and the belt broke because nothing ever asserted what they
-// render. Stub the DOM, drive ui.js, and read back what it actually writes.
+// The film counter broke because nothing ever asserted what it renders. Stub the DOM, drive ui.js, and read back what it actually writes.
 const nodes = {};
 const anims = {};
 const node = (id) => (nodes[id] = nodes[id] || {
@@ -44,7 +43,6 @@ ui.updateHud(state, cfg, 0.4, 0);
 
 const film = nodes.film.innerHTML;
 console.log('  film box  : ' + JSON.stringify(film));
-console.log('  belt      : ' + JSON.stringify(nodes.belt.innerHTML.replace(/<[^>]+>/g, '')));
 console.log('');
 
 check('film box shows film remaining', film, (s) => /\b12\b/.test(s));
@@ -56,8 +54,7 @@ state.film = 2; ui.updateHud(state, cfg, 0.4, 0);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
 state.film = 12;
 
-const belt = nodes.belt.innerHTML;
-check('belt still reports resolution and zoom', belt, (t) => /🔍 low 1×/.test(t));
+check('the film counter says what it is counting', film, (t) => /Film Remaining/.test(t));
 
 // The flash fired once and then stuck on, because a reflow restarts a CSS
 // transition but not a CSS animation. It must now fire on EVERY shot.

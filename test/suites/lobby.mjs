@@ -59,16 +59,19 @@ check('the other button rides alone', hits.pop(), 'solo');
 
 // --- the lobby -----------------------------------------------------------
 const seen = [];
-const show = (code, host, riders, mine) =>
-  ui.showLobby(code, host, riders, mine, () => seen.push('start'),
-               (c) => seen.push('join:' + c), () => seen.push('back'));
+const show = (code, host, riders, name = 'Ada') =>
+  ui.showLobby(code, host, riders, name, () => seen.push('start'),
+               (c) => seen.push('join:' + c), () => seen.push('back'),
+               (v) => seen.push('name:' + v));
 
-show('4821', 1, ['aaaa1111'], 'aaaa1111');
+// net.js hands the roster over already named, yours reading "You!", so there is
+// nothing here to work out about which rider is which.
+show('4821', 1, ['You!']);
 check('the code is the headline, big enough to read out', /<h1>4821<\/h1>/.test(card()));
-check('a lobby of one lists just you', card(), (h) => /aaaa \(you\)/.test(h));
+check('a lobby of one lists just you', card(), (h) => h.includes('You!'));
 check('and the host cannot start alone', card(), (h) => /id="start" disabled/.test(h));
 
-show('4821', 1, ['aaaa1111', 'bbbb2222'], 'aaaa1111');
+show('4821', 1, ['You!', 'rider bbbb']);
 check('a second rider appears on the roster', card(), (h) => h.includes('rider bbbb'));
 check('and now the host can start', card(), (h) => /id="start"(?! disabled)/.test(h));
 click('start');
@@ -87,26 +90,39 @@ check('and a non-numeric one too', seen.length, 0);
 j.value = '1234';
 click('join');
 check('four digits joins that room', seen.pop(), 'join:1234');
-j.onkeydown({ key: 'Enter', stopPropagation() {} });
+// One keydown handler covers the whole card rather than one per field.
+nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
 check('and Enter does the same', seen.pop(), 'join:1234');
 
-// Space is the shutter everywhere else in the game; inside the code field it has
-// to be a keystroke, so the field swallows the event rather than firing a photo.
+// Space is the shutter everywhere else in the game; inside a text field it has
+// to be a keystroke, so the card swallows the event rather than firing a photo.
 let swallowed = false;
-j.onkeydown({ key: ' ', stopPropagation: () => { swallowed = true; } });
-check('the code field keeps Space away from the shutter', swallowed);
+nodes.card.onkeydown({ key: ' ', stopPropagation: () => { swallowed = true; } });
+check('typing in the lobby keeps Space away from the shutter', swallowed);
+
+// --- naming yourself -----------------------------------------------------
+check('the name field is offered, carrying what you are called',
+      card(), (h) => h.includes('id="n"') && h.includes('value="Ada"'));
+document.getElementById('n').onchange({ target: { value: 'Bo' } });
+check('changing it is reported once, on change rather than per keystroke',
+      seen.pop(), 'name:Bo');
 
 click('back');
 check('back leaves the lobby', seen.pop(), 'back');
 
 // --- the guest's screen --------------------------------------------------
-show('4821', 0, ['aaaa1111', 'bbbb2222'], 'bbbb2222');
+show('4821', 0, ['You!', 'rider aaaa']);
 check('a guest is told to wait instead of being offered the button',
       card(), (h) => h.includes('waiting for the host') && !h.includes('id="start"'));
 // Nothing to do but wait, so the join row goes with the Start button. Wiring a
 // handler onto a field that is no longer drawn would throw on the null.
 check('and the join field is not drawn at all', card(), (h) => !h.includes('id="j"'));
 check('nor the Join button', card(), (h) => !h.includes('id="join"'));
+// The name is yours, not the room's, so a guest still gets to set it.
+check('but a guest can still name themselves', card(), (h) => h.includes('id="n"'));
+// join() has to survive the field it reads being absent.
+nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
+check('and Enter with no code field does not throw', true);
 check('but they can still walk out', card(), (h) => h.includes('id="back"'));
 click('back');
 check('and that still works', seen.pop(), 'back');
@@ -117,6 +133,7 @@ check('and that still works', seen.pop(), 'back');
 const state = { bank: 700 };
 const shot = (n, url) => ({ total: n, url, subjects: [], bonuses: [],
                             b: [['azure', '' + n], [' size', '+' + n]] });
+const rival = (n, p, b = []) => ({ name: 'Bo', n, p, b });
 let picked = null;
 const results = (rivals, waiting, mine) => {
   picked = null;
@@ -126,13 +143,13 @@ const results = (rivals, waiting, mine) => {
 
 results(null, undefined);
 check('alone, there is no board at all and the bank still shows',
-      card(), (h) => !h.includes('winner') && h.includes('bank 700'));
+      card(), (h) => !h.includes('place:') && h.includes('bank 700'));
 check('and the way on is the shop', card(), (h) => h.includes('id="shop"'));
 
 // --- still riding ---
-results([{ i: 'bbbb2222', n: 900, p: 'r.jpg', b: [] }], 1);
+results([rival(900, 'r.jpg')], 1);
 check('while a rider is still out, the result is withheld',
-      card(), (h) => h.includes('waiting for 1') && !h.includes('winner'));
+      card(), (h) => h.includes('waiting for 1') && !h.includes('place:'));
 check('and no scores are on show yet', card(), (h) => !h.includes('900'));
 // A rider who types the code mid-lap never reports, so waiting can stall for
 // good. Both ways off this screen have to work even then.
@@ -142,22 +159,22 @@ check('and the exit is a rematch, never the shop',
       card(), (h) => h.includes('Rematch') && !h.includes('Shop'));
 
 // --- a rival won ---
-results([{ i: 'bbbb2222', n: 900, p: 'r.jpg', b: [['coral', '900']] }], 0);
-check('the winner is named', card(), (h) => h.includes('winner rider bbbb'));
+results([rival(900, 'r.jpg', [['coral', '900']])], 0);
+check('the winner is named, and placed', card(), (h) => h.includes('1st place: Bo'));
 check('their photograph is the card, not a thumbnail',
       card(), (h) => h.includes('<img src="r.jpg"'));
 check('and their breakdown came off the wire with them',
       card(), (h) => h.includes('coral') && h.includes('900'));
 // Second place is a full card too, not a thumbnail and a number.
 check('the runner-up gets a card of their own, ranked',
-      card(), (h) => h.includes('<h2>2. you</h2>'));
+      card(), (h) => h.includes('<h2>2nd place: You!</h2>'));
 check('with their own photograph on it', card(), (h) => h.includes('<img src="hi.jpg">'));
 check('and their own breakdown under it', card(), (h) => h.includes('+400'));
-check('nobody is listed twice', card().split('rider bbbb').length - 1, 1);
+check('nobody is listed twice', card().split('place: Bo').length - 1, 1);
 
 // --- you won ---
-results([{ i: 'bbbb2222', n: 100, p: 'r.jpg', b: [] }], 0);
-check('winning says so', card(), (h) => h.includes('winner you'));
+results([rival(100, 'r.jpg')], 0);
+check('winning says so', card(), (h) => h.includes('1st place: You!'));
 // Your own entry used to be stubbed with no photo and no breakdown, so winning
 // showed a blank card.
 check('your own best shot is the photograph on it',
@@ -171,21 +188,21 @@ check('while a subject header is ruled off instead',
       card(), (h) => h.includes('<tr class="rule"><td>azure'));
 
 // --- your roll, on the same screen ---
-results([{ i: 'bbbb2222', n: 100, p: 'r.jpg', b: [] }], 0, 1);
+results([rival(100, 'r.jpg')], 0, 1);
 check('My Photos swaps the cards for your roll',
-      card(), (h) => h.includes('data-i="0"') && h.includes('data-i="1"') && !h.includes('winner'));
+      card(), (h) => h.includes('data-i="0"') && h.includes('data-i="1"') && !h.includes('place:'));
 check('and it is titled after the button that opened it',
       card(), (h) => h.includes('<h1>My Photos</h1>'));
 check('the button turns into the way back', card(), (h) => h.includes('>Results<'));
 // The whole point of the view: yours, and only yours.
 check('and no rival appears on it at all',
-      card(), (h) => !h.includes('rider bbbb') && !h.includes('r.jpg'));
+      card(), (h) => !h.includes('Bo') && !h.includes('r.jpg'));
 check('your own roll is best first',
       card().indexOf('data-i="1"') < card().indexOf('data-i="0"'));
 click('mine');
 check('the toggle reports itself as the -1 pick', picked, -1);
 
-results([{ i: 'bbbb2222', n: 100, p: '', b: [] }], 0);
+results([rival(100, '')], 0);
 nodes.card.onclick({ stopPropagation() {},
   target: { closest: (q) => (q === '.row' ? { dataset: { i: '1' } } : null) } });
 check('and a shot in the roll still opens on its index', picked, 1);

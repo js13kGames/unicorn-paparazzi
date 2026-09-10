@@ -92,7 +92,9 @@ const mpBlock = /^const MP_GEAR[\s\S]*?^}$/m.exec(src);
 check('the multiplayer boot block is still there to test', !!mpBlock);
 
 const mpBoot = (saved) => {
-  const state = { bank: 900, maxZoom: 0, res: 0, filmTier: 0, shutterTier: 0, go: 1, code: '' };
+  // filmTier starts at a value the fixed loadout does not use, so "it was
+  // overwritten" is visible even when the loadout's own value is zero.
+  const state = { bank: 900, maxZoom: 0, res: 0, filmTier: 4, shutterTier: 0, go: 1, code: '' };
   const writes = [];
   new Function('saved', 'state', 'persist', mpBlock[0])(
     saved, state, () => writes.push({ ...state }));
@@ -101,7 +103,8 @@ const mpBoot = (saved) => {
 
 const solo = mpBoot({ v: VERSION, g: 1 });
 check('a solo lap is left completely alone',
-      !solo.state.mp && !solo.state.res && solo.writes.length === 0);
+      !solo.state.mp && !solo.state.res && solo.state.filmTier === 4 &&
+      solo.writes.length === 0);
 
 // `c` with no `g` is a lobby to go back to, not a lap to start. If this block
 // fired on it, the lobby would inherit state.mp -- and persist() being a no-op
@@ -114,12 +117,13 @@ const mp = mpBoot({ v: VERSION, g: 1, c: '4821', h: 1 });
 check('a multiplayer lap is flagged as one', mp.state.mp === 1);
 check('and restores which lobby it belongs to, and who hosted it',
       mp.state.code === '4821' && mp.state.host === 1);
-check('and rides the fixed loadout, not the starter one',
-      mp.state.res > 0 && mp.state.filmTier > 0 && mp.state.maxZoom > 0);
+check('and rides the fixed loadout, whatever the save held',
+      mp.state.res > 0 && mp.state.maxZoom > 0 && mp.state.filmTier !== 4);
 check('the markers are cleared, so a stray refresh drops out of multiplayer',
       mp.state.go === 0 && mp.writes.length === 1);
 check('and that write went out BEFORE the gear was swapped, so it saved the real one',
-      !mp.writes[0].res && !mp.writes[0].maxZoom && mp.writes[0].bank === 900);
+      !mp.writes[0].res && !mp.writes[0].maxZoom &&
+      mp.writes[0].filmTier === 4 && mp.writes[0].bank === 900);
 
 // The guard is the whole defence: every later persist() -- finishing the lap,
 // buying nothing, anything -- must be a no-op for the rest of the page's life.

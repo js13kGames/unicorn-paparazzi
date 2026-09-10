@@ -25,11 +25,9 @@
     #hud { top: 8px; left: 10px }
     #film { top: 8px; right: 10px; text-align: right; font-size: 15px }
     #film b { font-size: 22px }
-    /* a keycap: sits next to an icon to say what key works it */
-    .k { background: #3a3f46; color: #fff; border-radius: 3px; padding: 0 5px; margin-right: 3px }
     #film.low b { color: #ff8f6b }
     #roll {
-      top: 60px; right: 10px; width: 56px; bottom: 46px; gap: 4px;
+      top: 60px; right: 10px; width: 84px; bottom: 46px; gap: 4px;
       display: flex; flex-direction: column-reverse; justify-content: flex-end;
       overflow: hidden;
     }
@@ -42,10 +40,6 @@
     #vf::before { width: 20px; height: 1px; margin-left: -10px }
     #vf::after { width: 1px; height: 20px; margin-top: -10px }
 
-    #belt { left: 10px; bottom: 26px; display: flex; gap: 10px }
-    #belt i { font-style: normal }
-    #belt i.no { opacity: .35 }
-    #belt b { color: #ffe08a }
 
     #track { left: 10px; right: 10px; bottom: 10px; height: 4px; background: #0004 }
     #bar { height: 100%; width: 0; background: #fff }
@@ -101,7 +95,6 @@
     <div id="film" class="sh"></div>
     <div id="roll"></div>
     <div id="vf"></div>
-    <div id="belt" class="sh"></div>
     <div id="track"><div id="bar"></div></div>
     <div id="panel"><div id="card"></div></div>
   </div>

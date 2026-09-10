@@ -2,9 +2,9 @@
 // join code cheap: the code IS the room, so nothing has to filter a shared
 // firehose and presence is per-lobby for free. Single player never connects.
 //
-//   {t:'h', i:id}                    I just arrived -- who is here?
-//   {t:'h', i:id, r:1}               a reply to that; r stops it echoing forever
-//   {t:'h', i:id, r:1, e:1}          ...and my roll is empty
+//   {t:'h', i:id, n:name}           I just arrived -- who is here?
+//   {t:'h', i:id, n:name, r:1}       a reply; r stops it echoing forever
+//   {t:'h', i:id, n:name, r:1, e:1}  ...and my roll is empty
 //   {t:'g', s:seed}                  the host started the lap
 //   {t:'d', i:id, n:score, p:shot, b:rows}   someone finished it
 //
@@ -42,21 +42,29 @@ const rows = (v) => (Array.isArray(v) ? v : []).slice(0, 16)
 
 let ws = null;
 const riders = new Map();          // id -> {n, p}, one result per rider per lap
-const here = new Set();            // everyone in the lobby, us included
+const here = new Map();            // everyone in the lobby, id -> their name
 const spent = new Set();           // ...and which of them have no film left
+let myName = '';
+
+// What to call a rider on screen. A relay id is unreadable, so four characters
+// of it stand in until they tell us something better.
+const nameOf = (i) => here.get(i) || 'rider ' + i.slice(0, 4);
 
 export const online = () => !!ws && ws.readyState === 1;
-export const others = () => [...riders].map(([i, r]) => ({ i, ...r }));
-export const lobby = () => [...here];
+export const others = () => [...riders.values()];
+// Ready to draw: you are "You!" wherever you appear, which is what the results
+// screen calls you too, so ui.js never has to work out which rider it is.
+export const lobby = () => [...here.keys()].map((i) => (i === key(ME) ? 'You!' : nameOf(i)));
+export const setName = (s) => { myName = clean(s); send({ t: 'h', i: ME, r: 1, n: myName }); };
 // Once nobody can take another photograph there is nothing left to ride for, so
 // the lap can stop early. Empty means no lobby at all, which is not everyone
 // being out of film -- it is a solo player, and they must never match this.
 export const allSpent = () => here.size > 0 && spent.size >= here.size;
-export const me = () => key(ME);
 
 // onGo(seed) fires when the host starts the lap. onChange() fires whenever the
 // roster or the results board moves, so whichever screen is up can redraw.
-export function connect(code, onGo, onChange) {
+export function connect(code, name, onGo, onChange) {
+  myName = clean(name);
   // Hopping to another code is a second connect, so the old room has to be let
   // go of first -- otherwise you would still be broadcasting into a lobby you
   // left, and still counting its riders as your own.
@@ -77,8 +85,8 @@ export function connect(code, onGo, onChange) {
     // roster has no row for.
     if (e.data[0] === '@') {
       ME = e.data.slice(1);
-      here.add(key(ME));
-      send({ t: 'h', i: ME });
+      here.set(key(ME), myName);
+      send({ t: 'h', i: ME, n: myName });
       return onChange();
     }
     // A rider who leaves comes off the roster and off the film tally, so nobody
@@ -99,16 +107,20 @@ export function connect(code, onGo, onChange) {
     if (m.t === 'g' && typeof m.s === 'number') return onGo(m.s | 0);
     if (typeof m.i !== 'string') return;
     if (m.t === 'h') {
-      here.add(key(m.i));
-      // "My roll is empty" rides on the hello rather than earning a message type
-      // of its own: this branch already carries an id and already means presence.
+      // A hello always carries the sender's name, so it is the whole record:
+      // presence and what to call them. "My roll is empty" rides along on it too
+      // rather than earning a message type of its own.
+      here.set(key(m.i), clean(m.n));
       if (m.e) spent.add(key(m.i));
       // Answer an arrival so it learns about us, but never answer an answer.
-      if (!m.r) send({ t: 'h', i: ME, r: 1 });
+      if (!m.r) send({ t: 'h', i: ME, r: 1, n: myName });
     } else if (m.t === 'd' && typeof m.n === 'number') {
       const i = key(m.i);
-      here.add(i);                 // a result is proof of presence
+      here.set(i, here.get(i) || '');    // a result is proof of presence
+      // The name is captured here rather than looked up later, because a result
+      // outlives the connection that sent it and the roster does not.
       riders.set(i, {
+        name: nameOf(i),
         n: Math.max(0, m.n | 0),
         // A data: URL and nothing else, so a hostile payload cannot become markup
         // or point the browser at someone else's server.
@@ -135,7 +147,7 @@ const send = (o) => { if (online()) try { ws.send(JSON.stringify(o)); } catch (e
 // Flagged as a reply so nobody answers it: this is news, not an arrival.
 export const noFilm = () => {
   spent.add(key(ME));
-  send({ t: 'h', i: ME, r: 1, e: 1 });
+  send({ t: 'h', i: ME, r: 1, e: 1, n: myName });
 };
 
 export const go = (seed) => send({ t: 'g', s: seed });
