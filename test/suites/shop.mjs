@@ -106,13 +106,13 @@ check('nothing is disabled when the bank is full', rich, (h) => !/data-i="\d+" d
 const dry = render({ film: 0, bank: 500 });
 check('an empty roll cannot be ridden', dry, (h) => /id="e" disabled/.test(h));
 // A greyed-out button with no reason on it is a dead end the player has to guess
-// at; the label is the explanation.
-check('and the button says why', dry, (h) => /disabled>No film</.test(h));
-check('rather than still offering the ride', dry, (h) => !/Ride again/.test(h));
+// at, so the reason sits under both buttons in the loss colour.
+check('and a line under the buttons says why', dry, (h) => /class="h m">no film</.test(h));
 check('but can still be refilled, since the money is there', dry,
       (h) => /data-i="3"(?! disabled)/.test(h));
 const loaded = render({ film: 1, bank: 0 });
 check('and a single frame is enough to ride on', loaded, (h) => !/id="e" disabled/.test(h));
+check('and then nothing says otherwise', loaded, (h) => !/no film/.test(h));
 
 // --- a maxed ladder must not offer anything ---
 const maxed = render({ maxZoom: 4, res: 3, shutterTier: 3, bank: 99999 });

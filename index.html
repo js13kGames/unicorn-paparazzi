@@ -85,9 +85,11 @@
     .r td { border-top: 1px solid #fff3; padding-top: 8px }
     .d { color: #8ab }
     .p { color: #8d9 }
-    .m { color: #f86 }
     .b { font-size: 17px }
     .h { margin-top: 14px; color: #79a; font-size: 12px; text-align: center }
+    /* After .h, so a footer line can take the loss colour: `class="h m"` is a
+       hint that is also a problem, and .m has to win the tie. */
+    .m { color: #f86 }
     button, input {
       background: #245; color: #def; border: 1px solid #fff3;
       padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px

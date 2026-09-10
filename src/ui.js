@@ -284,14 +284,16 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
     '<table>' + rows + '</table>' +
     '<p class="h">Film' + film + '</p>' +
     // A ride with an empty roll earns nothing and cannot be photographed, so it
-    // is only offered once there is film to shoot it on. Disabled, it says what
-    // is missing rather than dangling a greyed-out "Ride again" with no reason
-    // given -- and what is missing is on sale in the row directly above it.
-    '<p class="h"><button id="e"' + (state.film ? '>Ride again' : ' disabled>No film') +
-    '</button> ' +
+    // is only offered once there is film to shoot it on.
+    '<p class="h"><button id="e"' + (state.film ? '' : ' disabled') +
+    '>Ride again</button> ' +
     // Everything else you might want -- multiplayer, wiping the save -- lives on
     // the menu now, so the shop only has to be able to get you back there.
-    '<button id="mp">Menu</button></p>'
+    '<button id="mp">Menu</button></p>' +
+    // Under both buttons, in the loss colour: a greyed-out button with no reason
+    // on it is something the player has to guess at, and what is missing is on
+    // sale two rows up.
+    (state.film ? '' : '<p class="h m">no film</p>')
   );
   el.card.onclick = (e) => {
     const b = e.target.closest('button');
