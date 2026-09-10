@@ -68,11 +68,14 @@ function onCard(fn) {
   };
 }
 
-export function showTitle(onSolo, onMulti) {
+export function showTitle(onSolo, onMulti, onReset) {
   // The class centres the title and the buttons in a full-height column.
+  // onReset is falsy when there is nothing saved, and then there is nothing to
+  // offer to wipe.
   panel('<h1>Unicorn Paparazzi</h1><button id="go">Solo</button>' +
-        '<p><button id="mp">Multiplayer</button></p>', 't');
-  onCard((b) => (b.id === 'mp' ? onMulti() : onSolo()));
+        '<p><button id="mp">Multiplayer</button></p>' +
+        (onReset ? '<p><button id="restart">Reset</button></p>' : ''), 't');
+  onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'restart' ? onReset() : onSolo()));
 }
 
 // Everyone in the room, with the code big enough to read out loud. The roster is
@@ -92,13 +95,16 @@ export function showLobby(code, host, riders, name, onStart, onJoin, onBack, onN
       ? '<button id="start"' + (riders.length > 1 ? '' : ' disabled') +
         '>Start Multiplayer Game</button>'
       : 'waiting for the host') + '</p>' +
-    '<p class="hint">name <input id="n" maxlength="12" value="' + name + '"></p>' +
+    '<p class="hint">name <input id="n" value="' + name + '"></p>' +
     '<p class="hint">' + (host
-      ? 'join <input id="j" size="4" maxlength="4"> <button id="join">Join</button> '
+      ? 'join <input id="j"> <button id="join">Join</button> '
       : '') + '<button id="back">Back</button></p>'
   );
-  const field = (id) => document.getElementById(id) || {};
-  const join = () => { const v = field('j').value; if (/^\d{4}$/.test(v)) onJoin(v); };
+  // Read at click time, never from the render: the change event fires on the way
+  // out of a field, so by the time a button is clicked these are current.
+  const val = (id) => (document.getElementById(id) || {}).value || '';
+  // Both, or neither: a nameless rider is a riddle on everyone else's roster.
+  const join = () => { if (val('n') && /^\d{4}$/.test(val('j'))) onJoin(val('j')); };
   // One handler for the whole card rather than one per field: every key typed in
   // here must stay out of the game's own listeners, or Space fires the shutter.
   el.card.onkeydown = (e) => {
@@ -106,8 +112,9 @@ export function showLobby(code, host, riders, name, onStart, onJoin, onBack, onN
     if (e.key === 'Enter') join();
   };
   // On change, not on every keystroke: this reaches the wire and the save.
-  field('n').onchange = (e) => onName(e.target.value);
-  onCard((b) => (b.id === 'start' ? onStart() : b.id === 'back' ? onBack() : join()));
+  document.getElementById('n').onchange = (e) => onName(e.target.value);
+  onCard((b) => (b.id === 'start' ? val('n') && onStart()
+                 : b.id === 'back' ? onBack() : join()));
 }
 
 
@@ -218,7 +225,7 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
-export function showShop(state, cfg, offers, onBuy, onRide, onRestart, onMulti) {
+export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
   let rows = '';
   // Ladders are different lengths, so short ones have to be padded out to the
   // widest -- otherwise the row ends early and its rule stops short of the edge.
@@ -242,18 +249,16 @@ export function showShop(state, cfg, offers, onBuy, onRide, onRestart, onMulti) 
     '<h2>bank ' + state.bank + '</h2>' +
     '<table>' + rows + '</table>' +
     '<p class="hint"><button id="ride">Ride again</button> ' +
-    // The shop is the only screen a returning player sees -- the title is behind
-    // a wiped save -- so the way into a lobby has to be here too.
-    '<button id="mp">Multiplayer</button> ' +
-    '<button id="restart">Start over</button></p>'
+    // Everything else you might want -- multiplayer, wiping the save -- lives on
+    // the menu now, so the shop only has to be able to get you back there.
+    '<button id="mp">Main Menu</button></p>'
   );
   el.card.onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     e.stopPropagation();
     if (b.id === 'ride') onRide();
-    else if (b.id === 'mp') onMulti();
-    else if (b.id === 'restart') onRestart();
+    else if (b.id === 'mp') onMenu();
     else if (b.dataset.i !== undefined) onBuy(+b.dataset.i);
   };
 }

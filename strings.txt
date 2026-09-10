@@ -1,0 +1,256 @@
+
+PROSE  (the expensive kind -- reuse these words)
+------------------------------------------------
+ 44ch  x1  "wss://relay.js13kgames.com/unicorn-paparazzi"  net.js
+ 30ch  x1  "' + (sub ? 'dim' : 'rule') + '"                ui.js
+ 20ch  x1  "ws://localhost:1313/"                          net.js
+ 20ch  x1  "waiting for the host"                          ui.js
+ 20ch  x1  "class=\"row\" data-i=\""                       ui.js
+ 17ch  x1  "pointerlockchange"                             index.js
+ 17ch  x1  "No clear unicorns"                             ui.js
+ 13ch  x1  "gesturechange"                                 index.js
+ 13ch  x2  "click to look"                                 index.js
+ 12ch  x1  "u13k_uni_saf"                                  index.js
+ 12ch  x1  "gesturestart"                                  index.js
+ 12ch  x1  "class=\"rule\""                                ui.js
+ 12ch  x1  "' + name + '"                                  ui.js
+ 11ch  x1  "shutterTier"                                   index.js
+ 11ch  x2  "' + url + '"                                   ui.js
+ 10ch  x1  "gestureend"                                    index.js
+ 10ch  x2  "image/jpeg"                                    photo.js
+ 10ch  x1  "quadricorn"                                    score.js
+  9ch  x1  "mousemove"                                     index.js
+  9ch  x1  " obscured"                                     score.js
+  9ch  x2  " disabled"                                     ui.js
+  9ch  x2  "My Photos"                                     ui.js
+  8ch  x1  "filmTier"                                      index.js
+  8ch  x1  " colours"                                      score.js
+  8ch  x1  "ease-out"                                      ui.js
+  8ch  x1  " unicorn"                                      ui.js
+  8ch  x1  " place: "                                      ui.js
+  8ch  x1  "rule big"                                      ui.js
+  8ch  x1  "standing"                                      unicorn.js
+  8ch  x1  "neighing"                                      unicorn.js
+  7ch  x1  "maxZoom"                                       index.js
+  7ch  x1  "keydown"                                       index.js
+  7ch  x3  "results"                                       index.js
+  7ch  x1  "tricorn"                                       score.js
+  7ch  x1  "framing"                                       score.js
+  7ch  x1  "RAINBOW"                                       score.js
+  7ch  x1  " points"                                       ui.js
+  7ch  x2  "Results"                                       ui.js
+  7ch  x2  "restart"                                       ui.js
+  7ch  x1  "sitting"                                       unicorn.js
+  6ch  x1  "webgl2"                                        gl.js
+  6ch  x1  "resize"                                        index.js
+  6ch  x1  "detail"                                        index.js
+  6ch  x1  "rider "                                        net.js
+  6ch  x2  "number"                                        net.js
+  6ch  x2  "string"                                        net.js
+  6ch  x2  "canvas"                                        photo.js
+  6ch  x1  "pal[0]"                                        render.js
+  6ch  x1  "bicorn"                                        score.js
+  6ch  x2  "button"                                        ui.js
+  6ch  x1  "&nbsp;"                                        ui.js
+  6ch  x1  "rule g"                                        ui.js
+  6ch  x1  "orange"                                        unicorn.js
+  6ch  x1  "yellow"                                        unicorn.js
+  6ch  x1  "violet"                                        unicorn.js
+  6ch  x1  "eating"                                        unicorn.js
+  5ch  x1  "no gl"                                         gl.js
+  5ch  x1  "ultra"                                         index.js
+  5ch  x3  "title"                                         index.js
+  5ch  x1  "photo"                                         index.js
+  5ch  x1  "speed"                                         index.js
+  5ch  x1  "wheel"                                         index.js
+  5ch  x2  "click"                                         index.js
+  5ch  x2  "panel"                                         index.js ui.js
+  5ch  x1  "Space"                                         index.js
+  5ch  x3  "lobby"                                         index.js
+  5ch  x1  " size"                                         score.js
+  5ch  x1  " pose"                                         score.js
+  5ch  x1  "flash"                                         ui.js
+  5ch  x1  "Enter"                                         ui.js
+  5ch  x2  "start"                                         ui.js
+  5ch  x1  "#shop"                                         ui.js
+  5ch  x1  "#mine"                                         ui.js
+  5ch  x1  "n big"                                         ui.js
+  5ch  x1  "green"                                         unicorn.js
+  4ch  x1  "high"                                          index.js
+  4ch  x1  "zoom"                                          index.js
+  4ch  x2  "film"                                          index.js ui.js
+  4ch  x10  "ride"                                          index.js ui.js
+  4ch  x3  "shop"                                          index.js ui.js
+  4ch  x2  "You!"                                          net.js ui.js
+  4ch  x1  "card"                                          ui.js
+  4ch  x1  "roll"                                          ui.js
+  4ch  x1  "none"                                          ui.js
+  4ch  x1  "lap "                                          ui.js
+  4ch  x1  " low"                                          ui.js
+  4ch  x3  "back"                                          ui.js
+  4ch  x2  "rule"                                          ui.js
+  4ch  x1  ".row"                                          ui.js
+  4ch  x7  "hint"                                          ui.js
+  4ch  x1  "join"                                          ui.js
+  4ch  x1  "mine"                                          ui.js
+  4ch  x1  "blue"                                          unicorn.js
+  3ch  x1  "low"                                           index.js
+  3ch  x1  "med"                                           index.js
+  3ch  x1  "res"                                           index.js
+  3ch  x1  "hud"                                           ui.js
+  3ch  x1  "bar"                                           ui.js
+  3ch  x4  "dim"                                           ui.js
+  3ch  x1  "row"                                           ui.js
+  3ch  x1  "pos"                                           ui.js
+  3ch  x1  "red"                                           unicorn.js
+  2ch  x1  "nm"                                            render.js
+  2ch  x1  "ip"                                            render.js
+  2ch  x1  "iq"                                            render.js
+  2ch  x1  "vf"                                            ui.js
+  2ch  x1  "sh"                                            ui.js
+  2ch  x1  "on"                                            ui.js
+  2ch  x4  "mp"                                            ui.js
+  2ch  x1  "st"                                            ui.js
+  2ch  x1  "nd"                                            ui.js
+  2ch  x1  "rd"                                            ui.js
+  2ch  x2  "th"                                            ui.js
+  2ch  x1  "go"                                            ui.js
+  2ch  x2  "wk"                                            ui.js
+
+MARKUP  (repeats here are nearly free)
+--------------------------------------
+ 75ch  x1  "join <input id=\"j\" size=\"4\" maxlength=\"4\"> <button id=\"join\">Join</button> "ui.js
+ 59ch  x1  "<tr class=\"rule big\"><td><b>total</b></td><td class=\"n\"><b>"ui.js
+ 57ch  x1  "<p class=\"hint\">name <input id=\"n\" maxlength=\"12\" value=\""ui.js
+ 55ch  x1  "<h1>Unicorn Paparazzi</h1><button id=\"go\">Solo</button>"ui.js
+ 54ch  x1  "<p class=\"hint\"><button id=\"ride\">Ride again</button> "ui.js
+ 51ch  x1  "<p class=\"hint\"><button id=\"back\">Back</button></p>"ui.js
+ 51ch  x1  "<p class=\"hint\"><button id=\"shop\">Shop</button></p>"ui.js
+ 48ch  x1  "</button> <button id=\"shop\">Rematch</button></p>"ui.js
+ 44ch  x1  "<button id=\"restart\">Start over</button></p>"ui.js
+ 43ch  x1  "<p><button id=\"mp\">Multiplayer</button></p>" ui.js
+ 37ch  x1  "<button id=\"mp\">Multiplayer</button> "       ui.js
+ 35ch  x1  "<button id=\"back\">Back</button></p>"         ui.js
+ 35ch  x1  "<tr class=\"rule g\"><td class=\"dim\">"       ui.js
+ 34ch  x1  "<p class=\"hint\"><button id=\"mine\">"        ui.js
+ 32ch  x1  ">Start Multiplayer Game</button>"              ui.js
+ 32ch  x1  "<tr><td colspan=\"2\" class=\"dim\">"          ui.js
+ 27ch  x1  "<h1>My Photos</h1><h2>bank "                   ui.js
+ 26ch  x1  "</td><td class=\"n big\"><b>"                  ui.js
+ 22ch  x1  "</b></td></tr></table>"                        ui.js
+ 20ch  x1  "<tr><td class=\"dim\">"                        ui.js
+ 19ch  x1  "</td><td class=\"n\">"                         ui.js
+ 18ch  x1  "Film Remaining <b>"                            ui.js
+ 18ch  x1  "<h2>your code</h2>"                            ui.js
+ 18ch  x1  "<button id=\"start\""                          ui.js
+ 18ch  x1  "<h1>My Photos</h1>"                            ui.js
+ 18ch  x1  "<small class=\"wk\">"                          ui.js
+ 17ch  x1  "<span class=\"wk\">"                           ui.js
+ 16ch  x2  "<p class=\"hint\">"                            ui.js
+ 16ch  x1  "><td class=\"th\">"                            ui.js
+ 16ch  x1  "<h2>waiting for "                              ui.js
+ 16ch  x1  "<button data-i=\""                             ui.js
+ 15ch  x1  "</b><br><small>"                               ui.js
+ 15ch  x1  "<b class=\"pos\">"                             ui.js
+ 14ch  x1  "</b></td></tr>"                                ui.js
+ 14ch  x1  "<td class=\"n\">"                              ui.js
+ 13ch  x1  "<h1>SHOP</h1>"                                 ui.js
+ 12ch  x1  "</small><br>"                                  ui.js
+ 11ch  x1  "<tr class=\""                                  ui.js
+ 10ch  x2  "<img src=\""                                   ui.js
+ 10ch  x3  "</td></tr>"                                    ui.js
+  9ch  x1  "</td><td>"                                     ui.js
+  9ch  x1  "</button>"                                     ui.js
+  9ch  x1  "<td></td>"                                     ui.js
+  9ch  x1  "<h2>bank "                                     ui.js
+  8ch  x1  "</small>"                                      ui.js
+  8ch  x3  "</table>"                                      ui.js
+  7ch  x4  "<table>"                                       ui.js
+  7ch  x1  "</span>"                                       ui.js
+  6ch  x1  "\"></p>"                                       ui.js
+  6ch  x1  "\"><td>"                                       ui.js
+  5ch  x2  "</h1>"                                         ui.js
+  5ch  x4  "</h2>"                                         ui.js
+  5ch  x2  "</td>"                                         ui.js
+  5ch  x1  "</tr>"                                         ui.js
+  4ch  x2  "<h1>"                                          ui.js
+  4ch  x1  "</p>"                                          ui.js
+  4ch  x1  "<tr "                                          ui.js
+  4ch  x1  "<h2>"                                          ui.js
+  4ch  x1  "</b>"                                          ui.js
+  2ch  x2  "\">"                                           ui.js
+
+CSS VOCABULARY  (classes and ids already styled)
+-----------------------------------------------
+
+#bar #c #card #dceaf7 #ff8f6b #ff8f6bb3 #fff #fff6 #fff9 #ffffff12 #ffffff26 #ffffff33 #film #flash #hud #panel #roll #track #ui #vf .big .dim .g .hint .low .n .on .pos .row .rule .sh .t .th .wk
+
+CSS RULES
+---------
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  touch-action: none; overscroll-behavior: none;
+  background: #9ec7f2; color: #fff;
+  font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+}
+#c { display: block; width: 100vw; height: 100vh; cursor: crosshair }
+#ui { position: fixed; inset: 0; pointer-events: none }
+#ui > * { position: absolute }
+.sh { text-shadow: 0 1px 3px #0009 }
+small { font-size: 11px; opacity: .8 }
+#flash { inset: 0; background: #fff; opacity: 0 }
+#hud { top: 8px; left: 10px }
+#film { top: 8px; right: 10px; text-align: right; font-size: 15px }
+#film b { font-size: 22px }
+#film.low b { color: #ff8f6b }
+#roll {
+  top: 60px; right: 10px; width: 84px; bottom: 46px; gap: 4px;
+  display: flex; flex-direction: column-reverse; justify-content: flex-end;
+  overflow: hidden;
+}
+#roll img { width: 100%; border: 1px solid #fff6; display: block }
+#vf { border: 1px solid #fff6 }
+#vf::before, #vf::after {
+  content: ''; position: absolute; left: 50%; top: 50%; background: #fff9
+}
+#vf::before { width: 20px; height: 1px; margin-left: -10px }
+#vf::after { width: 1px; height: 20px; margin-top: -10px }
+#track { left: 10px; right: 10px; bottom: 10px; height: 4px; background: #0004 }
+#bar { height: 100%; width: 0; background: #fff }
+#panel { inset: 0; display: none; place-items: center; background: #ff8f6bb3; pointer-events: auto }
+#panel.on { display: grid }
+#card {
+  width: min(720px, 92vw); max-height: 88vh; overflow: auto; touch-action: pan-y;
+  background: #16273b; border: 1px solid #ffffff26; padding: 18px 20px
+}
+#card.t {
+  background: none; border: 0; width: 100vw;
+  display: flex; flex-direction: column; align-items: center
+}
+h1 { font: 700 44px serif; margin: 0 0 10px }
+#card.t h1 { font-size: 6em; animation: w 1s infinite }
+@keyframes w { 50% { transform: translateY(-20px) } }
+h2 { font-size: 14px; margin: 18px 0 12px; font-weight: 400; color: #9fb6cc }
+h1, h2 { text-align: center }
+#card img { width: 100%; display: block; margin-bottom: 12px; background: #000 }
+table { width: 100%; border-collapse: collapse; font-size: 12px }
+td { padding: 3px 0 }
+td.n { text-align: right; font-variant-numeric: tabular-nums }
+td.th { width: 92px; padding-right: 10px }
+tr.row { cursor: pointer }
+tr.row:hover td { background: #ffffff12 }
+.rule td { border-top: 1px solid #ffffff26; padding-top: 8px }
+.g td { height: 44px; vertical-align: bottom }
+.dim { color: #8ea6bd }
+.wk { color: #64798e }
+.pos { color: #8fe0a0 }
+.big { font-size: 17px }
+.hint { margin-top: 14px; color: #7d93a9; font-size: 12px; text-align: center }
+button, input {
+  background: #24405c; color: #dceaf7; border: 1px solid #ffffff33;
+  padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px
+}
+.t button { background: none; font: 2em serif; color: #fff }
+button:hover:not(:disabled) { background: #2f5478 }
+button:disabled { opacity: .35; cursor: default }

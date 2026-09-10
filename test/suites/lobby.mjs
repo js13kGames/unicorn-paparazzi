@@ -49,20 +49,36 @@ const click = (id) => {
 
 // --- the title -----------------------------------------------------------
 const hits = [];
-ui.showTitle(() => hits.push('solo'), () => hits.push('mp'));
+const showTitle = (reset) =>
+  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset);
+
+// A player with nothing saved has nothing to reset, so they are not offered it.
+showTitle(0);
 check('the title offers both ways in', /id="go"[\s\S]*id="mp"/.test(card()));
+check('and no Reset until there is a save to wipe',
+      card(), (h) => !h.includes('id="restart"'));
 click('mp');
 check('the multiplayer button opens the lobby', hits.pop(), 'mp');
 check('and the click never reaches the panel underneath', stopped);
 click('go');
 check('the other button rides alone', hits.pop(), 'solo');
 
+showTitle(() => hits.push('reset'));
+check('a returning player is offered Reset', card(), (h) => h.includes('>Reset<'));
+click('restart');
+check('and it wipes rather than riding', hits.pop(), 'reset');
+
 // --- the lobby -----------------------------------------------------------
 const seen = [];
-const show = (code, host, riders, name = 'Ada') =>
+const show = (code, host, riders, name = 'Ada') => {
   ui.showLobby(code, host, riders, name, () => seen.push('start'),
                (c) => seen.push('join:' + c), () => seen.push('back'),
                (v) => seen.push('name:' + v));
+  // A browser fills the field in from the value attribute; the stub does not, so
+  // do it here or every read comes back empty.
+  const f = document.getElementById('n');
+  if (f) f.value = name;
+};
 
 // net.js hands the roster over already named, yours reading "You!", so there is
 // nothing here to work out about which rider is which.
@@ -80,7 +96,17 @@ check('starting is routed to the host handler', seen.pop(), 'start');
 // Typing a code and joining, on the host's screen -- the only one that offers
 // it. A code that is not four digits must not send you anywhere: the room name
 // would simply be wrong and you would sit alone in it.
+// Nothing happens without a name, however good the code is: an anonymous rider
+// is a riddle on everyone else's roster.
 const j = document.getElementById('j');
+j.value = '1234';
+document.getElementById('n').value = '';
+click('join');
+check('a code with no name is refused', seen.length, 0);
+click('start');
+check('and so is starting a lap nameless', seen.length, 0);
+document.getElementById('n').value = 'Ada';
+
 j.value = '77';
 click('join');
 check('a short code is refused', seen.length, 0);

@@ -92,19 +92,23 @@ check('and every one of its tiers reads as owned', maxed,
 check('a maxed shop offers nothing at all', maxed, (h) => !/data-i=/.test(h));
 
 // --- clicking ---
-let bought = null, rode = false, restarted = false;
+let bought = null, rode = false, menued = false;
 const state = { bank: 2140,
                 maxZoom: 1, res: 0, filmTier: 0, shutterTier: 0 };
 ui.showShop(state, cfg, offersFor(state), (i) => { bought = i; },
-            () => { rode = true; }, () => { restarted = true; });
+            () => { rode = true; }, () => { menued = true; });
 const click = (attrs) => nodes.card.onclick({
   target: { closest: (q) => (q === 'button' ? attrs : null) }, stopPropagation() {} });
 click({ dataset: { i: '2' } });
 check('clicking a rung buys that ladder', bought, 2);
 click({ id: 'ride', dataset: {} });
 check('ride again still fires', rode, true);
-click({ id: 'restart', dataset: {} });
-check('start over still fires', restarted, true);
+// Wiping the save moved to the menu, so the shop's second button is the way
+// back to it and nothing else.
+click({ id: 'mp', dataset: {} });
+check('main menu still fires', menued, true);
+check('and the shop no longer offers to wipe the save',
+      nodes.card.innerHTML.includes('restart'), false);
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

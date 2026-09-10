@@ -280,7 +280,7 @@ function showDetail(i) {
 
 function showShop() {
   state.mode = 'shop';
-  ui.showShop(state, CONFIG, offers(), buy, ride, restart, lobby);
+  ui.showShop(state, CONFIG, offers(), buy, ride, title);
 }
 
 function buy(i) {
@@ -354,9 +354,8 @@ function host() {
 // The name outlives the lobby: it is yours, not the room's, so it goes in the
 // save and rides the reload into the lap with everything else.
 function rename(v) {
-  state.name = v;
+  state.name = net.setName(v);
   persist();
-  net.setName(v);
 }
 
 // Walking out has to close the socket, or the host keeps counting a ghost.
@@ -369,7 +368,17 @@ function leave() {
 
 function title() {
   state.mode = 'title';
-  ui.showTitle(primary, lobby);
+  // Reset is only worth offering when there is something to wipe.
+  ui.showTitle(solo, lobby, saved.v ? restart : 0);
+}
+
+// The menu is reachable from the shop without a reload, and by then the world
+// has been ridden -- the film is spent and the cart is round the track. A fresh
+// boot has not, so it can just start where it stands rather than paying for a
+// second worldgen.
+function solo() {
+  if (distance) ride();
+  else primary();
 }
 
 // Whatever screen is up, redraw it: the roster and the results board both move

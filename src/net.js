@@ -50,12 +50,21 @@ let myName = '';
 // of it stand in until they tell us something better.
 const nameOf = (i) => here.get(i) || 'rider ' + i.slice(0, 4);
 
+
 export const online = () => !!ws && ws.readyState === 1;
 export const others = () => [...riders.values()];
-// Ready to draw: you are "You!" wherever you appear, which is what the results
-// screen calls you too, so ui.js never has to work out which rider it is.
-export const lobby = () => [...here.keys()].map((i) => (i === key(ME) ? 'You!' : nameOf(i)));
-export const setName = (s) => { myName = clean(s); send({ t: 'h', i: ME, r: 1, n: myName }); };
+// Ready to draw. Your own row is your own name rather than "You!": in a lobby
+// the useful thing is seeing that the name you typed took, and the results
+// screen is where being told which one is you actually matters.
+export const lobby = () => [...here.keys()].map(nameOf);
+// Returns what it actually kept: the name goes straight into an HTML attribute
+// on the way back out, so the caller must store the filtered one, not the typed
+// one. clean() also caps the length, which is why the field needs no maxlength.
+export const setName = (s) => {
+  myName = clean(s);
+  send({ t: 'h', i: ME, r: 1, n: myName });
+  return myName;
+};
 // Once nobody can take another photograph there is nothing left to ride for, so
 // the lap can stop early. Empty means no lobby at all, which is not everyone
 // being out of film -- it is a solo player, and they must never match this.
@@ -110,8 +119,9 @@ export function connect(code, name, onGo, onChange) {
       // A hello always carries the sender's name, so it is the whole record:
       // presence and what to call them. "My roll is empty" rides along on it too
       // rather than earning a message type of its own.
-      here.set(key(m.i), clean(m.n));
-      if (m.e) spent.add(key(m.i));
+      const h = key(m.i);
+      here.set(h, clean(m.n));
+      if (m.e) spent.add(h);
       // Answer an arrival so it learns about us, but never answer an answer.
       if (!m.r) send({ t: 'h', i: ME, r: 1, n: myName });
     } else if (m.t === 'd' && typeof m.n === 'number') {
