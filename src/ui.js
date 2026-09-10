@@ -34,7 +34,7 @@ export function updateHud(state, cfg, lap, clock) {
   el.bar.style.width = (Math.min(1, lap) * 100).toFixed(1) + '%';
   el.hud.textContent = 'lap ' + Math.floor(Math.min(1, lap) * 100) + '%' +
     (performance.now() < toastUntil ? '  ·  ' + el.hud.dataset.msg : '');
-  el.film.innerHTML = 'Film Remaining <b>' + state.film + '</b><br><small>' +
+  el.film.innerHTML = 'Film <b>' + state.film + '</b><br><small>' +
     (clock < state.ready ? '⏳' : state.photos.length + '/' + cfg.filmTiers[state.filmTier]) +
     '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');

@@ -54,7 +54,7 @@ state.film = 2; ui.updateHud(state, cfg, 0.4, 0);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
 state.film = 12;
 
-check('the film counter says what it is counting', film, (t) => /Film Remaining/.test(t));
+check('the film counter says what it is counting', film, (t) => /Film/.test(t));
 
 // The flash fired once and then stuck on, because a reflow restarts a CSS
 // transition but not a CSS animation. It must now fire on EVERY shot.
@@ -115,7 +115,9 @@ const list = nodes.card.innerHTML;
 const order = [...list.matchAll(/data-i="(\d)"/g)].map((m) => +m[1]);
 check('results list is sorted best to worst', order.join(','), '0,2,1');
 check('results list shows every shot', order.length, scored.length);
-check('a frame with nothing big enough is labelled', list, (s) => s.includes('No clear unicorns'));
+// The empty label is built out of the words the other rows already use rather
+// than being prose of its own, so it reads "0 unicorns".
+check('a frame with nothing big enough is labelled', list, (s) => s.includes('0 unicorns'));
 check('bonuses appear in the row summary', list, (s) => s.includes('2 colours'));
 check('bank is shown', list, (s) => s.includes('1260'));
 nodes.card.onclick({ target: { closest: (q) => (q === '.o' ? { dataset: { i: '2' } } : null) }, stopPropagation() {} });

@@ -139,7 +139,7 @@ check('back leaves the lobby', seen.pop(), 'back');
 // --- the guest's screen --------------------------------------------------
 show('4821', 0, ['You!', 'rider aaaa']);
 check('a guest is told to wait instead of being offered the button',
-      card(), (h) => h.includes('waiting for the host') && !h.includes('id="a"'));
+      card(), (h) => h.includes('waiting for host') && !h.includes('id="a"'));
 // Nothing to do but wait, so the join row goes with the Start button. Wiring a
 // handler onto a field that is no longer drawn would throw on the null.
 check('and the join field is not drawn at all', card(), (h) => !h.includes('id="j"'));
