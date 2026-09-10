@@ -10,7 +10,17 @@ const node = (id) => (nodes[id] = nodes[id] || {
   animate() {},
 });
 globalThis.Image = class {};
-globalThis.document = { getElementById: node, createElement: () => node('tmp') };
+// The ids ui.js looks up at module load, which index.html always provides.
+const STATIC = ['hud', 'film', 'bar', 'flash', 'panel', 'card', 'vf', 'roll', 'belt'];
+// Everything else has to actually be in the card that was just rendered. A stub
+// that hands back a node for any id at all cannot catch the bug where a screen
+// stops drawing an element but still wires up a handler on it.
+globalThis.document = {
+  getElementById: (id) =>
+    (STATIC.includes(id) || (nodes.card || {}).innerHTML.includes('id="' + id + '"')
+      ? node(id) : null),
+  createElement: () => node('tmp'),
+};
 globalThis.performance = { now: () => 0 };
 
 const ui = await import('../.mirror/ui.mjs');
@@ -64,32 +74,42 @@ check('and now the host can start', card(), (h) => /id="start"(?! disabled)/.tes
 click('start');
 check('starting is routed to the host handler', seen.pop(), 'start');
 
-show('4821', 0, ['aaaa1111', 'bbbb2222'], 'bbbb2222');
-check('a guest is told to wait instead of being offered the button',
-      card(), (h) => h.includes('waiting for the host') && !h.includes('id="start"'));
-
-// Typing a code and joining. A code that is not four digits must not send you
-// anywhere -- the room name would simply be wrong and you would sit alone.
-nodes.j.value = '77';
+// Typing a code and joining, on the host's screen -- the only one that offers
+// it. A code that is not four digits must not send you anywhere: the room name
+// would simply be wrong and you would sit alone in it.
+const j = document.getElementById('j');
+j.value = '77';
 click('join');
 check('a short code is refused', seen.length, 0);
-nodes.j.value = 'abcd';
+j.value = 'abcd';
 click('join');
 check('and a non-numeric one too', seen.length, 0);
-nodes.j.value = '1234';
+j.value = '1234';
 click('join');
 check('four digits joins that room', seen.pop(), 'join:1234');
-nodes.j.onkeydown({ key: 'Enter', stopPropagation() {} });
+j.onkeydown({ key: 'Enter', stopPropagation() {} });
 check('and Enter does the same', seen.pop(), 'join:1234');
 
 // Space is the shutter everywhere else in the game; inside the code field it has
 // to be a keystroke, so the field swallows the event rather than firing a photo.
 let swallowed = false;
-nodes.j.onkeydown({ key: ' ', stopPropagation: () => { swallowed = true; } });
+j.onkeydown({ key: ' ', stopPropagation: () => { swallowed = true; } });
 check('the code field keeps Space away from the shutter', swallowed);
 
 click('back');
 check('back leaves the lobby', seen.pop(), 'back');
+
+// --- the guest's screen --------------------------------------------------
+show('4821', 0, ['aaaa1111', 'bbbb2222'], 'bbbb2222');
+check('a guest is told to wait instead of being offered the button',
+      card(), (h) => h.includes('waiting for the host') && !h.includes('id="start"'));
+// Nothing to do but wait, so the join row goes with the Start button. Wiring a
+// handler onto a field that is no longer drawn would throw on the null.
+check('and the join field is not drawn at all', card(), (h) => !h.includes('id="j"'));
+check('nor the Join button', card(), (h) => !h.includes('id="join"'));
+check('but they can still walk out', card(), (h) => h.includes('id="back"'));
+click('back');
+check('and that still works', seen.pop(), 'back');
 
 // --- the match result ----------------------------------------------------
 // Three shapes, one function: solo, a match still waiting, and a match with

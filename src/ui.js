@@ -93,15 +93,19 @@ export function showLobby(code, host, riders, mine, onStart, onJoin, onBack) {
     '<h1>' + code + '</h1>' +
     '<h2>your code</h2>' +
     '<table>' + rows + '</table>' +
+    // A guest has nothing to do but wait, so the whole join row goes with the
+    // Start button. Hopping to another code from here would mean leaving anyway.
     '<p class="hint">' + (host
       ? '<button id="start"' + (riders.length > 1 ? '' : ' disabled') +
         '>Start Multiplayer Game</button>'
       : 'waiting for the host') + '</p>' +
-    '<p class="hint">join <input id="j" size="4" maxlength="4"> ' +
-    '<button id="join">Join</button> <button id="back">Back</button></p>'
+    '<p class="hint">' + (host
+      ? 'join <input id="j" size="4" maxlength="4"> <button id="join">Join</button> '
+      : '') + '<button id="back">Back</button></p>'
   );
   const join = () => { const v = document.getElementById('j').value; if (/^\d{4}$/.test(v)) onJoin(v); };
-  document.getElementById('j').onkeydown = (e) => {
+  // Only the host has the field to wire up, and only the host can reach join().
+  if (host) document.getElementById('j').onkeydown = (e) => {
     e.stopPropagation();           // Space must type, not fire the shutter
     if (e.key === 'Enter') join();
   };
