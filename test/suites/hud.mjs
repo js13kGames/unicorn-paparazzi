@@ -118,16 +118,16 @@ check('results list shows every shot', order.length, scored.length);
 check('a frame with nothing big enough is labelled', list, (s) => s.includes('No clear unicorns'));
 check('bonuses appear in the row summary', list, (s) => s.includes('2 colours'));
 check('bank is shown', list, (s) => s.includes('1260'));
-nodes.card.onclick({ target: { closest: (q) => (q === '.row' ? { dataset: { i: '2' } } : null) }, stopPropagation() {} });
+nodes.card.onclick({ target: { closest: (q) => (q === '.o' ? { dataset: { i: '2' } } : null) }, stopPropagation() {} });
 check('clicking a row opens that photo', picked, 2);
-nodes.card.onclick({ target: { closest: (q) => (q === '#shop' ? {} : null) }, stopPropagation() {} });
+nodes.card.onclick({ target: { closest: (q) => (q === '#s' ? {} : null) }, stopPropagation() {} });
 check('the shop button reaches the shop', shopped, true);
 
 // Detail view must be able to get back
 let backed = false;
 ui.showPhoto(scored[0], () => { backed = true; });
-check('detail view offers a way back', nodes.card.innerHTML, (s) => s.includes('id="back"'));
-nodes.card.onclick({ target: { closest: (q) => (q === 'button' ? { id: 'back' } : null) }, stopPropagation() {} });
+check('detail view offers a way back', nodes.card.innerHTML, (s) => s.includes('id="k"'));
+nodes.card.onclick({ target: { closest: (q) => (q === 'button' ? { id: 'k' } : null) }, stopPropagation() {} });
 check('back returns to the results list', backed, true);
 
 // toast surfaces through the hud line while it is live

@@ -54,10 +54,10 @@ check('every film tier is on screen', text, (t) => cfg.filmTiers.every((v) => t.
 check('the ladders are named', text, (t) => /zoom/.test(t) && /photo/.test(t) && /film/.test(t) && /speed/.test(t));
 
 // Owned tiers read as owned; the rung above is the only button on that row.
-check('tiers you own are marked', mid, (h) => /<b class="pos">2×<\/b>/.test(h));
-check('the tier below the current one is also owned', mid, (h) => /<b class="pos">1×<\/b>/.test(h));
+check('tiers you own are marked', mid, (h) => /<b class="p">2×<\/b>/.test(h));
+check('the tier below the current one is also owned', mid, (h) => /<b class="p">1×<\/b>/.test(h));
 check('the next rung is a button', mid, (h) => /<button data-i="0"[^>]*>4×<\/button>/.test(h));
-check('rungs beyond the next are not buttons', mid, (h) => /<span class="wk">8×<\/span>/.test(h));
+check('rungs beyond the next are not buttons', mid, (h) => /<span class="w">8×<\/span>/.test(h));
 check('one button per ladder', (mid.match(/data-i="[0-3]"/g) || []).length, 4);
 
 // Prices sit above every rung you do not own yet, so a saving target is visible.
@@ -69,7 +69,7 @@ check('owned rungs show no price', mid, (h) => !/<small[^>]*>400<\/small>/.test(
 // to be padded out: an unpadded row ends early and its rule stops short of the
 // table edge instead of dividing the whole row.
 {
-  const cells = [...mid.matchAll(/<tr class="rule g">([\s\S]*?)<\/tr>/g)]
+  const cells = [...mid.matchAll(/<tr class="r g">([\s\S]*?)<\/tr>/g)]
     .map((m) => (m[1].match(/<td/g) || []).length);
   console.log('        cells per ladder row: ' + cells.join(' '));
   check('every ladder row is the same width', new Set(cells).size, 1);
@@ -88,7 +88,7 @@ check('nothing is disabled when the bank is full', rich, (h) => !/data-i="\d+" d
 const maxed = render({ maxZoom: 4, res: 3, filmTier: 4, shutterTier: 3, bank: 99999 });
 check('a maxed ladder has no button at all', maxed, (h) => !/data-i="[0-3]"/.test(h));
 check('and every one of its tiers reads as owned', maxed,
-      (h) => cfg.resNames.every((v) => h.includes('<b class="pos">' + v + '</b>')));
+      (h) => cfg.resNames.every((v) => h.includes('<b class="p">' + v + '</b>')));
 check('a maxed shop offers nothing at all', maxed, (h) => !/data-i=/.test(h));
 
 // --- clicking ---
@@ -101,7 +101,7 @@ const click = (attrs) => nodes.card.onclick({
   target: { closest: (q) => (q === 'button' ? attrs : null) }, stopPropagation() {} });
 click({ dataset: { i: '2' } });
 check('clicking a rung buys that ladder', bought, 2);
-click({ id: 'ride', dataset: {} });
+click({ id: 'e', dataset: {} });
 check('ride again still fires', rode, true);
 // Wiping the save moved to the menu, so the shop's second button is the way
 // back to it and nothing else.

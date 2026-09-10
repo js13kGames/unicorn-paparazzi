@@ -56,7 +56,7 @@ const showTitle = (reset) =>
 showTitle(0);
 check('the title offers both ways in', /id="go"[\s\S]*id="mp"/.test(card()));
 check('and no Reset until there is a save to wipe',
-      card(), (h) => !h.includes('id="restart"'));
+      card(), (h) => !h.includes('id="x"'));
 click('mp');
 check('the multiplayer button opens the lobby', hits.pop(), 'mp');
 check('and the click never reaches the panel underneath', stopped);
@@ -65,7 +65,7 @@ check('the other button rides alone', hits.pop(), 'solo');
 
 showTitle(() => hits.push('reset'));
 check('a returning player is offered Reset', card(), (h) => h.includes('>Reset<'));
-click('restart');
+click('x');
 check('and it wipes rather than riding', hits.pop(), 'reset');
 
 // --- the lobby -----------------------------------------------------------
@@ -85,12 +85,12 @@ const show = (code, host, riders, name = 'Ada') => {
 show('4821', 1, ['You!']);
 check('the code is the headline, big enough to read out', /<h1>4821<\/h1>/.test(card()));
 check('a lobby of one lists just you', card(), (h) => h.includes('You!'));
-check('and the host cannot start alone', card(), (h) => /id="start" disabled/.test(h));
+check('and the host cannot start alone', card(), (h) => /id="a" disabled/.test(h));
 
 show('4821', 1, ['You!', 'rider bbbb']);
 check('a second rider appears on the roster', card(), (h) => h.includes('rider bbbb'));
-check('and now the host can start', card(), (h) => /id="start"(?! disabled)/.test(h));
-click('start');
+check('and now the host can start', card(), (h) => /id="a"(?! disabled)/.test(h));
+click('a');
 check('starting is routed to the host handler', seen.pop(), 'start');
 
 // Typing a code and joining, on the host's screen -- the only one that offers
@@ -101,20 +101,20 @@ check('starting is routed to the host handler', seen.pop(), 'start');
 const j = document.getElementById('j');
 j.value = '1234';
 document.getElementById('n').value = '';
-click('join');
+click('o');
 check('a code with no name is refused', seen.length, 0);
-click('start');
+click('a');
 check('and so is starting a lap nameless', seen.length, 0);
 document.getElementById('n').value = 'Ada';
 
 j.value = '77';
-click('join');
+click('o');
 check('a short code is refused', seen.length, 0);
 j.value = 'abcd';
-click('join');
+click('o');
 check('and a non-numeric one too', seen.length, 0);
 j.value = '1234';
-click('join');
+click('o');
 check('four digits joins that room', seen.pop(), 'join:1234');
 // One keydown handler covers the whole card rather than one per field.
 nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
@@ -133,24 +133,24 @@ document.getElementById('n').onchange({ target: { value: 'Bo' } });
 check('changing it is reported once, on change rather than per keystroke',
       seen.pop(), 'name:Bo');
 
-click('back');
+click('k');
 check('back leaves the lobby', seen.pop(), 'back');
 
 // --- the guest's screen --------------------------------------------------
 show('4821', 0, ['You!', 'rider aaaa']);
 check('a guest is told to wait instead of being offered the button',
-      card(), (h) => h.includes('waiting for the host') && !h.includes('id="start"'));
+      card(), (h) => h.includes('waiting for the host') && !h.includes('id="a"'));
 // Nothing to do but wait, so the join row goes with the Start button. Wiring a
 // handler onto a field that is no longer drawn would throw on the null.
 check('and the join field is not drawn at all', card(), (h) => !h.includes('id="j"'));
-check('nor the Join button', card(), (h) => !h.includes('id="join"'));
+check('nor the Join button', card(), (h) => !h.includes('id="o"'));
 // The name is yours, not the room's, so a guest still gets to set it.
 check('but a guest can still name themselves', card(), (h) => h.includes('id="n"'));
 // join() has to survive the field it reads being absent.
 nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
 check('and Enter with no code field does not throw', true);
-check('but they can still walk out', card(), (h) => h.includes('id="back"'));
-click('back');
+check('but they can still walk out', card(), (h) => h.includes('id="k"'));
+click('k');
 check('and that still works', seen.pop(), 'back');
 
 // --- the match result ----------------------------------------------------
@@ -170,7 +170,7 @@ const results = (rivals, waiting, mine) => {
 results(null, undefined);
 check('alone, there is no board at all and the bank still shows',
       card(), (h) => !h.includes('place:') && h.includes('bank 700'));
-check('and the way on is the shop', card(), (h) => h.includes('id="shop"'));
+check('and the way on is the shop', card(), (h) => h.includes('id="s"'));
 
 // --- still riding ---
 results([rival(900, 'r.jpg')], 1);
@@ -180,7 +180,7 @@ check('and no scores are on show yet', card(), (h) => !h.includes('900'));
 // A rider who types the code mid-lap never reports, so waiting can stall for
 // good. Both ways off this screen have to work even then.
 check('but both ways out are still offered',
-      card(), (h) => h.includes('id="mine"') && h.includes('id="shop"'));
+      card(), (h) => h.includes('id="m"') && h.includes('id="s"'));
 check('and the exit is a rematch, never the shop',
       card(), (h) => h.includes('Rematch') && !h.includes('Shop'));
 
@@ -209,9 +209,9 @@ check('and your own breakdown is under it', card(), (h) => h.includes('+400'));
 // The leading space on a label is the whole contract between score.js and this
 // renderer: it is what says "detail of the row above" rather than a subject.
 check('a detail row is dimmed and indented under its subject',
-      card(), (h) => h.includes('<tr class="dim"><td>&nbsp; size'));
+      card(), (h) => h.includes('<tr class="d"><td>&nbsp; size'));
 check('while a subject header is ruled off instead',
-      card(), (h) => h.includes('<tr class="rule"><td>azure'));
+      card(), (h) => h.includes('<tr class="r"><td>azure'));
 
 // --- your roll, on the same screen ---
 results([rival(100, 'r.jpg')], 0, 1);
@@ -225,12 +225,12 @@ check('and no rival appears on it at all',
       card(), (h) => !h.includes('Bo') && !h.includes('r.jpg'));
 check('your own roll is best first',
       card().indexOf('data-i="1"') < card().indexOf('data-i="0"'));
-click('mine');
+click('m');
 check('the toggle reports itself as the -1 pick', picked, -1);
 
 results([rival(100, '')], 0);
 nodes.card.onclick({ stopPropagation() {},
-  target: { closest: (q) => (q === '.row' ? { dataset: { i: '1' } } : null) } });
+  target: { closest: (q) => (q === '.o' ? { dataset: { i: '1' } } : null) } });
 check('and a shot in the roll still opens on its index', picked, 1);
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');

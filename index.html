@@ -64,18 +64,25 @@
     table { width: 100%; border-collapse: collapse; font-size: 12px }
     td { padding: 3px 0 }
     td.n { text-align: right; font-variant-numeric: tabular-nums }
-    td.th { width: 92px; padding-right: 10px }
-    tr.row { cursor: pointer }
-    tr.row:hover td { background: #ffffff12 }
-    .rule td { border-top: 1px solid #ffffff26; padding-top: 8px }
+    td.i { width: 92px; padding-right: 10px }
+    /* Single letters because every one of these is written out in ui.js many
+       times over, and the stylesheet rides inside the compressed payload with
+       the markup. Measured at 14 bytes; CSS comments like this one are stripped
+       before packing, so the legend is free.
+         r rule (a ruled-off row)   d dim      w weak      p positive
+         h hint (a footer line)     b big      o row (clickable)
+         i thumbnail cell (t is taken by the title card)                     */
+    tr.o { cursor: pointer }
+    tr.o:hover td { background: #ffffff12 }
+    .r td { border-top: 1px solid #ffffff26; padding-top: 8px }
     /* One height for every ladder row, whether or not it carries a price tag,
        and every tier sitting on the same line. */
     .g td { height: 44px; vertical-align: bottom }
-    .dim { color: #8ea6bd }
-    .wk { color: #64798e }
-    .pos { color: #8fe0a0 }
-    .big { font-size: 17px }
-    .hint { margin-top: 14px; color: #7d93a9; font-size: 12px; text-align: center }
+    .d { color: #8ea6bd }
+    .w { color: #64798e }
+    .p { color: #8fe0a0 }
+    .b { font-size: 17px }
+    .h { margin-top: 14px; color: #7d93a9; font-size: 12px; text-align: center }
     button, input {
       background: #24405c; color: #dceaf7; border: 1px solid #ffffff33;
       padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px
