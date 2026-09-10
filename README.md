@@ -86,6 +86,3 @@ shipping.
   "build-watch": "webpack --mode=development --watch",
   "pack": "node build/pack.mjs"
 ```
-
-`node generate-icons.js` regenerates the PWA icons (needs the native `canvas`
-package).

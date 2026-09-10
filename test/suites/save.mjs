@@ -68,21 +68,172 @@ const restore = (saved) => {
     return new Function('saved', 'return ' + m[1])(saved);
   };
   return { bank: grab('bank'), maxZoom: grab('maxZoom'), res: grab('res'),
-           filmTier: grab('filmTier'), shutterTier: grab('shutterTier') };
+           film: grab('film'), shutterTier: grab('shutterTier') };
 };
 
 const old = restore({ v: 2, b: 4200, z: 2, r: 1, f: 3, a: [0,0,0,0,0,0,0] });
 check('an old save keeps its bank', old.bank === 4200, String(old.bank));
-check('an old save keeps its upgrades', old.maxZoom === 2 && old.res === 1 && old.filmTier === 3);
+check('an old save keeps its upgrades', old.maxZoom === 2 && old.res === 1);
+// `f` held a tier index (0-4) before v4 and holds a frame count from v4 on.
+// Read the old meaning with the new one and a veteran boots with three frames.
+check('a pre-v4 save is handed a fresh roll, not its old tier index',
+      old.film === 10, String(old.film));
+check('and v3 -- the version that actually shipped -- is handed one too',
+      restore({ v: 3, b: 900, f: 3 }).film === 10);
+const v4 = restore({ v: 4, b: 0, f: 7 });
+check('a v4 save keeps its actual stock', v4.film === 7, String(v4.film));
+// The obvious `saved.f || 10` would quietly refill an empty roll forever, which
+// is the whole failure state gone.
+const dry = restore({ v: 4, b: 0, f: 0 });
+check('and an empty roll stays empty rather than falling back', dry.film === 0, String(dry.film));
 
 const fresh = restore({});
-check('a fresh player starts at zero everywhere',
-      !fresh.bank && !fresh.maxZoom && !fresh.res && !fresh.filmTier && !fresh.shutterTier);
+check('a fresh player starts at zero everywhere but the roll',
+      !fresh.bank && !fresh.maxZoom && !fresh.res && !fresh.shutterTier);
+check('and a fresh player is staked ten frames', fresh.film === 10, String(fresh.film));
 
 // res indexes resBonus/resNames directly, so an out-of-range save used to give a
 // NaN score rather than a visible failure.
 check('a camera tier beyond the ladder is clamped', restore({ r: 9 }).res, 3);
 check('and a legitimate top tier survives', restore({ r: 3 }).res, 3);
+
+// --- the dead end --------------------------------------------------------
+// "No frames, and not enough money for one" is the whole failure condition, and
+// both halves of it are off-by-one bait: a <= would strand a player who can
+// still afford a frame, and dropping the film test would end a run mid-roll.
+// Lifted from the real source rather than restated.
+const FILM = +/^const FILM = (\d+);/m.exec(src)[1];
+const brokeSrc = /^const broke = .+$/m.exec(src)[0];
+check('the dead-end test is still there to test', !!brokeSrc && FILM > 0);
+const isBroke = (film, bank) =>
+  new Function('state', 'const FILM = ' + FILM + ';' + brokeSrc + ';return broke()')(
+    { film, bank });
+check('no frames and no money is the dead end', isBroke(0, 0) === true);
+check('a penny short of a frame is still the dead end',
+      isBroke(0, FILM - 1) === true);
+check('but exactly the price of a frame is not', isBroke(0, FILM) === false);
+check('and frames in hand are never the dead end, however broke',
+      isBroke(1, 0) === false);
+
+// --- what the shop sells -------------------------------------------------
+const framesSrc = /^const frames = .+$/m.exec(src)[0];
+const mk = (n, held) => {
+  const state = { film: held };
+  const o = new Function('state', 'FILM', framesSrc + ';return frames(' + n + ')')(state, FILM);
+  o.buy();
+  return { price: o.price, n: o.n, film: state.film };
+};
+check('a single frame costs the price of a frame', mk(1, 0).price === FILM);
+check('ten frames cost ten times it, with no bulk discount',
+      mk(10, 0).price === FILM * 10, String(mk(10, 0).price));
+check('buying adds exactly what was paid for to the roll', mk(10, 2).film === 12);
+check('and the button says how many it is', mk(10, 0).n === 10);
+// The two quantities themselves, which nothing else can see.
+const qty = /frames\((\d+)\), frames\((\d+)\)/.exec(src);
+check('the shop offers a single frame and a roll of ten',
+      qty && qty[1] === '1' && qty[2] === '10', qty && qty[1] + '/' + qty[2]);
+
+// The shop is where the dead end is discovered -- it is what the end of a run
+// and a plain reload both land on -- so the routing out of it is the thing that
+// actually decides whether losing is reachable at all.
+const shopSrc = /^function showShop\(\)[\s\S]*?^}$/m.exec(src)[0];
+const routed = (film, bank) => {
+  let to = null;
+  const state = { film, bank };
+  new Function('state', 'broke', 'ui', 'CONFIG', 'offers', 'buy', 'ride', 'title',
+               shopSrc + ';showShop()')(
+    state, () => !state.film && state.bank < FILM,
+    { showShop: () => { to = 'shop'; } }, {}, () => [], 0, 0,
+    () => { to = 'title'; });
+  return to;
+};
+check('a player who cannot buy a frame is sent to the dead end',
+      routed(0, 0) === 'title', String(routed(0, 0)));
+check('one who can afford a frame still gets the shop', routed(0, FILM) === 'shop');
+check('and so does one with film already in hand', routed(3, 0) === 'shop');
+
+// The title carries the dead end too, because a lobby you walk out of lands
+// there rather than on the shop. If it stopped asking, Solo would ride a whole
+// lap with a dead shutter.
+const titleSrc = /^function title\(\)[\s\S]*?^}$/m.exec(src)[0];
+const titled = (film, bank) => {
+  let lost;
+  const state = { film, bank };
+  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'saved', 'restart',
+               titleSrc + ';title()')(
+    state, () => !state.film && state.bank < FILM,
+    { showTitle: (a, b, c, d) => { lost = d; } }, 0, 0, { v: 4 }, 0);
+  return !!lost;
+};
+check('the title shows the dead end when there is no way to buy a frame',
+      titled(0, 0) === true);
+check('and does not when there is', titled(0, FILM) === false);
+
+// A frame is money now, so it has to leave the save the instant it is spent.
+// Without this a reload mid-lap hands the frames back and the roll is free.
+const shotSrc = /^function takePhoto\(\)[\s\S]*?^}$/m.exec(src)[0];
+const shot = (film) => {
+  const state = { film, ready: 0, shutterTier: 0, res: 0, fx: 1, fy: 1,
+                  photos: [], scored: [] };
+  const saved = [];
+  new Function('state', 'clock', 'CONFIG', 'net', 'ui', 'photoRig', 'scorePhoto',
+               'fov', 'herd', 'cam', 'persist', shotSrc + ';takePhoto()')(
+    state, 0, { shutterTiers: [0.8] }, { noFilm() {} },
+    { flash() {}, addThumb() {} }, { capture: () => ({ url: '' }) },
+    () => ({}), () => 1, null, null, () => saved.push(state.film));
+  return { left: state.film, saved };
+};
+check('taking a photograph spends a frame', shot(5).left === 4);
+check('and writes it to the save there and then, not at the end of the lap',
+      shot(5).saved[0] === 4, JSON.stringify(shot(5).saved));
+check('a shutter with no film left writes nothing', shot(0).saved.length === 0);
+
+// The other half of the round trip. restore() above pins what each key is read
+// back as; nothing pinned what gets written under it, so `f` could stop carrying
+// the roll and every read-side check would still pass.
+const persistSrc = /^function persist\(\)[\s\S]*?^}$/m.exec(src)[0];
+const persisted = (st) => {
+  let out = null;
+  new Function('state', 'SAVE_KEY', 'SAVE_VERSION', 'localStorage',
+               persistSrc + ';persist()')(
+    st, 'k', VERSION, { setItem: (_, v) => { out = JSON.parse(v); } });
+  return out;
+};
+const kit = { shutterTier: 1, go: 0, code: '', host: 0, name: 'Ann',
+              bank: 900, maxZoom: 2, res: 1, film: 7 };
+const w = persisted(kit);
+check('the save writes the roll under `f`', w.f === 7, JSON.stringify(w));
+check('and the bank under `b`', w.b === 900);
+check('and stamps the version it was written by', w.v === VERSION);
+check('what is written comes back as what it was', restore(w).film === 7);
+// Borrowed gear must never reach the save, or a match would overwrite the roll
+// it was lent.
+check('a multiplayer lap writes nothing at all', persisted({ ...kit, mp: 1 }) === null);
+
+// Where the money actually moves. The film offers go through this same function
+// as the ladders, so what has to hold is that the bank falls by exactly the
+// price and the roll rises by exactly what was bought -- and that neither
+// happens when it cannot be afforded.
+const buySrc = /^function buy\(i\)[\s\S]*?^}$/m.exec(src)[0];
+const framesOf = (n, state) =>
+  new Function('state', 'FILM', framesSrc + ';return frames(' + n + ')')(state, FILM);
+const spend = (bank, film, n) => {
+  const state = { bank, film };
+  new Function('state', 'offers', 'persist', 'showShop', buySrc + ';buy(0)')(
+    state, () => [framesOf(n, state)], () => {}, () => {});
+  return state;
+};
+check('buying a frame costs exactly the price of a frame',
+      spend(500, 0, 1).bank === 400, String(spend(500, 0, 1).bank));
+check('and puts exactly one frame in the roll', spend(500, 0, 1).film === 1);
+check('a roll of ten costs ten times and delivers ten',
+      spend(2000, 2, 10).bank === 1000 && spend(2000, 2, 10).film === 12);
+check('the exact price is affordable', spend(1000, 0, 10).film === 10);
+// A pound short has to buy nothing at all -- not a partial roll, and not a
+// negative bank, which would read as a fortune next time it is compared.
+const short = spend(999, 0, 10);
+check('a pound short buys nothing', short.film === 0 && short.bank === 999,
+      JSON.stringify(short));
 
 // --- the multiplayer lap -------------------------------------------------
 // A multiplayer lap rides borrowed gear. Two things have to hold or it quietly
@@ -92,9 +243,9 @@ const mpBlock = /^const MP_GEAR[\s\S]*?^}$/m.exec(src);
 check('the multiplayer boot block is still there to test', !!mpBlock);
 
 const mpBoot = (saved) => {
-  // filmTier starts at a value the fixed loadout does not use, so "it was
+  // The roll starts at a value the fixed loadout does not use, so "it was
   // overwritten" is visible even when the loadout's own value is zero.
-  const state = { bank: 900, maxZoom: 0, res: 0, filmTier: 4, shutterTier: 0, go: 1, code: '' };
+  const state = { bank: 900, maxZoom: 0, res: 0, film: 99, shutterTier: 0, go: 1, code: '' };
   const writes = [];
   new Function('saved', 'state', 'persist', mpBlock[0])(
     saved, state, () => writes.push({ ...state }));
@@ -103,7 +254,7 @@ const mpBoot = (saved) => {
 
 const solo = mpBoot({ v: VERSION, g: 1 });
 check('a solo lap is left completely alone',
-      !solo.state.mp && !solo.state.res && solo.state.filmTier === 4 &&
+      !solo.state.mp && !solo.state.res && solo.state.film === 99 &&
       solo.writes.length === 0);
 
 // `c` with no `g` is a lobby to go back to, not a lap to start. If this block
@@ -118,12 +269,12 @@ check('a multiplayer lap is flagged as one', mp.state.mp === 1);
 check('and restores which lobby it belongs to, and who hosted it',
       mp.state.code === '4821' && mp.state.host === 1);
 check('and rides the fixed loadout, whatever the save held',
-      mp.state.res > 0 && mp.state.maxZoom > 0 && mp.state.filmTier !== 4);
+      mp.state.res > 0 && mp.state.maxZoom > 0 && mp.state.film === 10);
 check('the markers are cleared, so a stray refresh drops out of multiplayer',
       mp.state.go === 0 && mp.writes.length === 1);
 check('and that write went out BEFORE the gear was swapped, so it saved the real one',
       !mp.writes[0].res && !mp.writes[0].maxZoom &&
-      mp.writes[0].filmTier === 4 && mp.writes[0].bank === 900);
+      mp.writes[0].film === 99 && mp.writes[0].bank === 900);
 
 // The guard is the whole defence: every later persist() -- finishing the lap,
 // buying nothing, anything -- must be a no-op for the rest of the page's life.

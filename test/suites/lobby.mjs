@@ -49,8 +49,8 @@ const click = (id) => {
 
 // --- the title -----------------------------------------------------------
 const hits = [];
-const showTitle = (reset) =>
-  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset);
+const showTitle = (reset, lost) =>
+  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost);
 
 // A player with nothing saved has nothing to reset, so they are not offered it.
 showTitle(0);
@@ -67,6 +67,20 @@ showTitle(() => hits.push('reset'));
 check('a returning player is offered Reset', card(), (h) => h.includes('>Reset<'));
 click('x');
 check('and it wipes rather than riding', hits.pop(), 'reset');
+
+// --- the dead end --------------------------------------------------------
+// No film and no money for any. It is this card rather than one of its own, so
+// what has to hold is that the two things you cannot afford are gone and the
+// one thing that still works is not.
+showTitle(() => hits.push('reset'), 1);
+const lost = card();
+check('losing says why', lost, (h) => /film/.test(h));
+check('and takes away the ride you cannot pay for', lost, (h) => !h.includes('id="go"'));
+check('and multiplayer with it, since the match is over too',
+      lost, (h) => !h.includes('id="mp"'));
+check('leaving Reset as the only way on', lost, (h) => h.includes('>Reset<'));
+click('x');
+check('which still wipes', hits.pop(), 'reset');
 
 // --- the lobby -----------------------------------------------------------
 const seen = [];
@@ -168,8 +182,8 @@ const results = (rivals, waiting, mine) => {
 };
 
 results(null, undefined);
-check('alone, there is no board at all and the bank still shows',
-      card(), (h) => !h.includes('place:') && h.includes('bank 700'));
+check('alone, there is no board at all and the money still shows',
+      card(), (h) => !h.includes('place:') && h.includes('$700'));
 check('and the way on is the shop', card(), (h) => h.includes('id="s"'));
 
 // --- still riding ---

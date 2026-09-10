@@ -15,7 +15,6 @@ export const CONFIG = {
   driftChance: 0.08,      // chance a unicorn wears an off-biome colour
   poseWeights: [0.80, 0.10, 0.08, 0.02],
   trackRadiusFrac: 0.25,
-  filmTiers: [10, 20, 30, 40, 50],
   shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive
   cartSpeed: 8,           // world units per second
   eyeHeight: 2.4,
@@ -52,7 +51,7 @@ function loadSave() {
   try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; }
 }
 
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 // A multiplayer lap rides borrowed gear, so it must never write gear or bank back
 // into the save. One guard covers every call site.
@@ -64,7 +63,7 @@ function persist() {
       t: state.shutterTier,
      
       g: state.go, c: state.code, h: state.host, n: state.name,
-      b: state.bank, z: state.maxZoom, r: state.res, f: state.filmTier,
+      b: state.bank, z: state.maxZoom, r: state.res, f: state.film,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
@@ -78,7 +77,10 @@ const state = {
   // Clamped: a save from a build with more tiers would index off the end of
   // resBonus, which is a NaN score rather than a visible failure.
   res: Math.min(saved.r || 0, 3),
-  filmTier: saved.f || 0,
+  // A stock, not a capacity: it is spent, bought and carried like the bank. `f`
+  // held a tier index before v4, so anything older -- or nothing at all -- is
+  // handed a fresh roll rather than having its tier read as a frame count.
+  film: saved.v > 3 ? saved.f : 10,
   zoom: 0,
   ready: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
@@ -95,7 +97,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { maxZoom: 2, res: 3, filmTier: 0, shutterTier: 1 };
+const MP_GEAR = { maxZoom: 2, res: 3, film: 10, shutterTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -110,7 +112,6 @@ if (mpCode && saved.g) {
   Object.assign(state, MP_GEAR);
   state.mp = 1;                    // from here persist() is a no-op
 }
-state.film = CONFIG.filmTiers[state.filmTier];
 
 // Every upgrade is a ladder: the tier values, the price of each step, the state
 // key holding how far up it you are, and a suffix for the values. p[i] buys
@@ -120,14 +121,22 @@ state.film = CONFIG.filmTiers[state.filmTier];
 const LADDERS = [
   ['zoom', CONFIG.zoomLevels, [400, 900, 1800, 3200], 'maxZoom', '×'],
   ['photo', CONFIG.resNames, [500, 1200, 2600], 'res', ''],
-  ['film', CONFIG.filmTiers, [300, 700, 1400, 2400], 'filmTier', ''],
   ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
 ];
 
-const offers = () => LADDERS.map(([label, v, p, key, sfx]) => ({
+// Dollars a frame. A photograph has to beat this to have been worth taking,
+// which is the whole reason the shutter is worth aiming.
+const FILM = 100;
+
+// Film is not a ladder -- there are no tiers to climb, only frames to stock up
+// on -- but it is shaped like one here so buy() stays a single function: an
+// offer is anything with a price and a way to spend it.
+const frames = (n) => ({ n, price: FILM * n, buy: () => (state.film += n) });
+
+const offers = () => [...LADDERS.map(([label, v, p, key, sfx]) => ({
   label, v, p, sfx, at: state[key], price: p[state[key]],
   buy: () => state[key]++,
-}));
+})), frames(1), frames(10)];
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 let distance = 0;
@@ -225,6 +234,7 @@ function takePhoto() {
   if (state.film <= 0 || clock < state.ready) return;
   state.ready = clock + CONFIG.shutterTiers[state.shutterTier];
   state.film--;
+  persist();
   // Tell the room the moment the roll runs out, so the others can know when
   // every roll in it is empty.
   if (state.mp && !state.film) net.noFilm();
@@ -278,8 +288,13 @@ function showDetail(i) {
   ui.showPhoto(state.scored[i], showResults);
 }
 
+// The dead end: no frames left and not enough money to buy one. Nothing you can
+// do from here changes either number, so the only honest offer is a fresh start.
+const broke = () => !state.film && state.bank < FILM;
+
 function showShop() {
   state.mode = 'shop';
+  if (broke()) return title();
   ui.showShop(state, CONFIG, offers(), buy, ride, title);
 }
 
@@ -368,8 +383,9 @@ function leave() {
 
 function title() {
   state.mode = 'title';
-  // Reset is only worth offering when there is something to wipe.
-  ui.showTitle(solo, lobby, saved.v ? restart : 0);
+  // Reset is only worth offering when there is something to wipe -- and when the
+  // roll and the bank are both empty it is the only thing left to offer at all.
+  ui.showTitle(solo, lobby, saved.v ? restart : 0, broke());
 }
 
 // The menu is reachable from the shop without a reload, and by then the world
@@ -451,7 +467,7 @@ function frame(now) {
     takePhoto();
   }
 
-  ui.updateHud(state, CONFIG, lap, clock);
+  ui.updateHud(state, lap, clock);
 
   if (state.mode === 'ride') {
     if (lap >= 1) endRun();

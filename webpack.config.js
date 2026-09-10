@@ -27,8 +27,6 @@ module.exports = {
       patterns: [
         { from: 'manifest.json', to: 'manifest.json' },
         { from: 'service-worker.js', to: 'service-worker.js' },
-        { from: 'icon-192.png', to: 'icon-192.png' },
-        { from: 'icon-512.png', to: 'icon-512.png' },
       ],
     }),
   ], 

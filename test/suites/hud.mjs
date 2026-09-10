@@ -14,12 +14,8 @@ globalThis.performance = { now: () => 1000 };
 const ui = await import('../.mirror/ui.mjs');
 const { frame } = await import('../.mirror/photo.mjs');
 
-const cfg = {
-  zoomLevels: [1, 2, 4, 8, 16], resNames: ['low', 'med', 'high', 'ultra'],
-  filmTiers: [15, 20, 30, 40, 50],
-};
 const state = {
-  film: 12, filmTier: 0, res: 0, zoom: 0, maxZoom: 0, ready: 0,
+  film: 12, bank: 740, res: 0, zoom: 0, maxZoom: 0, ready: 0,
   photos: [{}, {}, {}], fx: 1, fy: 1,
 };
 // index.js recomputes the frame every tick and hands it to the hud on `state`;
@@ -39,18 +35,18 @@ const check = (name, got, want) => {
     ok ? '' : '-> ' + JSON.stringify(got));
 };
 
-ui.updateHud(state, cfg, 0.4, 0);
+ui.updateHud(state, 0.4, 0);
 
 const film = nodes.film.innerHTML;
 console.log('  film box  : ' + JSON.stringify(film));
 console.log('');
 
 check('film box shows film remaining', film, (s) => /\b12\b/.test(s));
-check('film box shows shots taken', film, (s) => /\b3\b/.test(s));
-check('film box shows roll capacity', film, (s) => /\b15\b/.test(s));
+check('film box shows the bank, since a frame has to be paid for', film, (s) => /\$740\b/.test(s));
+check('and the bank is marked as money', film, (s) => s.includes('$'));
 check('lap bar tracks progress', nodes.bar.style.width, '40.0%');
 check('low-film warning off at 12', nodes.film.className, (c) => !/low/.test(c));
-state.film = 2; ui.updateHud(state, cfg, 0.4, 0);
+state.film = 2; ui.updateHud(state, 0.4, 0);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
 state.film = 12;
 
@@ -68,7 +64,7 @@ check('flash fires on every later shot too', anims.flash, 4);
 // top, which put the outline on the screen edge and left nowhere to watch a
 // unicorn walk in from; buying a camera must not move the frame at all.
 const insets = [];
-for (let r = 0; r < 4; r++) { state.res = r; setFrame(16 / 9); ui.updateHud(state, cfg, 0.4, 0); insets.push(nodes.vf.style.inset); }
+for (let r = 0; r < 4; r++) { state.res = r; setFrame(16 / 9); ui.updateHud(state, 0.4, 0); insets.push(nodes.vf.style.inset); }
 state.res = 0; setFrame(16 / 9);
 console.log('        viewfinder inset per tier: ' + insets.join('  '));
 const nums = insets.map(parseFloat);   // '15.0%' > '7.5%' is false as a string
@@ -80,7 +76,7 @@ check('and always keeps a margin off the screen edge', nums[0] > 0, true);
 // rectangle that the window shape no longer stretches.
 const shapes = [];
 for (const a of [16 / 9, 4 / 3, 21 / 9, 9 / 16]) {
-  setFrame(a); ui.updateHud(state, cfg, 0.4, 0);
+  setFrame(a); ui.updateHud(state, 0.4, 0);
   shapes.push(a.toFixed(2) + ' -> ' + nodes.vf.style.inset);
 }
 setFrame(16 / 9);
@@ -90,10 +86,10 @@ check('viewfinder carries a vertical and a horizontal inset',
 
 // The shutter recharges, so a burst of identical frames is not the best play.
 state.ready = 5;
-ui.updateHud(state, cfg, 0.4, 4);
-check('film box shows the winding indicator', nodes.film.innerHTML, (t) => /⏳/.test(t));
-ui.updateHud(state, cfg, 0.4, 6);
-check('and returns to the shot count once wound', nodes.film.innerHTML, (t) => /3\/15/.test(t));
+ui.updateHud(state, 0.4, 4);
+check('film box shows the winding indicator', nodes.film.innerHTML, (t) => /·/.test(t));
+ui.updateHud(state, 0.4, 6);
+check('and returns to the bank once wound', nodes.film.innerHTML, (t) => /\$740\b/.test(t));
 state.ready = 0;
 
 // Film roll
@@ -134,10 +130,10 @@ check('back returns to the results list', backed, true);
 
 // toast surfaces through the hud line while it is live
 ui.toast('no red attractor');
-ui.updateHud(state, cfg, 0.4, 0);
+ui.updateHud(state, 0.4, 0);
 check('toast appears in the hud', nodes.hud.textContent, (s) => /no red attractor/.test(s));
 globalThis.performance = { now: () => 999999 };
-ui.updateHud(state, cfg, 0.4, 0);
+ui.updateHud(state, 0.4, 0);
 check('toast expires', nodes.hud.textContent, (s) => !/no red attractor/.test(s));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');

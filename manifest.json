@@ -1,24 +1,10 @@
 {
-  "name": "Chromazoa - js13k 2026",
-  "short_name": "Chromazoa",
-  "description": "Breed and grow robots from RGB genetic code",
+  "name": "Unicorn Paparazzi - js13k 2026",
+  "short_name": "Unicorn Paparazzi",
+  "description": "Photograph wild unicorns from a cart on rails",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#111111",
-  "theme_color": "#111111",
-  "orientation": "any",
-  "icons": [
-    {
-      "src": "./icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ]
+  "background_color": "#9ec7f2",
+  "theme_color": "#9ec7f2",
+  "orientation": "any"
 }

@@ -26,7 +26,7 @@ export function setChrome(visible) {
   el.film.style.display = d;
 }
 
-export function updateHud(state, cfg, lap, clock) {
+export function updateHud(state, lap, clock) {
   // The frame is the photograph now, so it outlines exactly what will be taken:
   // a fixed 16:9 rectangle, which needs its own inset on each axis.
   el.vf.style.inset = ((1 - state.fy) * 50).toFixed(1) + '% ' +
@@ -35,8 +35,7 @@ export function updateHud(state, cfg, lap, clock) {
   el.hud.textContent = 'lap ' + Math.floor(Math.min(1, lap) * 100) + '%' +
     (performance.now() < toastUntil ? '  ·  ' + el.hud.dataset.msg : '');
   el.film.innerHTML = 'Film <b>' + state.film + '</b><br><small>' +
-    (clock < state.ready ? '⏳' : state.photos.length + '/' + cfg.filmTiers[state.filmTier]) +
-    '</small>';
+    (clock < state.ready ? '·' : '$' + state.bank) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
 
@@ -75,12 +74,17 @@ function onCard(fn) {
   };
 }
 
-export function showTitle(onSolo, onMulti, onReset) {
+export function showTitle(onSolo, onMulti, onReset, lost) {
   // The class centres the title and the buttons in a full-height column.
   // onReset is falsy when there is nothing saved, and then there is nothing to
   // offer to wipe.
-  panel('<h1>Unicorn Paparazzi</h1><button id="go">Solo</button>' +
-        '<p><button id="mp">Multiplayer</button></p>' +
+  //
+  // `lost` is the dead end -- no film and no money for any -- and it is this
+  // card rather than one of its own, because everything it needs to say is
+  // already here and only the two things you can no longer do come off.
+  panel('<h1>Unicorn Paparazzi</h1>' +
+        (lost ? '<h2>Out of film</h2>'
+              : '<button id="go">Solo</button><p><button id="mp">Multiplayer</button></p>') +
         (onReset ? '<p><button id="x">Reset</button></p>' : ''), 't');
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
 }
@@ -196,7 +200,7 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 
   // Solo: exactly what it always was.
   if (waiting === undefined) {
-    panel('<h1>My Photos</h1><h2>bank ' + state.bank + '</h2>' + roll +
+    panel('<h1>My Photos</h1><h2>$' + state.bank + '</h2>' + roll +
           '<p class="h"><button id="s">Shop</button></p>');
   } else {
     // Your own entry has to carry a photograph and a breakdown like everyone
@@ -233,19 +237,23 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
 export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
-  let rows = '';
+  let rows = '', film = '';
   // Ladders are different lengths, so short ones have to be padded out to the
   // widest -- otherwise the row ends early and its rule stops short of the edge.
-  const wide = Math.max(...offers.map((o) => o.v.length));
+  const wide = Math.max(...offers.map((o) => (o.v || []).length));
+  const price = (n) => '<small class="w">$' + n + '</small><br>';
   offers.forEach((o, i) => {
-    const price = (n) => '<small class="w">' + n + '</small><br>';
+    const btn = (label) => '<button data-i="' + i + '"' +
+      (state.bank >= o.price ? '' : ' disabled') + '>' + label + '</button>';
+    // A filmless offer is a quantity of frames rather than a rung. Film is not a
+    // ladder and does not belong in the ladder table, so it goes to the footer.
+    if (!o.v) return void (film += ' $' + o.price + ' ' + btn('+' + o.n));
     // Everything you own, the rung you can buy, and what is beyond.
     let cells = '';
     o.v.forEach((v, t) => {
       const label = v + o.sfx;
       cells += '<td class="n">' + (t <= o.at ? '<b class="p">' + label + '</b>'
-        : t === o.at + 1 ? price(o.p[t - 1]) + '<button data-i="' + i + '"' +
-            (state.bank >= o.price ? '' : ' disabled') + '>' + label + '</button>'
+        : t === o.at + 1 ? price(o.p[t - 1]) + btn(label)
         : price(o.p[t - 1]) + '<span class="w">' + label + '</span>') + '</td>';
     });
     rows += '<tr class="r g"><td class="d">' + o.label + '</td>' + cells +
@@ -253,9 +261,16 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
   });
   panel(
     '<h1>SHOP</h1>' +
-    '<h2>bank ' + state.bank + '</h2>' +
+    '<h2>$' + state.bank + '</h2>' +
     '<table>' + rows + '</table>' +
-    '<p class="h"><button id="e">Ride again</button> ' +
+    // What you are holding, then what a frame and a roll of ten cost. Worded
+    // exactly as the HUD counter is, which reads consistently and packs for
+    // less than a second spelling of the same thing.
+    '<p class="h">Film <b>' + state.film + '</b>' + film + '</p>' +
+    // A lap with an empty roll earns nothing and cannot be photographed, so it
+    // is only offered once there is film to shoot it on.
+    '<p class="h"><button id="e"' + '' +
+    '>Ride again</button> ' +
     // Everything else you might want -- multiplayer, wiping the save -- lives on
     // the menu now, so the shop only has to be able to get you back there.
     '<button id="mp">Main Menu</button></p>'
