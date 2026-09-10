@@ -81,10 +81,14 @@ export function connect(code, onGo, onChange) {
       send({ t: 'h', i: ME });
       return onChange();
     }
-    // A rider who leaves takes their roster row and their result with them.
+    // A rider who leaves comes off the roster and off the film tally, so nobody
+    // waits on them. Their RESULT stays: they already finished, and their score
+    // and photograph stand whether or not they are still connected. Dropping it
+    // meant the first player to hit Rematch wiped their own card off everyone
+    // else's results screen on the way out.
     if (e.data[0] === '-') {
       const i = key(e.data.slice(1));
-      if (here.delete(i) | riders.delete(i) | spent.delete(i)) onChange();
+      if (here.delete(i) | spent.delete(i)) onChange();
       return;
     }
     // Anything else is a stranger's text. Parse defensively and check the shape

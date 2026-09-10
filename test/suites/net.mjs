@@ -145,18 +145,24 @@ check('the leaver is on both the roster and the board',
 n = changes.length;
 deliver('-bob');
 check('leaving clears their roster row', net.lobby(), (l) => !l.includes('bob'));
-check('and their result', net.others(), (o) => !o.some((r) => r.i === 'bob'));
+// But NOT their result. They already finished; the score and the photograph
+// stand whether or not they are still connected. Dropping it meant the first
+// player to hit Rematch wiped their own card off everyone else's screen.
+check('while their finished result stands',
+      net.others(), (o) => o.some((r) => r.i === 'bob' && r.n === 9999));
 check('and redraws whatever screen is up', changes.length > n);
 n = changes.length;
 deliver('-nobody-we-ever-heard-of');
 check('a stranger leaving changes nothing', changes.length, n);
 
-// The ids the truncation produces have to agree across all three sources, or a
-// leaver could never be matched to the row they left behind.
-deliver('{"t":"d","i":"aaaaaaaaaaaaaaaaaaaaaaaa","n":5}');
+// The ids the truncation produces have to agree across every source, or a
+// leaver could never be matched to the rows they left behind.
+deliver('{"t":"h","i":"aaaaaaaaaaaaaaaaaaaaaaaa"}');
+check('a long id is truncated on the roster too',
+      net.lobby().includes('aaaaaaaa'), true);
 deliver('-aaaaaaaaaaaaaaaaaaaaaaaa');
-check('a long id truncates the same way coming and going',
-      net.others().some((o) => o.i === 'aaaaaaaa'), false);
+check('and truncates the same way coming and going',
+      net.lobby().includes('aaaaaaaa'), false);
 
 // No forget() to test: every lap transition is a page reload, so the board cannot
 // outlive the lap that filled it.

@@ -221,6 +221,28 @@ check('running dry is announced to the room', /net\.noFilm\(\)/.test(src));
 check('at the moment the last frame is spent',
       /if \(state\.mp && !state\.film\) net\.noFilm\(\);/.test(src));
 
+// --- who the results screen is still waiting for -------------------------
+// A finished rider's result now outlives their connection, so the roster can be
+// SMALLER than the set of results on the board. Without the clamp this goes
+// negative, and a negative is truthy: the screen would sit on "waiting for -1"
+// for good, with the winner never crowned.
+const waitLine = /^ {2}const waiting = .*$/m.exec(src);
+check('the waiting count is still there to test', !!waitLine);
+
+const waitingFor = (roster, results) => {
+  let out;
+  new Function('net', 'rivals', 'Math', waitLine[0] + '; return waiting;');
+  out = new Function('net', 'rivals', 'Math', waitLine[0] + '\nreturn waiting;')(
+    { lobby: () => new Array(roster) }, new Array(results), Math);
+  return out;
+};
+
+check('two riders, one reported: still waiting for one', waitingFor(2, 0) === 1);
+check('two riders, both reported: waiting for nobody', waitingFor(2, 1) === 0);
+check('a rider who left after reporting cannot drive it negative',
+      waitingFor(1, 1) === 0, waitingFor(1, 1));
+check('nor can several of them', waitingFor(1, 3) === 0, waitingFor(1, 3));
+
 // --- which screen a load lands on --------------------------------------------
 // Three routes, and the one-shot `g` marker is what separates "Ride again"
 // (straight onto the cart) from an actual refresh (back to the shop).
