@@ -48,9 +48,9 @@ const BOXES = [
   [HEAD,    0,  0.03, -0.20, 0.13,  0.15,  0.28,  1.00, 0],
   [HEAD,    0, -0.02, -0.44, 0.10,  0.10,  0.10,  1.00, 3],
   [HORN,    0,  0.18,  0.00, 0.05,  0.20,  0.05,  0.10, 2],
-  [HORN, -0.08,  0.15,  0.05, 0.04,  0.16,  0.04,  0.10, 4],
-  [HORN,  0.08,  0.15,  0.05, 0.04,  0.16,  0.04,  0.10, 5],
-  [HORN,     0,  0.14,  0.11, 0.04,  0.14,  0.04,  0.10, 6],
+  [HORN, -0.13,  0.18,  0.03, 0.05,  0.20,  0.05,  0.10, 4],
+  [HORN,  0.13,  0.18,  0.03, 0.05,  0.20,  0.05,  0.10, 5],
+  [HORN,     0,  0.18,  0.15, 0.05,  0.20,  0.05,  0.10, 6],
   [MANE,    0,  0.30,  0.06, 0.09,  0.34,  0.08,  0.70, 1],
   [TAIL,    0, -0.22,  0.06, 0.07,  0.26,  0.07,  0.60, 1],
 ];
@@ -207,10 +207,11 @@ export function spawn(world, cfg, seed) {
       list.x.push(x + 0.5);
       list.z.push(z + 0.5);
       list.color.push(color);
-      // Bicorn 1%, tricorn 0.5%, quadricorn 0.25% -- about a dozen, three and
-      // one per map. Rare enough to be worth hunting for.
+      // Bicorn 6%, tricorn 3%, quadricorn 2% -- roughly 40, 20 and 13 per map,
+      // so a ride turns one up and a quadricorn is a few rides' hunting. One draw
+      // whatever the outcome, which is what keeps the herd deterministic.
       const r = rnd();
-      list.horns.push(r < 0.0025 ? 3 : r < 0.0075 ? 2 : r < 0.0175 ? 1 : 0);
+      list.horns.push(r < 0.02 ? 3 : r < 0.05 ? 2 : r < 0.11 ? 1 : 0);
     }
   }
   return makeHerd(list, cfg, seed);

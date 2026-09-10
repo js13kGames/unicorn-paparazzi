@@ -11,6 +11,12 @@ globalThis.Image = class { set src(v) { this._src = v; } get src() { return this
 globalThis.document = { getElementById: node, createElement: () => node('tmp') };
 globalThis.performance = { now: () => 1000 };
 
+// The hud renders the zoom as `1 << state.zoom` rather than looking the ladder
+// up, so the ladder has to stay the powers of two that makes that true.
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+const CONFIG_SRC = fs.readFileSync(fileURLToPath(new URL('../../src/index.js', import.meta.url)), 'utf8');
+
 const ui = await import('../.mirror/ui.mjs');
 const { frame } = await import('../.mirror/photo.mjs');
 
@@ -42,9 +48,14 @@ console.log('  film box  : ' + JSON.stringify(film));
 console.log('');
 
 check('film box shows film remaining', film, (s) => /\b12\b/.test(s));
-check('film box shows the bank, since a frame has to be paid for', film, (s) => /\$740\b/.test(s));
-check('and the bank is marked as money', film, (s) => s.includes('$'));
-check('lap bar tracks progress', nodes.bar.style.width, '40.0%');
+check('the zoom ladder is still powers of two, which the hud assumes',
+      /zoomLevels: \[1, 2, 4, 8, 16\]/.test(CONFIG_SRC), true);
+check('film box shows the zoom the lens is on', film, (s) => /×1\b/.test(s));
+state.zoom = 3; ui.updateHud(state, 0.4, 0);
+check('and follows the lens up the ladder', nodes.film.innerHTML, (s) => /×8\b/.test(s));
+state.zoom = 0; ui.updateHud(state, 0.4, 0);
+check('money stays off the ride hud', nodes.film.innerHTML, (s) => !s.includes('$'));
+check('ride bar tracks progress', nodes.bar.style.width, '40.0%');
 check('low-film warning off at 12', nodes.film.className, (c) => !/low/.test(c));
 state.film = 2; ui.updateHud(state, 0.4, 0);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
@@ -89,7 +100,7 @@ state.ready = 5;
 ui.updateHud(state, 0.4, 4);
 check('film box shows the winding indicator', nodes.film.innerHTML, (t) => /·/.test(t));
 ui.updateHud(state, 0.4, 6);
-check('and returns to the bank once wound', nodes.film.innerHTML, (t) => /\$740\b/.test(t));
+check('and returns to the zoom once wound', nodes.film.innerHTML, (t) => /×1\b/.test(t));
 state.ready = 0;
 
 // Film roll
@@ -128,13 +139,18 @@ check('detail view offers a way back', nodes.card.innerHTML, (s) => s.includes('
 nodes.card.onclick({ target: { closest: (q) => (q === 'button' ? { id: 'k' } : null) }, stopPropagation() {} });
 check('back returns to the results list', backed, true);
 
-// toast surfaces through the hud line while it is live
-ui.toast('no red attractor');
-ui.updateHud(state, 0.4, 0);
-check('toast appears in the hud', nodes.hud.textContent, (s) => /no red attractor/.test(s));
-globalThis.performance = { now: () => 999999 };
-ui.updateHud(state, 0.4, 0);
-check('toast expires', nodes.hud.textContent, (s) => !/no red attractor/.test(s));
+// The lost-pointer hint is a state, not a timed toast: it is on screen for
+// exactly as long as riding without the lock is true, which is the whole moment
+// the player needs it.
+document.pointerLockElement = null;
+ui.updateHud({ ...state, mode: 'ride' }, 0.4, 0);
+check('riding without the lock says so', nodes.hud.textContent, (s) => /click to look/.test(s));
+document.pointerLockElement = nodes.c || {};
+ui.updateHud({ ...state, mode: 'ride' }, 0.4, 0);
+check('and shuts up once the pointer is held', nodes.hud.textContent, (s) => !/click to look/.test(s));
+document.pointerLockElement = null;
+ui.updateHud({ ...state, mode: 'title' }, 0.4, 0);
+check('a card on screen is not a lost pointer', nodes.hud.textContent, (s) => !/click to look/.test(s));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

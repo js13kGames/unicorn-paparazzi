@@ -154,7 +154,7 @@ check('and so does one with film already in hand', routed(3, 0) === 'shop');
 
 // The title carries the dead end too, because a lobby you walk out of lands
 // there rather than on the shop. If it stopped asking, Solo would ride a whole
-// lap with a dead shutter.
+// ride with a dead shutter.
 const titleSrc = /^function title\(\)[\s\S]*?^}$/m.exec(src)[0];
 const titled = (film, bank) => {
   let lost;
@@ -170,7 +170,7 @@ check('the title shows the dead end when there is no way to buy a frame',
 check('and does not when there is', titled(0, FILM) === false);
 
 // A frame is money now, so it has to leave the save the instant it is spent.
-// Without this a reload mid-lap hands the frames back and the roll is free.
+// Without this a reload mid-ride hands the frames back and the roll is free.
 const shotSrc = /^function takePhoto\(\)[\s\S]*?^}$/m.exec(src)[0];
 const shot = (film) => {
   const state = { film, ready: 0, shutterTier: 0, res: 0, fx: 1, fy: 1,
@@ -184,7 +184,7 @@ const shot = (film) => {
   return { left: state.film, saved };
 };
 check('taking a photograph spends a frame', shot(5).left === 4);
-check('and writes it to the save there and then, not at the end of the lap',
+check('and writes it to the save there and then, not at the end of the ride',
       shot(5).saved[0] === 4, JSON.stringify(shot(5).saved));
 check('a shutter with no film left writes nothing', shot(0).saved.length === 0);
 
@@ -208,7 +208,7 @@ check('and stamps the version it was written by', w.v === VERSION);
 check('what is written comes back as what it was', restore(w).film === 7);
 // Borrowed gear must never reach the save, or a match would overwrite the roll
 // it was lent.
-check('a multiplayer lap writes nothing at all', persisted({ ...kit, mp: 1 }) === null);
+check('a multiplayer ride writes nothing at all', persisted({ ...kit, mp: 1 }) === null);
 
 // Where the money actually moves. The film offers go through this same function
 // as the ladders, so what has to hold is that the bank falls by exactly the
@@ -235,8 +235,8 @@ const short = spend(999, 0, 10);
 check('a pound short buys nothing', short.film === 0 && short.bank === 999,
       JSON.stringify(short));
 
-// --- the multiplayer lap -------------------------------------------------
-// A multiplayer lap rides borrowed gear. Two things have to hold or it quietly
+// --- the multiplayer ride -------------------------------------------------
+// A multiplayer ride rides borrowed gear. Two things have to hold or it quietly
 // eats the player's save: the override must land, and nothing after it may write
 // gear back. Both are read out of the real source rather than reimplemented.
 const mpBlock = /^const MP_GEAR[\s\S]*?^}$/m.exec(src);
@@ -253,19 +253,19 @@ const mpBoot = (saved) => {
 };
 
 const solo = mpBoot({ v: VERSION, g: 1 });
-check('a solo lap is left completely alone',
+check('a solo ride is left completely alone',
       !solo.state.mp && !solo.state.res && solo.state.film === 99 &&
       solo.writes.length === 0);
 
-// `c` with no `g` is a lobby to go back to, not a lap to start. If this block
+// `c` with no `g` is a lobby to go back to, not a ride to start. If this block
 // fired on it, the lobby would inherit state.mp -- and persist() being a no-op
 // would mean walking out of the lobby could never clear the code.
 const lobbyOnly = mpBoot({ v: VERSION, c: '4821', h: 1 });
-check('a lobby code with no lap marker starts no lap',
+check('a lobby code with no ride marker starts no ride',
       !lobbyOnly.state.mp && !lobbyOnly.state.res && lobbyOnly.writes.length === 0);
 
 const mp = mpBoot({ v: VERSION, g: 1, c: '4821', h: 1 });
-check('a multiplayer lap is flagged as one', mp.state.mp === 1);
+check('a multiplayer ride is flagged as one', mp.state.mp === 1);
 check('and restores which lobby it belongs to, and who hosted it',
       mp.state.code === '4821' && mp.state.host === 1);
 check('and rides the fixed loadout, whatever the save held',
@@ -276,20 +276,20 @@ check('and that write went out BEFORE the gear was swapped, so it saved the real
       !mp.writes[0].res && !mp.writes[0].maxZoom &&
       mp.writes[0].film === 99 && mp.writes[0].bank === 900);
 
-// The guard is the whole defence: every later persist() -- finishing the lap,
+// The guard is the whole defence: every later persist() -- finishing the ride,
 // buying nothing, anything -- must be a no-op for the rest of the page's life.
 const guard = /^function persist\(\) \{\n  if \(state\.mp\) return;$/m.test(src);
-check('persist() refuses to run at all once the lap is a multiplayer one', guard);
+check('persist() refuses to run at all once the ride is a multiplayer one', guard);
 
 // The code is what carries the lobby across the reload; without it on the wire
 // format, everyone would reconnect to nothing.
 check('the save carries the lobby code', /c: state\.code/.test(src));
 // Without the host flag, everyone comes back from a rematch as a guest and
-// nobody can start the next lap.
+// nobody can start the next ride.
 check('and who the host was', /h: state\.host/.test(src));
 
 // --- actually getting the page to reload ---------------------------------
-// Every lap transition is a reload, because the world has to be rebuilt. The
+// Every ride transition is a reload, because the world has to be rebuilt. The
 // trap: a URL that differs from the current one ONLY in its fragment is a
 // same-document navigation, so assigning location.href looks like a reload and
 // silently is not. This stub models that rule, so the bug it caused -- "Start
@@ -328,40 +328,40 @@ const navigate = (name, from, call) => {
   return location;
 };
 
-// The one the player actually hit: the lobby lives at the bare path, so the lap
+// The one the player actually hit: the lobby lives at the bare path, so the ride
 // used to be started by a fragment change that never reloaded anything.
 const started = navigate('start', 'index.html', 'start(4242)');
-check('starting a multiplayer lap really reloads', started.reloads > 0);
+check('starting a multiplayer ride really reloads', started.reloads > 0);
 check('and carries the seed across in the hash', started.hash === '#4242', started.hash);
 
-// Coming back from a lap, the URL DOES carry a seed, so dropping it is once again
+// Coming back from a ride, the URL DOES carry a seed, so dropping it is once again
 // a fragment-only change -- and once again not a reload.
 const back = navigate('home', 'index.html#4242', 'home()');
-check('leaving a lap really reloads', back.reloads > 0);
-check('and drops the seed, so it does not stick to the next lap',
+check('leaving a ride really reloads', back.reloads > 0);
+check('and drops the seed, so it does not stick to the next ride',
       !+back.hash.slice(1), back.hash);
 
 // The plain case has always worked, because the target URL was byte-identical.
 const plain = navigate('home', 'index.html', 'home()');
 check('and it still reloads when there was no seed to drop', plain.reloads > 0);
 
-// --- what ends a lap -----------------------------------------------------
+// --- what ends a ride -----------------------------------------------------
 // Solo, an empty roll ends the ride. In a match it must not: the first rider to
 // burn their film would be thrown off the track while the others kept shooting,
 // and they would not finish together.
-const endBlock = /^ {4}if \(lap >= 1\) endRun[\s\S]*?net\.allSpent\(\)\)\) endRun\(\);$/m.exec(src);
-check('the lap-end conditions are still there to test', !!endBlock);
+const endBlock = /^ {4}if \(ride >= 1\) endRun[\s\S]*?net\.allSpent\(\)\)\) endRun\(\);$/m.exec(src);
+check('the ride-end conditions are still there to test', !!endBlock);
 
-const ends = (lap, state, allSpent = false) => {
+const ends = (ride, state, allSpent = false) => {
   let over = false;
-  new Function('lap', 'state', 'net', 'endRun', endBlock[0])(
-    lap, state, { allSpent: () => allSpent }, () => { over = true; });
+  new Function('ride', 'state', 'net', 'endRun', endBlock[0])(
+    ride, state, { allSpent: () => allSpent }, () => { over = true; });
   return over;
 };
 
-check('solo, finishing the track ends the lap', ends(1, { film: 9 }));
+check('solo, finishing the track ends the ride', ends(1, { film: 9 }));
 check('and so does running out of film', ends(0.3, { film: 0 }));
-check('in a match, your own roll running out does NOT end the lap',
+check('in a match, your own roll running out does NOT end the ride',
       !ends(0.3, { film: 0, mp: 1 }));
 // ...but once every roll in the room is empty there is nothing left to ride for.
 check('a match ends early when the last roll in the room runs dry',
@@ -419,14 +419,14 @@ const route = (saved) => {
 check('a fresh player lands on the title', route({}).hit.join() === 'title');
 
 // `c` without `g` is what Rematch and a mid-match refresh come back to: it means
-// "you belong to this lobby", not "a lap is starting".
+// "you belong to this lobby", not "a ride is starting".
 check('a lobby code alone lands back in that lobby',
       route({ v: VERSION, c: '4821', h: 1 }).hit.join() === 'lobby:4821:1');
 check('and it carries whether you were the host',
       route({ v: VERSION, c: '4821' }).hit.join() === 'lobby:4821:0');
 check('a lobby code outranks the shop, so a match is not silently left',
       !route({ v: VERSION, b: 900, c: '4821' }).hit.includes('shop'));
-check('but the code alone never starts a lap',
+check('but the code alone never starts a ride',
       !route({ v: VERSION, c: '4821' }).hit.includes('ride'));
 check('a plain refresh lands on the shop', route({ v: VERSION }).hit.join() === 'shop');
 const again = route({ v: VERSION, g: 1 });

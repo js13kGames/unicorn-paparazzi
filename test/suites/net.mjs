@@ -71,7 +71,7 @@ check('malformed and wrong-typed payloads are all dropped',
 
 // --- what it accepts -----------------------------------------------------
 deliver('{"t":"g","s":4242}');
-check('the host starting the lap is passed through', gone, (g) => g.length === 1 && g[0] === 4242);
+check('the host starting the ride is passed through', gone, (g) => g.length === 1 && g[0] === 4242);
 deliver('{"t":"g","s":99.7}');
 check('and a fractional seed is coerced to an int', gone[1], 99);
 
@@ -97,7 +97,7 @@ const evil = net.others().find((o) => o.name === 'rider eve2').b;
 check('markup in a breakdown label is stripped to text',
       evil[0], (r) => !r[0].includes('<') && !r[0].includes('>') && !r[1].includes('<'));
 check('and what survives is only whitelisted characters',
-      evil.every((r) => r.every((c) => /^[\w ×+.-]*$/.test(c))));
+      evil.every((r) => r.every((c) => /^[\w ×%+.-]*$/.test(c))));
 
 deliver('{"t":"d","i":"quot","n":1,"b":[["a\\" onload=\\"x","1"]]}');
 check('a quote cannot break out of the attribute it lands next to',
@@ -119,10 +119,16 @@ for (const junk of ['"nope"', '5', 'null', '[1,2,3]', '[[]]', '[null]', '[{"a":1
         Array.isArray(b) && b.every((r) => r.length === 2 && r.every((c) => typeof c === 'string')));
 }
 
-deliver('{"t":"d","i":"good","n":1,"b":[["azure rearing","380"],[" size","+300"]]}');
+// The real breakdown score.js writes, character for character. Percentages
+// arrived here late: the size row and the framing row are both written with one,
+// and a whitelist that dropped it turned "8.5% × 1000dpi" into "8.5 × 1000dpi"
+// and "×111%" into "×111" on every rival's card.
+deliver('{"t":"d","i":"good","n":1,"b":[["azure rearing","380"],' +
+        '[" 8.5% × 1000dpi","+300"],[" bicorn","×2"],["framing","×111%"]]}');
 check('an honest breakdown survives intact',
       JSON.stringify(net.others().find((o) => o.name === 'rider good').b),
-      '[["azure rearing","380"],[" size","+300"]]');
+      '[["azure rearing","380"],[" 8.5% × 1000dpi","+300"],' +
+      '[" bicorn","×2"],["framing","×111%"]]');
 
 deliver('{"t":"d","i":"cheat","n":-50}');
 check('a result with no breakdown at all still lands',
@@ -133,7 +139,7 @@ deliver('{"t":"d","i":"aaaaaaaaaaaaaaaaaaaaaaaa","n":5}');
 check('an absurdly long id is truncated into a name',
       net.others().some((o) => o.name === 'rider aaaa'));
 
-// One entry per rider per lap, however many times they shout.
+// One entry per rider per ride, however many times they shout.
 const before = net.others().length;
 deliver('{"t":"d","i":"bob","n":9999}');
 check('a rider repeating themselves does not appear twice', net.others().length, before);
@@ -166,8 +172,8 @@ deliver('-aaaaaaaaaaaaaaaaaaaaaaaa');
 check('and truncates the same way coming and going',
       net.lobby().includes('rider aaaa'), false);
 
-// No forget() to test: every lap transition is a page reload, so the board cannot
-// outlive the lap that filled it.
+// No forget() to test: every ride transition is a page reload, so the board cannot
+// outlive the ride that filled it.
 
 // --- running out of film -------------------------------------------------
 // Once nobody can take another photograph there is nothing left to ride for.
@@ -214,7 +220,7 @@ toFilm('-shooter');
 check('only the last rider with film leaving closes it', film.allSpent(), true);
 
 // The dangerous empty case: a solo player has no lobby at all, and 0 >= 0 must
-// not read as "everyone is out of film" or their lap would end on the first shot.
+// not read as "everyone is out of film" or their ride would end on the first shot.
 const solo = await import('../.mirror/net.mjs?solo');
 check('a player with no lobby is never spent', solo.allSpent(), false);
 

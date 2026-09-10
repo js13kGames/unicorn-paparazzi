@@ -254,3 +254,7 @@ button, input {
 .t button { background: none; font: 2em serif; color: #fff }
 button:hover:not(:disabled) { background: #2f5478 }
 button:disabled { opacity: .35; cursor: default }
+
+
+Order unicorns in results largest to smallest.
+

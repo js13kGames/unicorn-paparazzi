@@ -26,25 +26,30 @@ export function setChrome(visible) {
   el.film.style.display = d;
 }
 
-export function updateHud(state, lap, clock) {
+export function updateHud(state, ride, clock) {
   // The frame is the photograph now, so it outlines exactly what will be taken:
   // a fixed 16:9 rectangle, which needs its own inset on each axis.
   el.vf.style.inset = ((1 - state.fy) * 50).toFixed(1) + '% ' +
                       ((1 - state.fx) * 50).toFixed(1) + '%';
-  el.bar.style.width = (Math.min(1, lap) * 100).toFixed(1) + '%';
-  el.hud.textContent = 'lap ' + Math.floor(Math.min(1, lap) * 100) + '%' +
-    (performance.now() < toastUntil ? '  ·  ' + el.hud.dataset.msg : '');
+  el.bar.style.width = (Math.min(1, ride) * 100).toFixed(1) + '%';
+  // Losing the pointer is otherwise invisible -- you find out by taking a photo
+  // you did not mean to take. This used to be a 2.6s toast fired from the
+  // pointerlockchange event, which meant the one moment it mattered -- sitting
+  // unlocked, wondering why the camera will not turn -- was the moment it had
+  // already expired. It is a state now, so it is on screen for exactly as long
+  // as it is true.
+  el.hud.textContent = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
+    (state.mode === 'ride' && !document.pointerLockElement ? '  ·  click to look' : '');
+  // Under the frame count: the lens, or a winding dot while the shutter is
+  // still recovering. The bank used to read here, but money is a between-rides
+  // number -- what you actually want mid-ride is which zoom you are on, and the
+  // lens has no other readout. CONFIG.zoomLevels is [1, 2, 4, 8, 16], so the
+  // level is just the index shifted; the shop suite holds that ladder to it.
   el.film.innerHTML = 'Film <b>' + state.film + '</b><br><small>' +
-    (clock < state.ready ? '·' : '$' + state.bank) + '</small>';
+    (clock < state.ready ? '·' : '×' + (1 << state.zoom)) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
 
-
-let toastUntil = 0;
-export function toast(msg) {
-  el.hud.dataset.msg = msg;
-  toastUntil = performance.now() + 2600;
-}
 
 export function flash() {
   // Web Animations, not a CSS class: reading offsetWidth restarts a transition
@@ -84,7 +89,8 @@ export function showTitle(onSolo, onMulti, onReset, lost) {
   // already here and only the two things you can no longer do come off.
   panel('<h1>Unicorn Paparazzi</h1>' +
         (lost ? '<h2>Out of film</h2>'
-              : '<button id="go">Solo</button><p><button id="mp">Multiplayer</button></p>') +
+              : '<p><button id="go">Solo</button></p>' +
+                '<p><button id="mp">Multiplayer</button></p>') +
         (onReset ? '<p><button id="x">Reset</button></p>' : ''), 't');
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
 }
@@ -104,7 +110,7 @@ export function showLobby(code, host, riders, name, onStart, onJoin, onBack, onN
     // Start button. Hopping to another code from here would mean leaving anyway.
     '<p class="h">' + (host
       ? '<button id="a"' + (riders.length > 1 ? '' : ' disabled') +
-        '>Start Multiplayer Game</button>'
+        '>Start Game</button>'
       : 'waiting for host') + '</p>' +
     '<p class="h">name <input id="n" value="' + name + '"></p>' +
     '<p class="h">' + (host
@@ -152,8 +158,15 @@ export function photoCard(url, rows, heading, total) {
     // A leading space means "detail of the row above": dim it and indent it,
     // rather than ruling it off as a subject of its own.
     const sub = label[0] === ' ';
+    // A gain reads green and a loss red. A multiplier is judged against parity
+    // -- x2 is a gain, and framing rides below x100% as often as above it. Only
+    // a signed or multiplied value is coloured, so plain totals stay neutral.
+    const k = value[0];
+    const c = k === '-' ? ' m'
+      : k !== '+' && k !== '×' ? ''
+      : parseFloat(value.slice(1)) < (value.slice(-1) === '%' ? 100 : 1) ? ' m' : ' p';
     body += '<tr class="' + (sub ? 'd' : 'r') + '"><td>' +
-      (sub ? '&nbsp;' : '') + label + '</td><td class="n">' + value + '</td></tr>';
+      (sub ? '&nbsp;' : '') + label + '</td><td class="n' + c + '">' + value + '</td></tr>';
   }
   if (!body) body = '<tr><td colspan="2" class="d">' + NONE + '</td></tr>';
   return '<h2>' + heading + '</h2>' +
@@ -166,7 +179,7 @@ export function photoCard(url, rows, heading, total) {
 // The breakdown for one of your own shots, reached by clicking a row in the roll.
 export function showPhoto(scored, onBack) {
   panel(
-    '<h1>My Photos</h1>' +
+    '<h1>Photos</h1>' +
     photoCard(scored.url, scored.b, scored.total + ' points', scored.total) +
     '<p class="h"><button id="k">Back</button></p>'
   );
@@ -180,7 +193,7 @@ export function showPhoto(scored, onBack) {
 //   match, everyone in    every rider's best photograph, ranked
 //
 // The two match views are named after the buttons that swap them, so "Results"
-// and "My Photos" each earn their keep twice. `mine` is that swap: a sub-view,
+// and "Photos" each earn their keep twice. `mine` is that swap: a sub-view,
 // not a mode of its own.
 export function showResults(state, scored, onPick, onNext, rivals, waiting, mine) {
   // Best first. It used to run worst-first so you ended on your best shot, but
@@ -193,14 +206,21 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
       ? s.subjects.length + ' unicorn' + (s.subjects.length > 1 ? 's' : '') +
         (s.bonuses.length ? ' · ' + s.bonuses.map((b) => b.label).join(', ') : '')
       : NONE;
-    rows += row3('class="o" data-i="' + i + '"', s.url, what, s.total);
+    rows += row3('class="o" data-i="' + i + '"', s.url, what, '$' + s.total);
   }
   if (!rows) rows = '<tr><td class="d">' + NONE + '</td></tr>';
   const roll = '<table>' + rows + '</table>';
+  // The money reads under the roll, not over it: the photographs are what you
+  // came to look at, and the bank is what they add up to. What this ride paid
+  // rides along with it -- the roll is priced in dollars now, so the two totals
+  // belong on the same line. A borrowed-gear ride earns nothing and never gets
+  // here: the match view draws cards instead.
+  const ride = scored.reduce((a, s) => a + s.total, 0);
+  const earned = '<h2>$' + state.bank + ' · $' + ride + ' this ride</h2>';
 
-  // Solo: exactly what it always was.
+  // Solo: the roll, what it paid, and the way to the shop.
   if (waiting === undefined) {
-    panel('<h1>My Photos</h1><h2>$' + state.bank + '</h2>' + roll +
+    panel('<h1>Photos</h1>' + roll + earned +
           '<p class="h"><button id="s">Shop</button></p>');
   } else {
     // Your own entry has to carry a photograph and a breakdown like everyone
@@ -208,7 +228,7 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
     // this picks yours the same way endRun does, but at full thumbnail size
     // rather than the small copy that had to fit on the wire.
     const best = scored.reduce((a, s) => (a && a.total > s.total ? a : s), null);
-    const all = [{ name: 'You!', n: scored.reduce((a, s) => a + s.total, 0),
+    const all = [{ name: 'You!', n: ride,
                    p: best ? best.url : '', b: best ? best.b : [] }, ...rivals];
     all.sort((a, b) => b.n - a.n);
     let cards = '';
@@ -216,12 +236,12 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
       cards += photoCard(r.p, r.b, i + 1 + (ORD[i] || 'th') + ' place: ' + r.name, r.n);
     });
     // Both buttons sit on every match screen, the waiting one included. A rider
-    // who types the code mid-lap joins the roster and never reports, so `waiting`
+    // who types the code mid-ride joins the roster and never reports, so `waiting`
     // can stall for good -- nobody may be trapped on a screen with no way out.
     panel(
-      '<h1>' + (mine ? 'My Photos' : 'Results') + '</h1>' +
+      '<h1>' + (mine ? 'Photos' : 'Results') + '</h1>' +
       (waiting ? '<h2>waiting for ' + waiting + '</h2>' : mine ? roll : cards) +
-      '<p class="h"><button id="m">' + (mine ? 'Results' : 'My Photos') +
+      '<p class="h"><button id="m">' + (mine ? 'Results' : 'Photos') +
       '</button> <button id="s">Rematch</button></p>'
     );
   }
@@ -237,43 +257,41 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
 export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
+  // Three columns: what the ladder is, the rung you are standing on, and the one
+  // rung you can buy with its price inside the button. The whole ladder used to
+  // be drawn, which was a table of markup for something read once -- and a maxed
+  // ladder now simply has no button rather than a row of dimmed text.
   let rows = '', film = '';
-  // Ladders are different lengths, so short ones have to be padded out to the
-  // widest -- otherwise the row ends early and its rule stops short of the edge.
-  const wide = Math.max(...offers.map((o) => (o.v || []).length));
-  const price = (n) => '<small class="w">$' + n + '</small><br>';
   offers.forEach((o, i) => {
     const btn = (label) => '<button data-i="' + i + '"' +
       (state.bank >= o.price ? '' : ' disabled') + '>' + label + '</button>';
     // A filmless offer is a quantity of frames rather than a rung. Film is not a
     // ladder and does not belong in the ladder table, so it goes to the footer.
     if (!o.v) return void (film += ' $' + o.price + ' ' + btn('+' + o.n));
-    // Everything you own, the rung you can buy, and what is beyond.
-    let cells = '';
-    o.v.forEach((v, t) => {
-      const label = v + o.sfx;
-      cells += '<td class="n">' + (t <= o.at ? '<b class="p">' + label + '</b>'
-        : t === o.at + 1 ? price(o.p[t - 1]) + btn(label)
-        : price(o.p[t - 1]) + '<span class="w">' + label + '</span>') + '</td>';
-    });
-    rows += '<tr class="r g"><td class="d">' + o.label + '</td>' + cells +
-      '<td></td>'.repeat(wide - o.v.length) + '</tr>';
+    const next = o.at + 1;
+    rows += '<tr class="r"><td class="d">' + o.label +
+      '</td><td class="n"><b class="p">' + o.v[o.at] + o.sfx + '</b></td><td class="n">' +
+      (next < o.v.length ? btn(o.v[next] + o.sfx + ' $' + o.price) : '') + '</td></tr>';
   });
   panel(
     '<h1>SHOP</h1>' +
-    '<h2>$' + state.bank + '</h2>' +
+    // Money and film are the two things you spend, so they are read together.
+    '<h2>$' + state.bank + ' · Film ' + state.film + '</h2>' +
+    // A `current`/`Upgrade` header row here measured at 35 bytes -- a tenth of
+    // everything the three-column rebuild saved -- and the columns read without
+    // it: a name, the rung you own in green, and a button naming what it buys
+    // and what it costs. Restore it here if the budget ever allows.
     '<table>' + rows + '</table>' +
-    // What you are holding, then what a frame and a roll of ten cost. Worded
-    // exactly as the HUD counter is, which reads consistently and packs for
-    // less than a second spelling of the same thing.
-    '<p class="h">Film <b>' + state.film + '</b>' + film + '</p>' +
-    // A lap with an empty roll earns nothing and cannot be photographed, so it
-    // is only offered once there is film to shoot it on.
-    '<p class="h"><button id="e"' + '' +
-    '>Ride again</button> ' +
+    '<p class="h">Film' + film + '</p>' +
+    // A ride with an empty roll earns nothing and cannot be photographed, so it
+    // is only offered once there is film to shoot it on. Disabled, it says what
+    // is missing rather than dangling a greyed-out "Ride again" with no reason
+    // given -- and what is missing is on sale in the row directly above it.
+    '<p class="h"><button id="e"' + (state.film ? '>Ride again' : ' disabled>No film') +
+    '</button> ' +
     // Everything else you might want -- multiplayer, wiping the save -- lives on
     // the menu now, so the shop only has to be able to get you back there.
-    '<button id="mp">Main Menu</button></p>'
+    '<button id="mp">Menu</button></p>'
   );
   el.card.onclick = (e) => {
     const b = e.target.closest('button');

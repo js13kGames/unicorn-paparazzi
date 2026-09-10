@@ -1,7 +1,7 @@
 import { tally, TERRAIN } from '../.mirror/photo.mjs';
 import { scorePhoto } from '../.mirror/score.mjs';
 
-const cfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000], minCoverage:0.002, resNames:['low','med','high','ultra'], cropK:2.5, envK:2.0, occK:0.9 };
+const cfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000], minCoverage:0.002, cropK:2.5, envK:2.0, occK:0.9 };
 const st = { res: 0 };
 const W = 320, H = 180;
 
@@ -124,21 +124,87 @@ check('same colour twice is still x1',
 
 check('empty frame scores 0', score([]).total, 0);
 
-// --- extra horns ---
-check('a plain unicorn adds no horn bonus', score([[1,cx,cy,40,40]]).multiplier, 1);
+// --- extra horns: paid per animal, not per photograph ---
+// A bicorn used to double the whole shot, so one in the corner doubled what six
+// other unicorns had earned. It now multiplies only its own subtotal.
+const sub = (rects, i=0) => +score(rects).subjects[i].subtotal.toFixed(4);
+const plain = sub([[1,cx,cy,40,40]]);
+check('a plain unicorn is multiplied by nothing', plain > 0, true);
+check('horns are no longer a photograph-wide bonus',
+      score([[1,cx,cy,40,40]]).bonuses.length, 0);
 herd.horns[0] = 1;
-check('a bicorn doubles the shot', score([[1,cx,cy,40,40]]).multiplier, 2);
-check('and is named in the bonuses',
-      score([[1,cx,cy,40,40]]).bonuses.some(b=>b.label==='bicorn'), true);
+const times = (rects) => +(sub(rects)/plain).toFixed(3);
+check('a bicorn doubles its own subtotal', times([[1,cx,cy,40,40]]), 2, 1e-6);
+check('and stays out of the photograph-wide multiplier',
+      score([[1,cx,cy,40,40]]).multiplier, 1);
+check('and is named in its own breakdown rows',
+      score([[1,cx,cy,40,40]]).b.some(r=>r[0]===' bicorn' && r[1]==='×2'), true);
 herd.horns[0] = 2;
-check('a tricorn triples it', score([[1,cx,cy,40,40]]).multiplier, 3);
+check('a tricorn triples its own', times([[1,cx,cy,40,40]]), 3, 1e-6);
 herd.horns[0] = 3;
-check('a quadricorn quadruples it', score([[1,cx,cy,40,40]]).multiplier, 4);
-// the rarest head in frame pays, not the sum
-herd.horns[1] = 1;
-check('the rarest head in frame sets the bonus',
-      score([[1,40,cy,40,40],[2,200,cy,40,40]]).multiplier, 4 * 2);  // quadricorn x 2 colours
+check('a quadricorn quadruples its own', times([[1,cx,cy,40,40]]), 4, 1e-6);
+
+// The point of the change: a horned animal must not lift the others.
+herd.horns[0] = 3; herd.horns[1] = 0;
+{
+  const two = score([[1,40,cy,40,40],[2,200,cy,40,40]]);
+  const bare = two.subjects.find(s=>s.horns===0).subtotal;
+  const horned = two.subjects.find(s=>s.horns===3).subtotal;
+  check('the plain animal beside a quadricorn is untouched',
+        +bare.toFixed(4), +score([[1,40,cy,40,40],[2,200,cy,40,40]]).subjects
+          .find(s=>s.horns===0).subtotal.toFixed(4), 1e-9);
+  check('only the horned one is multiplied', +(horned/bare).toFixed(2) > 3.5, true);
+}
 herd.horns[0] = 0; herd.horns[1] = 0;
+
+// --- framing is a multiplier, floored so a bad frame never zeroes a shot ---
+const framingOf = (rects) => score(rects).framing;
+check('dead centre earns the ceiling', framingOf([[1,cx,cy,40,40]]), 1.5, 0.02);
+check('the corner earns the floor, not zero', framingOf([[1,4,4,40,40]]) > 0.25, true);
+check('and never drops below the floor',
+      Math.min(...[[[1,4,4,40,40]],[[1,0,0,10,10]],[[1,W-12,H-12,10,10]]]
+        .map(r=>framingOf(r))) >= 0.25, true);
+check('an empty frame cannot be framed well', framingOf([]), 0.25, 1e-9);
+check('framing shows as a percentage, not a point total',
+      score([[1,cx,cy,40,40]]).b.some(r=>r[0]==='framing' && /^×\d+%$/.test(r[1])), true);
+// The whole reason for the change: framing must bite the same at every tier.
+{
+  const ratio = (r) => { st.res = r;
+    const good = score([[1,cx,cy,40,40]]).total, bad = score([[1,4,4,40,40]]).total;
+    return +(bad/good).toFixed(3); };
+  const at = [0,1,2,3].map(ratio); st.res = 0;
+  console.log('        corner/centre score ratio per tier: ' + at.join(' / '));
+  check('a bad frame costs the same share on every camera',
+        +(Math.max(...at) - Math.min(...at)).toFixed(3) < 0.01, true);
+}
+
+// Reporting the factor and applying it are two different things: dropping
+// `framing` from the total left every assertion above still passing.
+{
+  const expect = (sc) => Math.round(
+    sc.subjects.reduce((a, x) => a + x.subtotal, 0) * sc.framing * sc.multiplier);
+  const centred = score([[1,cx,cy,40,40]]);
+  const corner = score([[1,4,4,40,40]]);
+  check('the total is the subtotals times framing times bonuses',
+        centred.total, expect(centred));
+  check('and the same at the other end of the framing range',
+        corner.total, expect(corner));
+  check('so a corner shot really does score less than a centred one',
+        corner.total < centred.total, true);
+}
+
+// --- the size row explains its own arithmetic ---
+{
+  const rows = score([[1,cx,cy,40,40]]).b;
+  const size = rows.find(r=>/dpi$/.test(r[0]));
+  console.log('        size row: ' + JSON.stringify(size));
+  check('the size row names the sensor rate', /× 1000dpi$/.test(size[0]), true);
+  check('and the share of the frame it is charged on', /^ size · \d+\.\d% ×/.test(size[0]), true);
+  // percent-as-a-fraction times the rate is exactly the points shown
+  const pct = parseFloat(/(\d+\.\d)%/.exec(size[0])[1]), pts = parseFloat(size[1]);
+  check('and the two multiply out to the points beside them',
+        +(pct/100*1000).toFixed(1), +pts.toFixed(1), 0.05);
+}
 
 // --- standing is the baseline and earns nothing ---
 check('standing scores 0', score([[1,cx,cy,40,40]]).subjects[0].pose, 0);
@@ -261,16 +327,19 @@ const standing = score([[1,cx,cy,40,40]]);
 check('a subject heads its own group', standing.b[0][0], 'red', 0);
 check('and the group header is not marked as a detail',
       standing.b[0][0][0] === ' ', false);
-check('size is always broken out', rowsOf(standing).includes(' size'), true);
+check('size is always broken out', rowsOf(standing).some(l=>/dpi$/.test(l)), true);
+check('and is still marked as a detail of the row above',
+      rowsOf(standing).find(l=>/dpi$/.test(l))[0], ' ');
 check('and it is marked as a detail of the subject above',
       standing.b[1][0][0], ' ');
 // Standing is the baseline and scores nothing, so a row saying "+0" would be noise.
-check('standing shows no pose row', rowsOf(standing).includes(' pose'), false);
+check('standing shows no pose row', rowsOf(standing).some((l) => /^ pose/.test(l)), false);
 
 herd.pose[0] = 3;
 const neighing = score([[1,cx,cy,40,40]]);
-check('a pose worth points gets its own row', rowsOf(neighing).includes(' pose'), true);
-check('and it carries the points, signed', valueOf(neighing, ' pose'), '+98');
+check('a pose worth points gets its own row, and it names the pose',
+      rowsOf(neighing).includes(' pose · neighing'), true);
+check('and it carries the points, signed', valueOf(neighing, ' pose · neighing'), '+98');
 check('the pose is named in the subject header', neighing.b[0][0], 'red neighing', 0);
 herd.pose[0] = 0;
 

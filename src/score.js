@@ -53,12 +53,19 @@ export function scorePhoto(photo, cfg, state) {
       size, pose,
       cEdge, cEnv, cOcc,
       cropLoss, envLoss, occLoss,
-      subtotal: gross - cropLoss - envLoss - occLoss,
+      // The extra horns pay on the animal that grew them: a bicorn is worth
+      // double, a quadricorn quadruple, and only its own subtotal moves.
+      subtotal: (gross - cropLoss - envLoss - occLoss) * (s.horns + 1),
     });
   }
 
   const composition = compose(subjects);
-  const base = subjects.reduce((a, s) => a + s.subtotal, 0) + composition;
+  // Framing is a multiplier rather than an addition. As a flat 0-100 bonus it
+  // was invisible beside subtotals in the thousands on a good camera; as a
+  // factor it matters just as much at every tier. Floored at a quarter so a
+  // badly framed rarity is still worth something, never a demoralising zero.
+  const framing = 0.25 + composition * 0.0125;
+  const base = subjects.reduce((a, s) => a + s.subtotal, 0);
   const bonuses = bonusList(subjects);
   const multiplier = bonuses.reduce((a, b) => a * b.factor, 1);
 
@@ -66,10 +73,11 @@ export function scorePhoto(photo, cfg, state) {
     url: photo.url,
     subjects,
     composition,
+    framing,
     bonuses,
     multiplier,
-    total: Math.round(base * multiplier),
-    b: breakdown(subjects, composition, bonuses),
+    total: Math.round(base * framing * multiplier),
+    b: breakdown(subjects, framing, bonuses, bonus),
   };
 }
 
@@ -81,19 +89,24 @@ export function scorePhoto(photo, cfg, state) {
 // A leading space marks a detail row. One character, it survives the wire's
 // character whitelist, and it saves carrying a third field per row just to say
 // "indent me".
-function breakdown(subjects, composition, bonuses) {
+function breakdown(subjects, framing, bonuses, dpi) {
   const out = [];
   for (const s of subjects) {
     out.push([s.colour + (s.pose ? ' ' + s.poseName : ''), '' + Math.round(s.subtotal)]);
-    out.push([' size', sign(s.size)]);
-    if (s.pose) out.push([' pose', sign(s.pose)]);
+    // The size row shows its own arithmetic: the share of the frame this animal
+    // fills, times what the sensor pays for a share. They multiply out to
+    // exactly the points beside them, which is the only thing on screen that
+    // says why the resolution upgrade is worth buying.
+    out.push([' size · ' + (s.size / dpi * 100).toFixed(1) + '% × ' + dpi + 'dpi', sign(s.size)]);
+    if (s.pose) out.push([' pose · ' + s.poseName, sign(s.pose)]);
     // Cut by the frame, hidden behind scenery, blocked by another unicorn: three
     // penalties that compound in order, but one number as far as the player is
     // concerned. Sub-point losses read as "-0", which looks like a bug.
     const loss = s.cropLoss + s.envLoss + s.occLoss;
     if (loss > 0.5) out.push([' obscured', sign(-loss)]);
+    if (s.horns) out.push([' ' + HORNS[s.horns], '×' + (s.horns + 1)]);
   }
-  if (composition) out.push(['framing', sign(composition)]);
+  if (subjects.length) out.push(['framing', '×' + Math.round(framing * 100) + '%']);
   for (const b of bonuses) out.push([b.label, '×' + b.factor]);
   return out;
 }
@@ -123,11 +136,6 @@ function compose(subjects) {
 function bonusList(subjects) {
   const out = [];
   const colours = new Set(subjects.map((s) => s.colourIndex));
-  // The rarest head in the frame pays: two horns double the shot, four quadruple it.
-  const horns = Math.max(0, ...subjects.map((s) => s.horns));
-  if (horns) {
-    out.push({ label: HORNS[horns], factor: horns + 1 });
-  }
   if (colours.size >= 2) {
     out.push({ label: colours.size + ' colours', factor: colours.size });
   }

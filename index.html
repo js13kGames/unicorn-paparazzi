@@ -5,15 +5,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <title>Unicorn Paparazzi</title>
-  <meta name="theme-color" content="#9ec7f2">
+  <meta name="theme-color" content="#9ce">
   <style>
     /* Deliberately lean: this stylesheet rides inside the compressed payload,
        and unique prose is the one thing the packer cannot squeeze. */
     html, body {
       margin: 0; height: 100%; overflow: hidden;
       touch-action: none; overscroll-behavior: none;
-      background: #9ec7f2; color: #fff;
-      font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+      background: #9ce; color: #fff;
+      font: 13px/1.45 ui-monospace, monospace;
     }
     #c { display: block; width: 100vw; height: 100vh; cursor: crosshair }
     #ui { position: fixed; inset: 0; pointer-events: none }
@@ -25,7 +25,7 @@
     #hud { top: 8px; left: 10px }
     #film { top: 8px; right: 10px; text-align: right; font-size: 15px }
     #film b { font-size: 22px }
-    #film.low b { color: #ff8f6b }
+    #film.low b { color: #f86 }
     #roll {
       top: 60px; right: 10px; width: 84px; bottom: 46px; gap: 4px;
       display: flex; flex-direction: column-reverse; justify-content: flex-end;
@@ -33,63 +33,68 @@
     }
     #roll img { width: 100%; border: 1px solid #fff6; display: block }
 
-    #vf { border: 1px solid #fff6 }
-    #vf::before, #vf::after {
-      content: ''; position: absolute; left: 50%; top: 50%; background: #fff9
+    /* The crosshair as two centred gradient strips rather than two pseudo-elements
+       with their own position, offsets and content: same 20px cross, far less CSS. */
+    #vf {
+      border: 1px solid #fff6;
+      background: linear-gradient(#fff9, #fff9) center/20px 1px no-repeat,
+                  linear-gradient(#fff9, #fff9) center/1px 20px no-repeat;
     }
-    #vf::before { width: 20px; height: 1px; margin-left: -10px }
-    #vf::after { width: 1px; height: 20px; margin-top: -10px }
 
 
     #track { left: 10px; right: 10px; bottom: 10px; height: 4px; background: #0004 }
     #bar { height: 100%; width: 0; background: #fff }
 
-    #panel { inset: 0; display: none; place-items: center; background: #ff8f6bb3; pointer-events: auto }
+    #panel { inset: 0; display: none; place-items: center; background: #f86b; pointer-events: auto }
     #panel.on { display: grid }
     #card {
       width: min(720px, 92vw); max-height: 88vh; overflow: auto; touch-action: pan-y;
-      background: #16273b; border: 1px solid #ffffff26; padding: 18px 20px
+      background: #123; border: 1px solid #fff3; padding: 18px 20px
     }
+    /* Exactly the viewport, and nothing to scroll. #card is content-box with
+       20px of side padding, so the old `width: 100vw` made the title card 40px
+       wider than the screen -- and `overflow: auto` then answered that, and any
+       column taller than 88vh, with a scrollbar whose gutter pulled the centred
+       title and buttons a few pixels off centre. */
     #card.t {
-      background: none; border: 0; width: 100vw;
+      background: none; border: 0; width: 100%; padding: 0; overflow: visible;
       display: flex; flex-direction: column; align-items: center
     }
     h1 { font: 700 44px serif; margin: 0 0 10px }
     #card.t h1 { font-size: 6em; animation: w 1s infinite }
     @keyframes w { 50% { transform: translateY(-20px) } }
     /* Top margin so stacked result cards do not run into each other. */
-    h2 { font-size: 14px; margin: 18px 0 12px; font-weight: 400; color: #9fb6cc }
+    h2 { font-size: 14px; margin: 18px 0 12px; font-weight: 400; color: #9bc }
     h1, h2 { text-align: center }
     #card img { width: 100%; display: block; margin-bottom: 12px; background: #000 }
     table { width: 100%; border-collapse: collapse; font-size: 12px }
     td { padding: 3px 0 }
-    td.n { text-align: right; font-variant-numeric: tabular-nums }
+    /* No tabular-nums: the page is set in a monospace face, so digits already line up. */
+    td.n { text-align: right }
     td.i { width: 92px; padding-right: 10px }
     /* Single letters because every one of these is written out in ui.js many
        times over, and the stylesheet rides inside the compressed payload with
        the markup. Measured at 14 bytes; CSS comments like this one are stripped
        before packing, so the legend is free.
          r rule (a ruled-off row)   d dim      w weak      p positive
+         m minus (a loss, or a multiplier below parity)
          h hint (a footer line)     b big      o row (clickable)
          i thumbnail cell (t is taken by the title card)                     */
     tr.o { cursor: pointer }
-    tr.o:hover td { background: #ffffff12 }
-    .r td { border-top: 1px solid #ffffff26; padding-top: 8px }
-    /* One height for every ladder row, whether or not it carries a price tag,
-       and every tier sitting on the same line. */
-    .g td { height: 44px; vertical-align: bottom }
-    .d { color: #8ea6bd }
-    .w { color: #64798e }
-    .p { color: #8fe0a0 }
+    tr.o:hover td { background: #fff1 }
+    .r td { border-top: 1px solid #fff3; padding-top: 8px }
+    .d { color: #8ab }
+    .p { color: #8d9 }
+    .m { color: #f86 }
     .b { font-size: 17px }
-    .h { margin-top: 14px; color: #7d93a9; font-size: 12px; text-align: center }
+    .h { margin-top: 14px; color: #79a; font-size: 12px; text-align: center }
     button, input {
-      background: #24405c; color: #dceaf7; border: 1px solid #ffffff33;
+      background: #245; color: #def; border: 1px solid #fff3;
       padding: 3px 10px; font: inherit; cursor: pointer; min-width: 60px
     }
     /* Scoped to the title card, so the shop's own Multiplayer button is spared. */
     .t button { background: none; font: 2em serif; color: #fff }
-    button:hover:not(:disabled) { background: #2f5478 }
+    button:hover:not(:disabled) { background: #357 }
     button:disabled { opacity: .35; cursor: default }
   </style>
 </head>

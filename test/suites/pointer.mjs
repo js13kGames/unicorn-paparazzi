@@ -37,7 +37,7 @@ const lost = run('ride', false);
 check('riding with the pointer lost re-locks', lost.lock === 1);
 check('and does not queue the shutter', !lost.shutter);
 
-// Starting a lap used to shout its seed at every player in the game, and any idle
+// Starting a ride used to shout its seed at every player in the game, and any idle
 // one was yanked onto it. Lobbies replaced that, so the title must stay quiet --
 // nothing about a single-player ride reaches the wire.
 const started = run('title', false);
@@ -62,9 +62,11 @@ for (const mode of ['results', 'detail', 'shop']) {
   check('a click in ' + mode + ' does nothing', !p.shutter && p.lock === 0);
 }
 
-// The lost lock is otherwise invisible, so it has to say something.
+// The lost lock is otherwise invisible, so the hud has to say something for as
+// long as it lasts -- see the hud suite for the behaviour itself.
+const hud = fs.readFileSync(ROOT + 'src/ui.js', 'utf8');
 check('losing the lock mid-ride tells the player',
-      /pointerlockchange[\s\S]{0,220}ui\.toast/.test(src));
+      /!document\.pointerLockElement[\s\S]{0,40}click to look/.test(hud));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

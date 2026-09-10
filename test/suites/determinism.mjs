@@ -1,4 +1,4 @@
-// Two players are meant to ride the same lap from the same seed and compare
+// Two players are meant to ride the same ride from the same seed and compare
 // photographs, which only works if the herd is a function of the TICK COUNT and
 // nothing else.
 //
@@ -80,7 +80,7 @@ console.log('        ticks in 10s -- 60fps ' + steady + ', 120fps ' + fast + ', 
 
 // Within one tick, not exactly equal: the accumulator carries a fractional
 // remainder, so a client can sit one tick behind for a frame. That is harmless
-// because the lap ends on a tick count, not on a wall-clock time -- both players
+// because the ride ends on a tick count, not on a wall-clock time -- both players
 // traverse the identical tick sequence, at worst a frame apart. What would break a
 // match is a systematic drift, which is what these bounds catch.
 const near = (a, b) => Math.abs(a - b) <= 1;

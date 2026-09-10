@@ -5,7 +5,7 @@
 //   {t:'h', i:id, n:name}           I just arrived -- who is here?
 //   {t:'h', i:id, n:name, r:1}       a reply; r stops it echoing forever
 //   {t:'h', i:id, n:name, r:1, e:1}  ...and my roll is empty
-//   {t:'g', s:seed}                  the host started the lap
+//   {t:'g', s:seed}                  the host started the ride
 //   {t:'d', i:id, n:score, p:shot, b:rows}   someone finished it
 //
 // The relay interleaves its own control frames, which are bare strings rather
@@ -33,15 +33,17 @@ const key = (s) => s.slice(0, 8);
 // escape list: whatever else is in it, what comes out can only be text. Length
 // and row count are capped too, because a hostile peer chooses those as well.
 //
-// \u00d7 is the multiplication sign a bonus row uses. Spelled as an escape, not
-// as itself: a non-ASCII byte inside a regex literal fails roadroller's
+// \u00d7 is the multiplication sign a bonus row uses and \u00b7 the dot that
+// separates a detail row's label from its arithmetic; without them a rival's
+// card would lose the punctuation your own keeps. Both are spelled as escapes,
+// not as themselves: a non-ASCII byte inside a regex literal fails roadroller's
 // round-trip check at pack time.
-const clean = (v) => String(v == null ? '' : v).replace(/[^\w \u00d7+.-]/g, '').slice(0, 24);
+const clean = (v) => String(v == null ? '' : v).replace(/[^\w \u00d7\u00b7%+.-]/g, '').slice(0, 24);
 const rows = (v) => (Array.isArray(v) ? v : []).slice(0, 16)
   .map((r) => [clean(r && r[0]), clean(r && r[1])]);
 
 let ws = null;
-const riders = new Map();          // id -> {n, p}, one result per rider per lap
+const riders = new Map();          // id -> {n, p}, one result per rider per ride
 const here = new Map();            // everyone in the lobby, id -> their name
 const spent = new Set();           // ...and which of them have no film left
 let myName = '';
@@ -66,11 +68,11 @@ export const setName = (s) => {
   return myName;
 };
 // Once nobody can take another photograph there is nothing left to ride for, so
-// the lap can stop early. Empty means no lobby at all, which is not everyone
+// the ride can stop early. Empty means no lobby at all, which is not everyone
 // being out of film -- it is a solo player, and they must never match this.
 export const allSpent = () => here.size > 0 && spent.size >= here.size;
 
-// onGo(seed) fires when the host starts the lap. onChange() fires whenever the
+// onGo(seed) fires when the host starts the ride. onChange() fires whenever the
 // roster or the results board moves, so whichever screen is up can redraw.
 export function connect(code, name, onGo, onChange) {
   myName = clean(name);
@@ -80,9 +82,13 @@ export function connect(code, name, onGo, onChange) {
   close();
   try {
     // Served from localhost: talk to test/tools/relay.mjs, which rooms by path
-    // the same way the real relay does.
-    const url = (/^(localhost|127|\[?::1)/.test(location.hostname)
-      ? 'ws://localhost:1313/' : RELAY + '-') + code;
+    // the same way the real relay does. Webpack folds NODE_ENV in at build time,
+    // so a production build sees `if (false && ...)` and terser takes the whole
+    // branch out -- the local URL and the hostname regex are 25 bytes of the zip
+    // that only the dev workflow ever needed.
+    let url = RELAY + '-' + code;
+    if (process.env.NODE_ENV !== 'production'
+        && /^(localhost|127|\[?::1)/.test(location.hostname)) url = 'ws://localhost:1313/' + code;
     ws = new WebSocket(url);
   } catch (e) {
     return;                        // no socket, no lobby, still a game

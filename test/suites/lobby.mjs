@@ -118,7 +118,7 @@ document.getElementById('n').value = '';
 click('o');
 check('a code with no name is refused', seen.length, 0);
 click('a');
-check('and so is starting a lap nameless', seen.length, 0);
+check('and so is starting a ride nameless', seen.length, 0);
 document.getElementById('n').value = 'Ada';
 
 j.value = '77';
@@ -191,7 +191,7 @@ results([rival(900, 'r.jpg')], 1);
 check('while a rider is still out, the result is withheld',
       card(), (h) => h.includes('waiting for 1') && !h.includes('place:'));
 check('and no scores are on show yet', card(), (h) => !h.includes('900'));
-// A rider who types the code mid-lap never reports, so waiting can stall for
+// A rider who types the code mid-ride never reports, so waiting can stall for
 // good. Both ways off this screen have to work even then.
 check('but both ways out are still offered',
       card(), (h) => h.includes('id="m"') && h.includes('id="s"'));
@@ -229,10 +229,10 @@ check('while a subject header is ruled off instead',
 
 // --- your roll, on the same screen ---
 results([rival(100, 'r.jpg')], 0, 1);
-check('My Photos swaps the cards for your roll',
+check('Photos swaps the cards for your roll',
       card(), (h) => h.includes('data-i="0"') && h.includes('data-i="1"') && !h.includes('place:'));
 check('and it is titled after the button that opened it',
-      card(), (h) => h.includes('<h1>My Photos</h1>'));
+      card(), (h) => h.includes('<h1>Photos</h1>'));
 check('the button turns into the way back', card(), (h) => h.includes('>Results<'));
 // The whole point of the view: yours, and only yours.
 check('and no rival appears on it at all',
@@ -246,6 +246,34 @@ results([rival(100, '')], 0);
 nodes.card.onclick({ stopPropagation() {},
   target: { closest: (q) => (q === '.o' ? { dataset: { i: '1' } } : null) } });
 check('and a shot in the roll still opens on its index', picked, 1);
+
+// --- gains, losses and multipliers are coloured ---------------------------
+// The breakdown is a wall of numbers; the sign is the fastest thing to read.
+// A plain subtotal must stay neutral -- naively testing the character after the
+// first would paint "43" red, since its tail parses as 3.
+{
+  const card = ui.photoCard('', [
+    ['red neighing', '366'], [' 8.5% × 1000dpi', '+85'], [' pose', '+98'],
+    [' obscured', '-20'], [' bicorn', '×2'], ['green', '43'],
+    ['framing', '×111%'], ['2 colours', '×2'],
+  ], 'a heading', 911);
+  const cls = {};
+  for (const m of card.matchAll(/<td>(?:&nbsp;)?([^<]*)<\/td><td class="([^"]*)">([^<]*)</g)) {
+    cls[m[3]] = m[2];
+  }
+  console.log('        ' + Object.entries(cls).map(([v, c]) => v + '=' + c).join('  '));
+  check('a gain is green', cls['+85'], 'n p');
+  check('a loss is red', cls['-20'], 'n m');
+  check('a multiplier is a gain', cls['×2'], 'n p');
+  check('framing above parity is green', cls['×111%'], 'n p');
+  check('a plain subtotal is left alone', cls['366'], 'n');
+  check('and so is one whose tail looks like a small number', cls['43'], 'n');
+}
+{
+  const card = ui.photoCard('', [['framing', '×62%']], 'h', 1);
+  check('framing below parity is red',
+        /<td class="n m">×62%</.test(card), true);
+}
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

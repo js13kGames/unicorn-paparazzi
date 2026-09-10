@@ -20,12 +20,14 @@ export const CONFIG = {
   eyeHeight: 2.4,
   baseFov: Math.PI / 3,
   zoomLevels: [1, 2, 4, 8, 16],
-  // Deliberately not pixel counts: the photograph is the same size at every tier,
-  // so naming them 720p..8K promised a resolution nothing in the pipeline has.
-  resNames: ['low', 'med', 'high', 'ultra'],
   // What one frame-share of unicorn is worth on each sensor: 1 / 1.5 / 3 / 6 of
   // the base rate. Size is coverage x this, so a subject filling a tenth of the
   // frame scores 100 on the cheapest camera and 600 on the best.
+  //
+  // These double as the sensor's NAME, written `1000dpi`. They are not pixel
+  // counts -- the photograph is the same size at every tier -- but they are the
+  // number the score is actually made of, which `low/med/high/ultra` never was:
+  // the breakdown reads `1.2% x 1000dpi  +12` and multiplies out exactly.
   resBonus: [1000, 1500, 3000, 6000],
   // Fraction of the frame a unicorn must fill to be counted as a subject.
   minCoverage: 0.002,
@@ -53,7 +55,7 @@ function loadSave() {
 
 const SAVE_VERSION = 4;
 
-// A multiplayer lap rides borrowed gear, so it must never write gear or bank back
+// A multiplayer ride is taken on borrowed gear, so it must never write gear or bank back
 // into the save. One guard covers every call site.
 function persist() {
   if (state.mp) return;
@@ -92,7 +94,7 @@ const state = {
   scored: [],
 };
 
-// A multiplayer lap is settled by photography, not by who has ridden more laps,
+// A multiplayer ride is settled by photography, not by who has ridden farther,
 // so it ignores the save entirely and everyone rides the same loadout. Tune here.
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
@@ -101,7 +103,7 @@ const MP_GEAR = { maxZoom: 2, res: 3, film: 10, shutterTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
-// means a lap is starting right now. So only `g` is consumed here: dropping out
+// means a ride is starting right now. So only `g` is consumed here: dropping out
 // of the match entirely is something you have to actually ask for.
 const mpCode = saved.c || '';
 if (mpCode && saved.g) {
@@ -120,7 +122,7 @@ if (mpCode && saved.g) {
 // what camera you were actually carrying.
 const LADDERS = [
   ['zoom', CONFIG.zoomLevels, [400, 900, 1800, 3200], 'maxZoom', '×'],
-  ['photo', CONFIG.resNames, [500, 1200, 2600], 'res', ''],
+  ['resolution', CONFIG.resBonus, [500, 1200, 2600], 'res', 'dpi'],
   ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
 ];
 
@@ -183,11 +185,11 @@ addEventListener('wheel', (e) => {
   state.zoom = Math.max(0, Math.min(state.maxZoom, state.zoom + (e.deltaY > 0 ? -1 : 1)));
 }, { passive: false });
 
-// Safari sends pinch as its own gesture events rather than ctrl+wheel.
-// TODO: Is this necessary???
-for (const g of ['gesturestart', 'gesturechange', 'gestureend']) {
-  addEventListener(g, (e) => e.preventDefault());
-}
+// Safari sends pinch as its own gesture events rather than ctrl+wheel. Cancelling
+// the start cancels the whole sequence, so `gesturechange` and `gestureend` --
+// 24 bytes of vocabulary the packer had never seen before -- were paying for
+// nothing.
+addEventListener('gesturestart', (e) => e.preventDefault());
 
 // Chrome rejects this promise if the lock was exited very recently, and an
 // unhandled rejection would show up as a console error.
@@ -208,13 +210,6 @@ function primary() {
   }
 }
 
-// Losing the pointer is otherwise invisible -- you find out by taking a photo
-// you did not mean to take.
-document.addEventListener('pointerlockchange', () => {
-  if (state.mode === 'ride' && document.pointerLockElement !== canvas) {
-    ui.toast('click to look');
-  }
-});
 
 canvas.addEventListener('click', primary);
 document.getElementById('panel').addEventListener('click', primary);
@@ -248,11 +243,11 @@ function takePhoto() {
 
 function endRun() {
   state.mode = 'results';
-  // Borrowed gear earns no money: a multiplayer lap would otherwise be the
+  // Borrowed gear earns no money: a multiplayer ride would otherwise be the
   // cheapest way to farm the shop.
   if (!state.mp) for (const s of state.scored) state.bank += s.total;
   persist();
-  // One result per rider per lap: the total, and the best single frame.
+  // One result per rider per ride: the total, and the best single frame.
   let best = 0;
   for (let i = 1; i < state.scored.length; i++) {
     if (state.scored[i].total > state.scored[best].total) best = i;
@@ -309,7 +304,7 @@ function buy(i) {
   showShop();
 }
 
-// A new lap needs a fresh world, which means rebuilding every GL buffer. The
+// A new ride needs a fresh world, which means rebuilding every GL buffer. The
 // save already holds everything that carries over, so a reload is both cheaper
 // in bytes and less likely to leak GPU resources than tearing the scene down.
 function ride() {
@@ -320,9 +315,9 @@ function ride() {
 
 // Drop the seed, then reload. Assigning the bare path instead LOOKS like it
 // reloads and does not: a URL that differs only in its fragment is a
-// same-document navigation, so coming back from a lap at #4242 would have
+// same-document navigation, so coming back from a ride at #4242 would have
 // scrolled and stayed put. Clearing the hash first is also what stops a seed
-// adopted for one lap sticking to every later one.
+// adopted for one ride sticking to every later one.
 const home = () => { location.hash = ''; location.reload(); };
 
 function restart() {
@@ -345,7 +340,7 @@ function lobby(code, host) {
   refresh();
 }
 
-// The lap begins with a reload, because the world has to be rebuilt from the new
+// The ride begins with a reload, because the world has to be rebuilt from the new
 // seed either way. The hash carries the seed across it and the save carries the
 // code, so everyone reconnects to the same room on the other side.
 function start(s) {
@@ -353,7 +348,7 @@ function start(s) {
   state.go = 1;
   persist();
   // Same trap as home(): setting href to pathname + '#' + s only changes the
-  // fragment, which the browser handles in-document and never reloads. The lap
+  // fragment, which the browser handles in-document and never reloads. The ride
   // does not begin until the world is rebuilt, so ask for the reload outright.
   location.hash = s;
   location.reload();
@@ -367,7 +362,7 @@ function host() {
 }
 
 // The name outlives the lobby: it is yours, not the room's, so it goes in the
-// save and rides the reload into the lap with everything else.
+// save and rides the reload into the ride with everything else.
 function rename(v) {
   state.name = net.setName(v);
   persist();
@@ -393,7 +388,12 @@ function title() {
 // boot has not, so it can just start where it stands rather than paying for a
 // second worldgen.
 function solo() {
-  if (distance) ride();
+  // An empty roll is not a ride: the shutter would be dead for the whole track
+  // and the only thing waiting at the end is the shop. So go there now. broke()
+  // has already turned this card into the dead end when there is no money
+  // either, so reaching here means the frames are affordable.
+  if (!state.film) showShop();
+  else if (distance) ride();
   else primary();
 }
 
@@ -409,15 +409,15 @@ function refresh() {
 // --- loop ----------------------------------------------------------------
 
 ui.setChrome(false);
-// A multiplayer lap rejoins the room its code names, so rivals' results land on
+// A multiplayer ride rejoins the room its code names, so rivals' results land on
 // the board as they finish -- while you are still riding, or after.
 if (mpCode) net.connect(mpCode, state.name, start, refresh);
 // Three ways in. A first run, or one after "Start over" wipes the save, stops on
 // the title. "Ride again" leaves a one-shot marker and reloads to rebuild the
 // world, so it lands straight on the cart -- consuming the marker here means an
 // actual refresh does not do the same. That refresh reopens the shop instead, so
-// a stray reload mid-lap costs the lap but not the bank.
-if (saved.g) { state.go = 0; persist(); primary(); ui.toast('click to look'); }
+// a stray reload mid-ride costs the ride but not the bank.
+if (saved.g) { state.go = 0; persist(); primary(); }
 else if (saved.c) lobby(saved.c, saved.h);
 else if (saved.v) showShop();
 else title();
@@ -426,7 +426,7 @@ else title();
 // updateHerd draws from one RNG stream shared by the whole herd, from inside
 // dt-gated branches, so the number and ORDER of draws -- and therefore every
 // unicorn -- is a function of the tick count and nothing else. Fixing the step is
-// what lets two machines at 60Hz and 144Hz ride an identical lap. `clock` is the
+// what lets two machines at 60Hz and 144Hz ride an identical ride. `clock` is the
 // authoritative tick clock: it is always exactly tickCount * STEP.
 const STEP = 1 / 60;
 let acc = 0;
@@ -440,13 +440,13 @@ function tick() {
 let last = performance.now();
 function frame(now) {
   // Capped so a long stall cannot spin this loop; the cost is that the dropped
-  // ticks are simply lost, which a networked lap would have to resync.
+  // ticks are simply lost, which a networked ride would have to resync.
   acc += Math.min(0.25, (now - last) / 1000);
   last = now;
   while (state.mode === 'ride' && acc >= STEP) { tick(); acc -= STEP; }
 
   packInstances(herd, world);
-  const lap = distance / world.path.length;
+  const ride = distance / world.path.length;
   // The cart alone is smoothed across the leftover accumulator, so it does not
   // judder on a display faster than the tick rate. Presentation only -- this
   // never feeds back into the simulation.
@@ -467,10 +467,10 @@ function frame(now) {
     takePhoto();
   }
 
-  ui.updateHud(state, lap, clock);
+  ui.updateHud(state, ride, clock);
 
   if (state.mode === 'ride') {
-    if (lap >= 1) endRun();
+    if (ride >= 1) endRun();
     // Solo, an empty roll ends the ride. In a match it must not: everyone rides
     // the same track at the same speed off the same tick clock, so letting the
     // cart run on with a dead shutter is what makes them all finish together --
