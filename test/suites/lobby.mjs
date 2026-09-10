@@ -100,7 +100,7 @@ const shot = (n, url) => ({ total: n, url, subjects: [], bonuses: [],
 let picked = null;
 const results = (rivals, waiting, mine) => {
   picked = null;
-  ui.showResults(state, [shot(100, 'lo.jpg'), shot(400, 'hi.jpg')], 'You completed the lap.',
+  ui.showResults(state, [shot(100, 'lo.jpg'), shot(400, 'hi.jpg')],
                  (i) => { picked = i; }, () => {}, rivals, waiting, mine);
 };
 

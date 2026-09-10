@@ -194,21 +194,32 @@ check('and it still reloads when there was no seed to drop', plain.reloads > 0);
 // Solo, an empty roll ends the ride. In a match it must not: the first rider to
 // burn their film would be thrown off the track while the others kept shooting,
 // and they would not finish together.
-const endBlock = /^ {4}if \(lap >= 1\) endRun[\s\S]*?endRun\('Out of film\.'\);$/m.exec(src);
+const endBlock = /^ {4}if \(lap >= 1\) endRun[\s\S]*?net\.allSpent\(\)\)\) endRun\(\);$/m.exec(src);
 check('the lap-end conditions are still there to test', !!endBlock);
 
-const ends = (lap, state) => {
-  let reason = null;
-  new Function('lap', 'state', 'endRun', endBlock[0])(lap, state, (r) => { reason = r; });
-  return reason;
+const ends = (lap, state, allSpent = false) => {
+  let over = false;
+  new Function('lap', 'state', 'net', 'endRun', endBlock[0])(
+    lap, state, { allSpent: () => allSpent }, () => { over = true; });
+  return over;
 };
 
-check('solo, finishing the track ends the lap', ends(1, { film: 9 }) === 'Lap complete.');
-check('and so does running out of film', ends(0.3, { film: 0 }) === 'Out of film.');
-check('in a match, running out of film does NOT end the lap',
-      ends(0.3, { film: 0, mp: 1 }) === null);
-check('a match rider still stops at the end of the track',
-      ends(1, { film: 0, mp: 1 }) === 'Lap complete.');
+check('solo, finishing the track ends the lap', ends(1, { film: 9 }));
+check('and so does running out of film', ends(0.3, { film: 0 }));
+check('in a match, your own roll running out does NOT end the lap',
+      !ends(0.3, { film: 0, mp: 1 }));
+// ...but once every roll in the room is empty there is nothing left to ride for.
+check('a match ends early when the last roll in the room runs dry',
+      ends(0.3, { film: 0, mp: 1 }, true));
+check('a rider who still has film is not stopped by that',
+      !ends(0.3, { film: 4, mp: 1 }, true));
+check('and a match rider always stops at the end of the track',
+      ends(1, { film: 0, mp: 1 }));
+
+// The room only learns a roll is empty because the rider says so.
+check('running dry is announced to the room', /net\.noFilm\(\)/.test(src));
+check('at the moment the last frame is spent',
+      /if \(state\.mp && !state\.film\) net\.noFilm\(\);/.test(src));
 
 // --- which screen a load lands on --------------------------------------------
 // Three routes, and the one-shot `g` marker is what separates "Ride again"

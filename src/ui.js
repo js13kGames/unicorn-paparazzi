@@ -162,7 +162,7 @@ export function showPhoto(scored, onBack) {
 // The two match views are named after the buttons that swap them, so "Results"
 // and "My Photos" each earn their keep twice. `mine` is that swap: a sub-view,
 // not a mode of its own.
-export function showResults(state, scored, reason, onPick, onNext, rivals, waiting, mine) {
+export function showResults(state, scored, onPick, onNext, rivals, waiting, mine) {
   // Best first. It used to run worst-first so you ended on your best shot, but
   // this is a scoreboard now and the interesting one belongs at the top.
   const order = scored.map((s, i) => i).sort((a, b) => scored[b].total - scored[a].total);
@@ -180,8 +180,8 @@ export function showResults(state, scored, reason, onPick, onNext, rivals, waiti
 
   // Solo: exactly what it always was.
   if (waiting === undefined) {
-    panel('<h1>My Photos</h1><h2>' + reason + '  ·  bank ' + state.bank + '</h2>' + roll +
-          '<p class="hint"><button id="shop">Shop</button> — click a shot</p>');
+    panel('<h1>My Photos</h1><h2>bank ' + state.bank + '</h2>' + roll +
+          '<p class="hint"><button id="shop">Shop</button></p>');
   } else {
     // Your own entry has to carry a photograph and a breakdown like everyone
     // else's, or winning would show a blank card. Rivals send their best shot;

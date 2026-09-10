@@ -112,7 +112,7 @@ const scored = [
   { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colours' }], b: [] },
 ];
 let picked = null, shopped = false;
-ui.showResults({ bank: 1260 }, scored, 'You completed the lap.',
+ui.showResults({ bank: 1260 }, scored,
                (i) => { picked = i; }, () => { shopped = true; });
 const list = nodes.card.innerHTML;
 const order = [...list.matchAll(/data-i="(\d)"/g)].map((m) => +m[1]);

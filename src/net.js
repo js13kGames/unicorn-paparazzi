@@ -4,6 +4,7 @@
 //
 //   {t:'h', i:id}                    I just arrived -- who is here?
 //   {t:'h', i:id, r:1}               a reply to that; r stops it echoing forever
+//   {t:'h', i:id, r:1, e:1}          ...and my roll is empty
 //   {t:'g', s:seed}                  the host started the lap
 //   {t:'d', i:id, n:score, p:shot, b:rows}   someone finished it
 //
@@ -42,10 +43,15 @@ const rows = (v) => (Array.isArray(v) ? v : []).slice(0, 16)
 let ws = null;
 const riders = new Map();          // id -> {n, p}, one result per rider per lap
 const here = new Set();            // everyone in the lobby, us included
+const spent = new Set();           // ...and which of them have no film left
 
 export const online = () => !!ws && ws.readyState === 1;
 export const others = () => [...riders].map(([i, r]) => ({ i, ...r }));
 export const lobby = () => [...here];
+// Once nobody can take another photograph there is nothing left to ride for, so
+// the lap can stop early. Empty means no lobby at all, which is not everyone
+// being out of film -- it is a solo player, and they must never match this.
+export const allSpent = () => here.size > 0 && spent.size >= here.size;
 export const me = () => key(ME);
 
 // onGo(seed) fires when the host starts the lap. onChange() fires whenever the
@@ -78,7 +84,7 @@ export function connect(code, onGo, onChange) {
     // A rider who leaves takes their roster row and their result with them.
     if (e.data[0] === '-') {
       const i = key(e.data.slice(1));
-      if (here.delete(i) | riders.delete(i)) onChange();
+      if (here.delete(i) | riders.delete(i) | spent.delete(i)) onChange();
       return;
     }
     // Anything else is a stranger's text. Parse defensively and check the shape
@@ -90,6 +96,9 @@ export function connect(code, onGo, onChange) {
     if (typeof m.i !== 'string') return;
     if (m.t === 'h') {
       here.add(key(m.i));
+      // "My roll is empty" rides on the hello rather than earning a message type
+      // of its own: this branch already carries an id and already means presence.
+      if (m.e) spent.add(key(m.i));
       // Answer an arrival so it learns about us, but never answer an answer.
       if (!m.r) send({ t: 'h', i: ME, r: 1 });
     } else if (m.t === 'd' && typeof m.n === 'number') {
@@ -114,9 +123,16 @@ export function close() {
   ws = null;
   here.clear();
   riders.clear();
+  spent.clear();
 }
 
 const send = (o) => { if (online()) try { ws.send(JSON.stringify(o)); } catch (e) { /* dropped */ } };
+
+// Flagged as a reply so nobody answers it: this is news, not an arrival.
+export const noFilm = () => {
+  spent.add(key(ME));
+  send({ t: 'h', i: ME, r: 1, e: 1 });
+};
 
 export const go = (seed) => send({ t: 'g', s: seed });
 export const done = (n, p, b) => send({ t: 'd', i: ME, n, p, b });

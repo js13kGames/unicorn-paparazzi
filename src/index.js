@@ -224,6 +224,9 @@ function takePhoto() {
   if (state.film <= 0 || clock < state.ready) return;
   state.ready = clock + CONFIG.shutterTiers[state.shutterTier];
   state.film--;
+  // Tell the room the moment the roll runs out, so the others can know when
+  // every roll in it is empty.
+  if (state.mp && !state.film) net.noFilm();
   ui.flash();
   const photo = photoRig.capture(cam, fov(), herd, state.fx, state.fy, state.res);
   const scored = scorePhoto(photo, CONFIG, state);
@@ -232,9 +235,8 @@ function takePhoto() {
   ui.addThumb(photo.url);
 }
 
-function endRun(reason) {
+function endRun() {
   state.mode = 'results';
-  state.endReason = reason;
   // Borrowed gear earns no money: a multiplayer lap would otherwise be the
   // cheapest way to farm the shop.
   if (!state.mp) for (const s of state.scored) state.bank += s.total;
@@ -263,7 +265,7 @@ function showResults() {
   // A rider who closes the tab leaves the roster, so this reaches zero and the
   // crown settles rather than waiting on someone who is never coming back.
   const waiting = Math.max(0, net.lobby().length - rivals.length - 1);
-  ui.showResults(state, state.scored, state.endReason, showDetail,
+  ui.showResults(state, state.scored, showDetail,
                  state.mp ? home : showShop, rivals,
                  state.mp ? waiting : undefined, ownRoll);
 }
@@ -433,13 +435,18 @@ function frame(now) {
   ui.updateHud(state, CONFIG, lap, clock);
 
   if (state.mode === 'ride') {
-    if (lap >= 1) endRun('Lap complete.');
+    if (lap >= 1) endRun();
     // Solo, an empty roll ends the ride. In a match it must not: everyone rides
     // the same track at the same speed off the same tick clock, so letting the
     // cart run on with a dead shutter is what makes them all finish together --
     // and what stops the first rider to burn their film being thrown off the
     // track while the others are still shooting.
-    else if (!state.mp && state.film <= 0) endRun('Out of film.');
+    // Solo, an empty roll ends the ride at once. In a match it must not: the
+    // first rider to burn their film would be thrown off the track while the
+    // others kept shooting. So the cart runs on with a dead shutter until every
+    // roll in the room is empty -- at which point there is nothing left to ride
+    // for, and everyone stops together.
+    else if (state.film <= 0 && (!state.mp || net.allSpent())) endRun();
   }
 
   requestAnimationFrame(frame);

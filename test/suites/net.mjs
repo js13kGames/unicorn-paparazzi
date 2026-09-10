@@ -161,6 +161,47 @@ check('a long id truncates the same way coming and going',
 // No forget() to test: every lap transition is a page reload, so the board cannot
 // outlive the lap that filled it.
 
+// --- running out of film -------------------------------------------------
+// Once nobody can take another photograph there is nothing left to ride for.
+// "My roll is empty" rides on the hello rather than earning a message type of
+// its own, so what matters is that the flag is read and the tally is right.
+check('a lobby with film left is not spent', net.allSpent(), false);
+
+const roster = net.lobby().length;
+for (const i of net.lobby()) {
+  if (i !== net.me()) deliver('{"t":"h","i":"' + i + '","r":1,"e":1}');
+}
+check('every rival being out is still not everyone', net.allSpent(), false);
+check('and hearing it did not change the roster', net.lobby().length, roster);
+net.noFilm();
+check('our own roll running dry is what completes it', net.allSpent(), true);
+check('and it goes out flagged so nobody answers it', last(), (m) => m.e === 1 && m.r === 1);
+
+// A rider who leaves shrinks the roster. If they were not taken off the spent
+// tally too, the count would pass while someone still had film.
+deliver('{"t":"h","i":"freshrider"}');
+check('a rider arriving with film unspends the room', net.allSpent(), false);
+deliver('-freshrider');
+check('and their leaving settles it again', net.allSpent(), true);
+
+// The subtle one: when the rider who leaves was themselves out of film, both
+// tallies have to drop. Taking them off the roster alone would leave their name
+// in the spent count, and the room would read as finished while someone was
+// still shooting.
+deliver('{"t":"h","i":"quitter","r":1,"e":1}');   // here, and out of film
+deliver('{"t":"h","i":"shooter"}');               // here, still has film
+check('one rider with film left holds the room open', net.allSpent(), false);
+deliver('-quitter');
+check('and a rider who was out of film leaving does not close it',
+      net.allSpent(), false);
+deliver('-shooter');
+check('only the last rider with film leaving closes it', net.allSpent(), true);
+
+// The dangerous empty case: a solo player has no lobby at all, and 0 >= 0 must
+// not read as "everyone is out of film" or their lap would end on the first shot.
+const solo = await import('../.mirror/net.mjs?solo');
+check('a player with no lobby is never spent', solo.allSpent(), false);
+
 // --- hopping to another lobby --------------------------------------------
 // Joining a different code is just another connect. The old room has to be let
 // go of, or you would keep broadcasting into a lobby you left and keep counting
