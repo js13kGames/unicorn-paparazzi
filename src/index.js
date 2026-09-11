@@ -19,7 +19,11 @@ export const CONFIG = {
   cartSpeed: 8,           // world units per second
   eyeHeight: 2.4,
   baseFov: Math.PI / 3,
-  zoomLevels: [1, 2, 4, 8, 16],
+  // The first rung is free and barely a zoom at all: a new player who nudges the
+  // wheel sees the frame tighten by a fifth and learns the lens is there. Without
+  // it the control is dead until the first $400, and nothing on screen says the
+  // camera has a zoom to buy. Everything above it is the ladder as it was.
+  zoomLevels: [1, 1.2, 2, 4, 8, 16],
   // What one frame-share of unicorn is worth on each sensor: 1 / 1.5 / 3 / 6 of
   // the base rate. Size is coverage x this, so a subject filling a tenth of the
   // frame scores 100 on the cheapest camera and 600 on the best.
@@ -75,7 +79,11 @@ const saved = loadSave();
 const state = {
   mode: 'title',
   bank: saved.b || 0,
-  maxZoom: saved.z || 0,
+  // 1, not 0: the free rung is where everyone starts. An older save that stored
+  // an index into the previous ladder reads one rung low, which is a lens you
+  // already paid for -- the save is local and pre-release, so it is not worth
+  // bytes to migrate.
+  maxZoom: saved.z || 1,
   // Clamped: a save from a build with more tiers would index off the end of
   // resBonus, which is a NaN score rather than a visible failure.
   res: Math.min(saved.r || 0, 3),
@@ -99,7 +107,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { maxZoom: 2, res: 3, film: 10, shutterTier: 1 };
+const MP_GEAR = { maxZoom: 3, res: 3, film: 10, shutterTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -121,8 +129,13 @@ if (mpCode && saved.g) {
 // -- the old list showed only the next rung, so nothing on screen ever said
 // what camera you were actually carrying.
 const LADDERS = [
-  ['zoom', CONFIG.zoomLevels, [400, 900, 1800, 3200], 'maxZoom', '×'],
-  ['resolution', CONFIG.resBonus, [500, 1200, 2600], 'res', 'dpi'],
+  // p[0] is the free rung nobody buys -- you start standing on it -- so the
+  // prices are the same four they always were, shifted along by one.
+  ['zoom', CONFIG.zoomLevels, [0, 400, 900, 1800, 3200], 'maxZoom', '×'],
+  // Named for its unit rather than "resolution": the row already reads
+  // `dpi 1500 [3000 $1200]`, so spelling the unit out on every value as well
+  // said it three times over.
+  ['dpi', CONFIG.resBonus, [500, 1200, 2600], 'res', ''],
   ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
 ];
 
@@ -133,12 +146,23 @@ const FILM = 100;
 // Film is not a ladder -- there are no tiers to climb, only frames to stock up
 // on -- but it is shaped like one here so buy() stays a single function: an
 // offer is anything with a price and a way to spend it.
-const frames = (n) => ({ n, price: FILM * n, buy: () => (state.film += n) });
+const frames = (n) => ({ n, price: FILM * n, ok: state.bank >= FILM * n, buy: () => (state.film += n) });
 
-const offers = () => [...LADDERS.map(([label, v, p, key, sfx]) => ({
-  label, v, p, sfx, at: state[key], price: p[state[key]],
-  buy: () => state[key]++,
-})), frames(1), frames(10)];
+// `ok` is affordability, and it is not simply "can I cover the price". With an
+// empty roll the last $100 is not money, it is the next ride: spend it on a
+// lens and the shop has sold you into the dead end, with nothing to photograph
+// and no way to buy anything to photograph it with. So while there is no film,
+// an upgrade has to leave a frame's worth behind. Film itself is exempt -- it
+// IS the way out -- and once there is a roll in the camera the reserve lifts
+// and you may spend to the last dollar.
+const offers = () => {
+  const keep = state.film ? 0 : FILM;
+  return [...LADDERS.map(([label, v, p, key, sfx]) => ({
+    label, v, p, sfx, at: state[key], price: p[state[key]],
+    ok: state.bank - p[state[key]] >= keep,
+    buy: () => state[key]++,
+  })), frames(1), frames(10)];
+};
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 let distance = 0;
@@ -359,9 +383,10 @@ function showShop() {
 
 function buy(i) {
   const o = offers()[i];
-  // A maxed ladder has no price at all, and `bank < undefined` is false -- so
-  // without the second test it would sell you a tier past the top of the ladder.
-  if (!o || !o.price || state.bank < o.price) return;
+  // A maxed ladder has no price at all, and `NaN >= keep` is false -- so `ok`
+  // already refuses it, and the price test only guards against selling a tier
+  // past the top of the ladder for nothing.
+  if (!o || !o.price || !o.ok) return;
   state.bank -= o.price;
   o.buy();
   persist();
@@ -391,18 +416,23 @@ function restart() {
 
 // --- the lobby -----------------------------------------------------------
 
-// Open a room and sit in it. With no code we invent one and are the host; with a
-// code we are joining someone else's, which is also how "join another" hops
-// rooms -- net.connect lets go of the old one for us.
+// The multiplayer card, in or out of a room. No code is the way in -- name
+// yourself, then make a room or walk into one -- and a code is that room, which
+// is also how "join another" hops rooms: net.connect lets go of the old one.
 function lobby(code, host) {
   state.mode = 'lobby';
-  state.code = code || '' + (1000 + (Math.random() * 9000 | 0));
+  state.code = code || '';
   // Taken rather than inferred: booting back into a lobby after a match has to
   // restore whoever was host, and "was a code passed in" cannot tell you that.
-  state.host = code ? host || 0 : 1;
-  net.connect(state.code, state.name, start, refresh);
+  state.host = code && host || 0;
+  if (code) net.connect(code, state.name, start, refresh);
   refresh();
 }
+
+// The only place a room is minted. It used to happen inside lobby() on a missing
+// code, which meant the way IN to multiplayer was already a room you were
+// hosting -- broadcasting before you had so much as a name.
+const create = () => lobby('' + (1000 + (Math.random() * 9000 | 0)), 1);
 
 // The ride begins with a reload, because the world has to be rebuilt from the new
 // seed either way. The hash carries the seed across it and the save carries the
@@ -432,8 +462,11 @@ function rename(v) {
   persist();
 }
 
-// Walking out has to close the socket, or the host keeps counting a ghost.
-function leave() {
+// Walking out has to close the socket, or the host keeps counting a ghost. Back
+// is the way off multiplayer entirely, from either state of the card: it is one
+// page now, so stepping back from the room to the way into it would be stepping
+// back onto the same page.
+function back() {
   net.close();
   state.code = '';
   persist();               // and stop booting into a lobby that was walked out of
@@ -442,9 +475,14 @@ function leave() {
 
 function title() {
   state.mode = 'title';
-  // Reset is only worth offering when there is something to wipe -- and when the
-  // roll and the bank are both empty it is the only thing left to offer at all.
-  ui.showTitle(solo, lobby, saved.v ? restart : 0, broke());
+  // Reset is always offered. It used to be conditional on `saved.v`, but `saved`
+  // is the snapshot taken at boot and nothing refreshes it, so on a first
+  // session the flag stayed false however much you played -- and a player who
+  // burned all ten frames on their first ride reached the dead end with the one
+  // button that gets out of it missing. It only came back after a ride, because
+  // a ride reloads the page and re-reads the save. The cost of always drawing it
+  // is that a brand-new player is offered a wipe of nothing, which does nothing.
+  ui.showTitle(solo, lobby, restart, broke());
 }
 
 // The menu is reachable from the shop without a reload, and by then the world
@@ -465,8 +503,10 @@ function solo() {
 // on their own as riders arrive, finish and leave.
 function refresh() {
   if (state.mode === 'lobby') {
+    // One primary action, picked here rather than in the card: in a room it
+    // starts the ride, out of one it mints the room.
     ui.showLobby(state.code, state.host, net.lobby(), state.name,
-                 host, lobby, leave, rename);
+                 state.code ? host : create, lobby, back, rename);
   } else if (state.mode === 'results') showResults();
 }
 
@@ -531,7 +571,7 @@ function frame(now) {
     takePhoto();
   }
 
-  ui.updateHud(state, ride, clock);
+  ui.updateHud(state, ride, clock, CONFIG.zoomLevels);
 
   if (state.mode === 'ride') {
     if (ride >= 1) endRun();

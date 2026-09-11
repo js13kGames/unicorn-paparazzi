@@ -5,7 +5,9 @@
 //
 //   a start (host)   e ride again   k back    m my photos / results
 //   o join           s shop / rematch         x reset
-//   go solo          mp multiplayer / menu    j code field   n name field
+//   a create / start -- the primary action, whichever state the card is in
+//   go solo          mp multiplayer / menu
+//   j code field     n name field (out of a room only)
 const $ = (id) => document.getElementById(id);
 const el = { hud: $('hud'), film: $('film'), bar: $('bar'),
              flash: $('flash'), panel: $('panel'), card: $('card'), vf: $('vf'),
@@ -26,7 +28,7 @@ export function setChrome(visible) {
   el.film.style.display = d;
 }
 
-export function updateHud(state, ride, clock) {
+export function updateHud(state, ride, clock, zoom) {
   // The frame is the photograph now, so it outlines exactly what will be taken:
   // a fixed 16:9 rectangle, which needs its own inset on each axis.
   el.vf.style.inset = ((1 - state.fy) * 50).toFixed(1) + '% ' +
@@ -44,10 +46,11 @@ export function updateHud(state, ride, clock) {
   // Under the frame count: the lens, or a winding dot while the shutter is
   // still recovering. The bank used to read here, but money is a between-rides
   // number -- what you actually want mid-ride is which zoom you are on, and the
-  // lens has no other readout. CONFIG.zoomLevels is [1, 2, 4, 8, 16], so the
-  // level is just the index shifted; the shop suite holds that ladder to it.
+  // lens has no other readout. The ladder is read rather than derived: it used
+  // to be `1 << state.zoom`, which was true only while every rung was a power of
+  // two, and the free 1.2x rung is not one.
   el.film.innerHTML = 'film <b>' + state.film + '</b><br><small>' +
-    (clock < state.ready ? '·' : '×' + (1 << state.zoom)) + '</small>';
+    (clock < state.ready ? '·' : '×' + zoom[state.zoom]) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
 
@@ -69,6 +72,16 @@ export function hidePanel() {
   el.panel.className = '';
 }
 
+// A code that is not four digits must not send you anywhere: the room name would
+// simply be wrong and you would sit alone in it. Both the Join button and the
+// Enter key ask this.
+const four = (v) => /^\d{4}$/.test(v);
+
+// Read at click time, never from the render: the change event fires on the way
+// out of a field, so by the time a button is clicked these are current. A field
+// that is not on the card at all reads as empty rather than throwing.
+const val = (id) => ($(id) || {}).value || '';
+
 // Every card that has its own buttons stops the click reaching #panel, which
 // otherwise reads any click in title mode as "start riding".
 function onCard(fn) {
@@ -80,10 +93,13 @@ function onCard(fn) {
   };
 }
 
+// The browser tab's name. It lives here rather than in a <title> tag because
+// the same words are on the card below: inside the packed payload the second
+// copy is nearly free, while in the shell it was 32 characters of plain text.
+document.title = 'Unicorn Paparazzi';
+
 export function showTitle(onSolo, onMulti, onReset, lost) {
   // The class centres the title and the buttons in a full-height column.
-  // onReset is falsy when there is nothing saved, and then there is nothing to
-  // offer to wipe.
   //
   // `lost` is the dead end -- no film and no money for any -- and it is this
   // card rather than one of its own, because everything it needs to say is
@@ -92,49 +108,70 @@ export function showTitle(onSolo, onMulti, onReset, lost) {
         (lost ? '<h2>Out of film</h2>'
               : '<p><button id="go">Solo</button></p>' +
                 '<p><button id="mp">Multiplayer</button></p>') +
-        (onReset ? '<p><button id="x">Reset</button></p>' : ''), 't');
+        '<p><button id="x">Reset</button></p>', 't');
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
 }
 
-// Everyone in the room, with the code big enough to read out loud. The roster is
-// live: net.js calls back on every arrival and departure and this redraws.
-export function showLobby(code, host, riders, name, onStart, onJoin, onBack, onName) {
+// The whole of multiplayer, in one card with two states. Out of a room it is the
+// way in: who you are, and the two doors -- make one, or walk into someone
+// else's. In a room it is the roster, live, redrawn by net.js on every arrival
+// and departure. `code` is the switch: empty means no room yet.
+//
+// One card rather than two because almost all of it is shared -- the code field,
+// Join, Back, the Enter key, the four-digit guard and the click router are
+// written once here and serve both states. A second screen would have been a
+// second copy of that scaffolding for the sake of one headline.
+export function showLobby(code, host, riders, name, onGo, onJoin, onBack, onName) {
   // net.js hands these over ready to draw, yours already reading "You!", so
   // there is nothing here to work out about who is who.
   let rows = '';
   for (const nm of riders) rows += row3('class="r"', '', nm, '');
   panel(
-    '<h1>' + code + '</h1>' +
-    '<h2>code</h2>' +
-    '<table>' + rows + '</table>' +
-    // A guest has nothing to do but wait, so the whole join row goes with the
-    // Start button. Hopping to another code from here would mean leaving anyway.
-    '<p class="h">' + (host
-      ? '<button id="a"' + (riders.length > 1 ? '' : ' disabled') +
-        '>Start Game</button>'
+    // The headline is the room's number, or the name of the card when there is
+    // no room yet -- one pair of tags either way rather than one per state.
+    '<h1>' + (code || 'Multiplayer') + '</h1>' +
+    (code
+      // What the number is FOR: the thing you read out to whoever is joining.
+      ? '<h2>Join code</h2><table>' + rows + '</table>'
+      : '<p class="h">name <input id="n" value="' + name + '"></p>') +
+    // Create and Start are the same button: one primary action per state, so
+    // they share an id, a callback and every byte of markup around the label.
+    // A guest has no primary action at all -- only the wait.
+    '<p class="h">' + (!code || host
+      ? '<button id="a"' + (!code || riders.length > 1 ? '' : ' disabled') +
+        '>' + (code ? 'Start' : 'Create') + ' Game</button>'
       : 'waiting for host') + '</p>' +
-    '<p class="h">name <input id="n" value="' + name + '"></p>' +
-    '<p class="h">' + (host
-      ? 'join <input id="j"> <button id="o">Join</button> '
-      : '') + '<button id="k">Back</button></p>'
+    // Only on the way in. Once you are in a room the way to another one is out
+    // of this one, and a join field sitting under your own code invites you to
+    // type the number you are already looking at.
+    (code ? '' : '<p class="h">code <input id="j"> <button id="o">Join Game</button></p>') +
+    '<p class="h"><button id="k">Back</button></p>'
   );
-  // Read at click time, never from the render: the change event fires on the way
-  // out of a field, so by the time a button is clicked these are current.
-  const val = (id) => (document.getElementById(id) || {}).value || '';
-  // Both, or neither: a nameless rider is a riddle on everyone else's roster.
-  const join = () => { if (val('n') && /^\d{4}$/.test(val('j'))) onJoin(val('j')); };
+  // What each door actually needs, live as you type rather than on the way out
+  // of a field: a nameless rider is a riddle on everyone else's roster, and
+  // joining needs somewhere to go as well, so Join stays shut until the code is
+  // a code. A button that lights up before it can do anything is a promise the
+  // card cannot keep.
+  if (!code) {
+    const n = $('n'), j = $('j');
+    (n.oninput = j.oninput = () => {
+      $('a').disabled = !n.value;
+      $('o').disabled = !n.value || !four(j.value);
+    })();
+    // On change, not on every keystroke: this reaches the wire and the save.
+    n.onchange = (e) => onName(e.target.value);
+  }
+  // Enter reaches join() past the disabled button, so the guard stands here too.
+  const join = () => { if (four(val('j'))) onJoin(val('j')); };
   // One handler for the whole card rather than one per field: every key typed in
   // here must stay out of the game's own listeners, or Space fires the shutter.
   el.card.onkeydown = (e) => {
     e.stopPropagation();
     if (e.key === 'Enter') join();
   };
-  // On change, not on every keystroke: this reaches the wire and the save.
-  document.getElementById('n').onchange = (e) => onName(e.target.value);
-  onCard((b) => (b.id === 'a' ? val('n') && onStart()
+  onCard((b) => (b.id === 'a' ? onGo()
                  : b.id === 'k' ? onBack() : join()));
 }
-
 
 const NONE = 0 + ' unicorns';
 // Only the first three need naming; every later index falls through to 'th',
@@ -266,8 +303,11 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
   const row = (label, now, buys) => '<tr class="r"><td class="d">' + label +
     '</td><td class="n"><b class="p">' + now + '</b></td><td class="n">' + buys + '</td></tr>';
   offers.forEach((o, i) => {
+    // index.js decides what you can afford, because affordability is not just
+    // the price: with an empty roll an upgrade must leave a frame's worth in
+    // the bank, or the shop sells you into a dead end.
     const btn = (label) => '<button data-i="' + i + '"' +
-      (state.bank >= o.price ? '' : ' disabled') + '>' + label + '</button>';
+      (o.ok ? '' : ' disabled') + '>' + label + '</button>';
     // A filmless offer is a quantity of frames rather than a rung, so it has no
     // next tier to name -- but it is bought the same way, and a row of its own
     // under the ladders reads better than a stray line of buttons below them.

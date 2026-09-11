@@ -3,9 +3,24 @@
 
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>Unicorn Paparazzi</title>
-  <meta name="theme-color" content="#9ce">
+  <!-- No user-scalable=no: maximum-scale=1 already stops the pinch on Android,
+       and Safari has ignored both since iOS 10 -- there it is `touch-action:
+       none` below and the gesturestart handler in index.js that actually hold
+       the zoom off. So it was 17 characters of shell, which is the most
+       expensive place in the archive to keep a duplicate. -->
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <!-- No <title> and no theme-color: everything left in the shell is the one
+       part of the archive Roadroller never sees -- it has to stay parseable
+       HTML -- so it costs close to raw bytes. The title is set from ui.js
+       instead, where the same words are already written on the title card and
+       cost the packer almost nothing the second time. The tab is nameless for
+       the instant before the script runs. Comments here are stripped at build
+       time, so saying so is free. -->
+  <!-- No theme-color: the shell is the one part of the archive Roadroller never
+       sees -- it has to stay parseable HTML -- so its characters cost close to
+       raw bytes in the zip. That one meta tag measured 26 of them, which bought
+       a tinted address bar on mobile and nothing else. Comments here are
+       stripped at build time, so saying so is free. -->
   <style>
     /* Deliberately lean: this stylesheet rides inside the compressed payload,
        and unique prose is the one thing the packer cannot squeeze. */

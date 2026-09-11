@@ -44,10 +44,23 @@ function fold(html) {
     'document.head.insertAdjacentHTML("beforeend","<style>"+' + lit(style[1]) + '+"<\\/style>");' +
     'document.body.innerHTML=' + lit(markup) + ';';
 
-  // What is left is the shell the browser parses before the script runs.
+  // What is left is the shell the browser parses before the script runs. It is
+  // the one part of the archive Roadroller never sees -- it has to stay
+  // parseable HTML -- so every character in it costs close to a raw byte, and
+  // the structural tags are the cheapest thing in the file to give up: <html>,
+  // <head>, </head>, </body> and </html> are all OPTIONAL, inferred by the
+  // parser, and dropping them measured 37 bytes. (14 of those are lang="en";
+  // put the attribute back if the a11y matters more than the room.)
+  //
+  // <body> itself must STAY. Without it the parser is still in head context
+  // when it reaches the script, document.body is null, and the bootstrap's
+  // first assignment throws -- a blank page, in the build, with no test that
+  // renders real HTML to catch it. Hence the assertion below.
   const shell = html
     .replace(/<style>[\s\S]*?<\/style>/, '')
-    .replace(/<body>[\s\S]*?<\/body>/, '<body></body>');
+    .replace(/<body>[\s\S]*?<\/body>/, '<body>')
+    .replace(/<\/?html[^>]*>|<\/?head>/g, '');
+  if (!/<body>$/.test(shell)) throw new Error('the shell must end at <body>, or the bootstrap runs before there is a body to fill');
   return { boot, shell };
 }
 
@@ -89,8 +102,9 @@ const SEED = Number(process.env.RR_SEED || 101);
   await verifyRoundTrip(packed, source);
 
   // The shell carries nothing but the script; the bootstrap builds the rest.
-  const page = shell.replace('</body>', '<script>' + packed + '</script></body>');
-  if (!page.includes(packed)) throw new Error('could not find </body> to inline into');
+  // It ends at <body>, so the script simply follows it -- there is no closing
+  // tag left to inject before.
+  const page = shell + '<script>' + packed + '</script>';
 
   const single = path.join(DOCS, 'dist');
   fs.mkdirSync(single, { recursive: true });

@@ -52,11 +52,14 @@ const hits = [];
 const showTitle = (reset, lost) =>
   ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost);
 
-// A player with nothing saved has nothing to reset, so they are not offered it.
 showTitle(0);
 check('the title offers both ways in', /id="go"[\s\S]*id="mp"/.test(card()));
-check('and no Reset until there is a save to wipe',
-      card(), (h) => !h.includes('id="x"'));
+// Reset is unconditional. It used to be hidden until index.js could see a save,
+// but that flag is read once at boot and never refreshed, so a first-session
+// player who burned their whole roll met the dead end with no way off it. The
+// price of always drawing it is a wipe offered to someone with nothing to wipe.
+check('and Reset, always, because the dead end needs it',
+      card(), (h) => h.includes('id="x"'));
 click('mp');
 check('the multiplayer button opens the lobby', hits.pop(), 'mp');
 check('and the click never reaches the panel underneath', stopped);
@@ -64,7 +67,7 @@ click('go');
 check('the other button rides alone', hits.pop(), 'solo');
 
 showTitle(() => hits.push('reset'));
-check('a returning player is offered Reset', card(), (h) => h.includes('>Reset<'));
+check('a returning player is offered Reset too', card(), (h) => h.includes('>Reset<'));
 click('x');
 check('and it wipes rather than riding', hits.pop(), 'reset');
 
@@ -82,10 +85,13 @@ check('leaving Reset as the only way on', lost, (h) => h.includes('>Reset<'));
 click('x');
 check('which still wipes', hits.pop(), 'reset');
 
-// --- the lobby -----------------------------------------------------------
+// --- the multiplayer card ------------------------------------------------
+// One card, two states: no code is the way in (name yourself, then make a room
+// or walk into one), a code is the room itself.
 const seen = [];
 const show = (code, host, riders, name = 'Ada') => {
-  ui.showLobby(code, host, riders, name, () => seen.push('start'),
+  ui.showLobby(code, host, riders, name,
+               () => seen.push(code ? 'start' : 'create'),
                (c) => seen.push('join:' + c), () => seen.push('back'),
                (v) => seen.push('name:' + v));
   // A browser fills the field in from the value attribute; the stub does not, so
@@ -93,6 +99,63 @@ const show = (code, host, riders, name = 'Ada') => {
   const f = document.getElementById('n');
   if (f) f.value = name;
 };
+
+// --- out of a room: who you are, and the two doors ------------------------
+show('', 0, []);
+check('the way in names itself rather than a room',
+      card(), (h) => h.includes('<h1>Multiplayer</h1>') && !h.includes('<h2>Join code'));
+check('and there is no roster to draw yet', card(), (h) => !h.includes('<table>'));
+check('both doors are offered at once, no toggle in between',
+      card(), (h) => h.includes('>Create Game<') && h.includes('id="j"') && h.includes('id="o"'));
+check('the name field carries what you are called',
+      card(), (h) => h.includes('id="n"') && h.includes('value="Ada"'));
+// Create and Start are the same button -- one primary action per state -- so
+// out of a room it can only read as Create.
+check('and it is Create out here, never Start', card(), (h) => !h.includes('Start'));
+
+// The gate: what each door actually needs, live as you type rather than when you
+// leave the field. Create needs a name; Join needs a name AND somewhere to go.
+const n = document.getElementById('n');
+const jf = document.getElementById('j');
+n.value = ''; jf.value = '';
+n.oninput();
+check('a nameless rider cannot create', document.getElementById('a').disabled, true);
+check('nor join', document.getElementById('o').disabled, true);
+n.value = 'Ada';
+n.oninput();
+check('typing a name opens Create', document.getElementById('a').disabled, false);
+// The old gate opened Join on the name alone, which lit a door the four-digit
+// guard then quietly refused to let anyone walk through.
+check('but Join needs a code as well as a name',
+      document.getElementById('o').disabled, true);
+jf.value = '12';
+jf.oninput();
+check('and half a code is not a code', document.getElementById('o').disabled, true);
+jf.value = '1234';
+jf.oninput();
+check('four digits and a name opens Join', document.getElementById('o').disabled, false);
+
+click('a');
+check('Create mints a room without a code', seen.pop(), 'create');
+check('and the click never reaches the panel', stopped);
+click('o');
+check('Join walks into the one you were given', seen.pop(), 'join:1234');
+// Enter reaches join() past the button, so the four-digit guard stands there
+// too rather than only on the button's disabled attribute.
+nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
+check('and Enter does the same', seen.pop(), 'join:1234');
+jf.value = 'abcd';
+nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
+check('but Enter on a non-numeric code goes nowhere', seen.length, 0);
+jf.value = '77';
+nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
+check('and a short one likewise', seen.length, 0);
+jf.value = '1234';
+n.onchange({ target: { value: 'Bo' } });
+check('the name is reported once, on change rather than per keystroke',
+      seen.pop(), 'name:Bo');
+click('k');
+check('and Back is the way off multiplayer', seen.pop(), 'back');
 
 // net.js hands the roster over already named, yours reading "You!", so there is
 // nothing here to work out about which rider is which.
@@ -107,32 +170,14 @@ check('and now the host can start', card(), (h) => /id="a"(?! disabled)/.test(h)
 click('a');
 check('starting is routed to the host handler', seen.pop(), 'start');
 
-// Typing a code and joining, on the host's screen -- the only one that offers
-// it. A code that is not four digits must not send you anywhere: the room name
-// would simply be wrong and you would sit alone in it.
-// Nothing happens without a name, however good the code is: an anonymous rider
-// is a riddle on everyone else's roster.
-const j = document.getElementById('j');
-j.value = '1234';
-document.getElementById('n').value = '';
-click('o');
-check('a code with no name is refused', seen.length, 0);
-click('a');
-check('and so is starting a ride nameless', seen.length, 0);
-document.getElementById('n').value = 'Ada';
-
-j.value = '77';
-click('o');
-check('a short code is refused', seen.length, 0);
-j.value = 'abcd';
-click('o');
-check('and a non-numeric one too', seen.length, 0);
-j.value = '1234';
-click('o');
-check('four digits joins that room', seen.pop(), 'join:1234');
-// One keydown handler covers the whole card rather than one per field.
-nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
-check('and Enter does the same', seen.pop(), 'join:1234');
+// A code that is not four digits must not send you anywhere: the room name would
+// simply be wrong and you would sit alone in it.
+check('a room has no name field: you named yourself on the way in',
+      card(), (h) => !h.includes('id="n"'));
+// Once you are in a room, the way to another one is out of this one -- a join
+// field under your own code just invites you to type the number you can see.
+check('and no join field either', card(), (h) => !h.includes('id="j"'));
+check('nor a Join button', card(), (h) => !h.includes('id="o"'));
 
 // Space is the shutter everywhere else in the game; inside a text field it has
 // to be a keystroke, so the card swallows the event rather than firing a photo.
@@ -140,29 +185,16 @@ let swallowed = false;
 nodes.card.onkeydown({ key: ' ', stopPropagation: () => { swallowed = true; } });
 check('typing in the lobby keeps Space away from the shutter', swallowed);
 
-// --- naming yourself -----------------------------------------------------
-check('the name field is offered, carrying what you are called',
-      card(), (h) => h.includes('id="n"') && h.includes('value="Ada"'));
-document.getElementById('n').onchange({ target: { value: 'Bo' } });
-check('changing it is reported once, on change rather than per keystroke',
-      seen.pop(), 'name:Bo');
-
 click('k');
-check('back leaves the lobby', seen.pop(), 'back');
+check('back leaves the room', seen.pop(), 'back');
 
 // --- the guest's screen --------------------------------------------------
 show('4821', 0, ['You!', 'rider aaaa']);
 check('a guest is told to wait instead of being offered the button',
       card(), (h) => h.includes('waiting for host') && !h.includes('id="a"'));
-// Nothing to do but wait, so the join row goes with the Start button. Wiring a
-// handler onto a field that is no longer drawn would throw on the null.
-check('and the join field is not drawn at all', card(), (h) => !h.includes('id="j"'));
-check('nor the Join button', card(), (h) => !h.includes('id="o"'));
-// The name is yours, not the room's, so a guest still gets to set it.
-check('but a guest can still name themselves', card(), (h) => h.includes('id="n"'));
-// join() has to survive the field it reads being absent.
+// join() has to survive the field it reads not being on the card at all.
 nodes.card.onkeydown({ key: 'Enter', stopPropagation() {} });
-check('and Enter with no code field does not throw', true);
+check('and Enter with no code field does not throw', seen.length, 0);
 check('but they can still walk out', card(), (h) => h.includes('id="k"'));
 click('k');
 check('and that still works', seen.pop(), 'back');

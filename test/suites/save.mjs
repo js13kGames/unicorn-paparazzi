@@ -89,7 +89,9 @@ check('and an empty roll stays empty rather than falling back', dry.film === 0, 
 
 const fresh = restore({});
 check('a fresh player starts at zero everywhere but the roll',
-      !fresh.bank && !fresh.maxZoom && !fresh.res && !fresh.shutterTier);
+      // ...but the zoom starts on the free rung, not at nothing: index 1 is the
+      // 1.2x step every camera owns so the wheel does something on day one.
+      !fresh.bank && fresh.maxZoom === 1 && !fresh.res && !fresh.shutterTier);
 check('and a fresh player is staked ten frames', fresh.film === 10, String(fresh.film));
 
 // res indexes resBonus/resNames directly, so an out-of-range save used to give a
@@ -168,6 +170,12 @@ const titled = (film, bank) => {
 check('the title shows the dead end when there is no way to buy a frame',
       titled(0, 0) === true);
 check('and does not when there is', titled(0, FILM) === false);
+// The dead end's only way out is Reset, so title() must never decide not to
+// draw it. It used to hand ui.showTitle a falsy handler when the boot-time save
+// snapshot had no version -- which on a first session it never did, however far
+// the player got -- and the screen became a wall.
+check('and Reset is handed over unconditionally, never gated on the save',
+      !/saved\.v \?/.test(titleSrc), titleSrc);
 
 // A frame is money now, so it has to leave the save the instant it is spent.
 // Without this a reload mid-ride hands the frames back and the roll is free.
@@ -234,6 +242,22 @@ check('the exact price is affordable', spend(1000, 0, 10).film === 10);
 const short = spend(999, 0, 10);
 check('a pound short buys nothing', short.film === 0 && short.bank === 999,
       JSON.stringify(short));
+
+// buy() is the till, and it does not trust the card it was handed: the shop
+// greys an upgrade that would eat your last frame's worth, but the guard has to
+// stand here too, or the only thing between the player and the dead end is a
+// disabled attribute.
+const sell = (offer) => {
+  const state = { bank: 450, film: 0 };
+  new Function('state', 'offers', 'persist', 'showShop', buySrc + ';buy(0)')(
+    state, () => [offer], () => {}, () => {});
+  return state;
+};
+const refused = sell({ price: 400, ok: false, buy() {} });
+check('an upgrade marked unaffordable is refused at the till',
+      refused.bank === 450, String(refused.bank));
+const sold = sell({ price: 400, ok: true, buy() {} });
+check('and one marked affordable still sells', sold.bank === 50, String(sold.bank));
 
 // --- the multiplayer ride -------------------------------------------------
 // A multiplayer ride rides borrowed gear. Two things have to hold or it quietly
@@ -344,6 +368,50 @@ check('and drops the seed, so it does not stick to the next ride',
 // The plain case has always worked, because the target URL was byte-identical.
 const plain = navigate('home', 'index.html', 'home()');
 check('and it still reloads when there was no seed to drop', plain.reloads > 0);
+
+// --- the way into a room --------------------------------------------------
+// The multiplayer card is one screen with two states, and which state you are in
+// is `state.code`. These pin the wiring around that, because a mismatch here is
+// invisible: the suites that render the card never run index.js, so a handler
+// wired to a function that no longer exists still passes every other check.
+const roomBlock = (name) => navBlock(name);
+const room = (name, call, code = '') => {
+  const state = { code, mode: 'lobby' };
+  const net = { connected: null, closed: 0,
+                connect: (c) => { net.connected = c; }, close: () => { net.closed++; } };
+  let titled = 0;
+  new Function('state', 'net', 'refresh', 'persist', 'title', 'start',
+               roomBlock('lobby') + ';' + roomBlock(name === 'lobby' ? 'back' : name) +
+               ';' + call)(
+    state, net, () => {}, () => {}, () => { titled++; }, () => {});
+  return { state, net, titled };
+};
+
+// Out of a room, the card is the way in: nothing is minted and nothing connects,
+// or "Multiplayer" would put you on the air before you had a name.
+const wayIn = room('back', 'lobby()');
+check('the way in mints no room', wayIn.state.code === '');
+check('and opens no socket', wayIn.net.connected === null);
+
+// Create is the only place a room is minted, and it hosts the room it mints.
+const made = room('create', 'create()');
+check('Create mints a four-digit room', /^\d{4}$/.test(made.state.code), made.state.code);
+check('and connects to exactly that room', made.net.connected === made.state.code);
+check('and you host what you made', made.state.host === 1);
+
+// Joining takes the code as given and does not host it.
+const joined = room('back', "lobby('4821')");
+check('joining uses the code you were given', joined.state.code === '4821');
+check('and connects to it', joined.net.connected === '4821');
+check('and a guest does not host', !joined.state.host);
+
+// Back is the way off multiplayer from either state: the socket goes, or the
+// host keeps counting a ghost, and the code goes, or the next boot walks
+// straight back into the room you just left.
+const left = room('back', 'back()', '4821');
+check('Back closes the socket', left.net.closed === 1);
+check('and forgets the room', left.state.code === '');
+check('and lands on the main menu', left.titled === 1);
 
 // --- what ends a ride -----------------------------------------------------
 // Solo, an empty roll ends the ride. In a match it must not: the first rider to
