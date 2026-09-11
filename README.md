@@ -1,5 +1,11 @@
 ## Unicorn Snap — js13k 2026
 
+**Play: [thbrown.github.io/js13k-2026](https://thbrown.github.io/js13k-2026/)**
+
+<img src="docs/qr.svg" alt="QR code to play Unicorn Snap" width="150" height="150">
+
+Scan to join a multiplayer room from your phone.
+
 Theme: **Rainbows and Unicorns**.
 
 A cart carries you once around a rail loop through a procedurally generated
