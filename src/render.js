@@ -157,7 +157,7 @@ export function createRenderer(canvas, world, herd) {
   // once here: the terrain's own buffers stay bound to the same slots in its
   // own VAO, and nothing else ever looks at them.
   const water = vao(gl, [[P, buffer(gl, wPos), 3, gl.FLOAT, false]]);
-  gl.vertexAttrib4f(C, 46 / 255, 108 / 255, 190 / 255, 1);
+  gl.vertexAttrib4f(C, 46 / 255, 108 / 255, 190 / 255, 165 / 255);
   gl.vertexAttrib4f(NM, 0, 1, 0, 0);
 
   // --- herd ---
@@ -220,15 +220,24 @@ export function createRenderer(canvas, world, herd) {
 
     // The sea is one flat quad, drawn here while the terrain program and its
     // uniforms are still current -- so it costs a bind and a draw and nothing
-    // else. It used to be a translucent pass of its own at the end of the frame,
-    // which bought a glimpse of the shallows through the surface for a blend
-    // mode, a blend function and a depth-mask dance around it. Opaque, the
-    // shoreline still reads: the fog and the sun in shade() are what make it
-    // water, not what is underneath it. Skipped in the ID pass, where the sea is
-    // not a subject and the sea floor is the thing being measured.
+    // else. TERRAIN_FS already writes vc.a, and the quad's colour is a constant
+    // vertex attribute, so the translucency is just the alpha it is set with:
+    // everything below is the depth-mask dance around it, which is what stops a
+    // surface that does not occlude from writing depth as if it did.
+    //
+    // It does NOT need a pass of its own at the end of the frame, which is what
+    // it used to have. Nothing is ever drawn between the eye and the surface: no
+    // unicorn spawns in the sea, and the eye rides 2.4 above the rails, so no
+    // ray to an animal crosses the plane. Skipped in the ID pass, where the sea
+    // is not a subject and the sea floor is the thing being measured.
     if (!idPass) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
       gl.bindVertexArray(water);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
 
     gl.useProgram(hp);

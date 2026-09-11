@@ -16,7 +16,11 @@ export const CONFIG = {
   poseWeights: [0.80, 0.10, 0.08, 0.02],
   trackRadiusFrac: 0.25,
   shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive
-  cartSpeed: 8,           // world units per second
+  // World units per second, per drive train. A faster cart covers more of the
+  // loop between one frame and the next, so the same roll of film sees more of
+  // the map -- and more of the combinations that are only worth photographing
+  // together. Pinned for everyone in a match; see MP_GEAR.
+  cartTiers: [8, 10, 13, 17],
   eyeHeight: 2.4,
   baseFov: Math.PI / 3,
   // The first rung is free and barely a zoom at all: a new player who nudges the
@@ -73,7 +77,7 @@ function persist() {
       // No SAVE_VERSION bump: a save from before the escalating price simply
       // has no `s`, which reads 0, which prices film at $100 -- exactly what
       // that save already expected. A bump would cost bytes and change nothing.
-      s: state.rides,
+      s: state.rides, d: state.cartTier,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
@@ -99,6 +103,10 @@ const state = {
   ready: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
   shutterTier: saved.t || 0,
+  // No SAVE_VERSION bump, for the same reason as `s` below: a save from before
+  // the drive train simply has no `d`, which reads 0, which is the rung every
+  // one of those saves was already standing on.
+  cartTier: saved.d || 0,
   // Rides finished, and so the price of a frame: film costs $100 x this. It is
   // the only number in the save that only ever goes up, and the reason a solo
   // game ends -- see price() below.
@@ -115,7 +123,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { maxZoom: 3, res: 3, film: 10, shutterTier: 1 };
+const MP_GEAR = { maxZoom: 3, res: 3, film: 10, shutterTier: 1, cartTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -145,7 +153,13 @@ const LADDERS = [
   // said it three times over.
   ['dpi', CONFIG.resBonus, [500, 1200, 2600], 'res', ''],
   ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
+  // `speed` is already the shutter's, so this one is named for the thing that
+  // moves rather than the movement.
+  ['cart', CONFIG.cartTiers, [400, 1000, 2200], 'cartTier', ''],
 ];
+
+// How fast the cart is running, in world units per second.
+const pace = () => CONFIG.cartTiers[state.cartTier];
 
 // Dollars a frame. A photograph has to beat this to have been worth taking,
 // which is the whole reason the shutter is worth aiming.
@@ -564,7 +578,7 @@ let acc = 0;
 
 function tick() {
   clock += STEP;
-  distance += CONFIG.cartSpeed * STEP;
+  distance += pace() * STEP;
   updateHerd(herd, world, CONFIG, STEP);
 }
 
@@ -581,7 +595,7 @@ function frame(now) {
   // The cart alone is smoothed across the leftover accumulator, so it does not
   // judder on a display faster than the tick rate. Presentation only -- this
   // never feeds back into the simulation.
-  const p = pathAt(world.path, distance + CONFIG.cartSpeed * acc);
+  const p = pathAt(world.path, distance + pace() * acc);
   cam.x = p.x;
   // Ride the rails: the ground where there is ground, the span where there is not.
   cam.y = Math.max(elevAt(world, p.x, p.z), p.y) + CONFIG.eyeHeight;

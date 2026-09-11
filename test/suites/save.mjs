@@ -68,7 +68,8 @@ const restore = (saved) => {
     return new Function('saved', 'return ' + m[1])(saved);
   };
   return { bank: grab('bank'), maxZoom: grab('maxZoom'), res: grab('res'),
-           film: grab('film'), shutterTier: grab('shutterTier'), rides: grab('rides') };
+           film: grab('film'), shutterTier: grab('shutterTier'), rides: grab('rides'),
+           cartTier: grab('cartTier') };
 };
 
 const old = restore({ v: 2, b: 4200, z: 2, r: 1, f: 3, a: [0,0,0,0,0,0,0] });
@@ -97,6 +98,13 @@ check('and a fresh player is staked ten frames', fresh.film === 10, String(fresh
 // read as "one ride's worth" rather than zero -- zero would be free film, which
 // is the failure state sold back to anyone with an old save.
 check('a fresh player has taken no rides', fresh.rides === 0, String(fresh.rides));
+// The drive train took no SAVE_VERSION bump, so every save ever written is
+// missing `d` -- and every one of them was standing on rung 0 when it was
+// written, which is exactly what a missing key reads as.
+check('a fresh player is on the slowest cart', fresh.cartTier === 0, String(fresh.cartTier));
+check('and so is every save written before the cart could be bought',
+      restore({ v: 4, b: 900, f: 3 }).cartTier === 0);
+check('a save that has bought one keeps it', restore({ v: 4, d: 2 }).cartTier === 2);
 check('a save from before the counter existed reads as none taken',
       restore({ v: 4, b: 900, f: 3 }).rides === 0);
 check('and one that has been ridden keeps its count',
@@ -246,12 +254,14 @@ const persisted = (st) => {
   return out;
 };
 const kit = { shutterTier: 1, go: 0, code: '', host: 0, name: 'Ann',
-              bank: 900, maxZoom: 2, res: 1, film: 7 };
+              bank: 900, maxZoom: 2, res: 1, film: 7, cartTier: 2 };
 const w = persisted(kit);
 check('the save writes the roll under `f`', w.f === 7, JSON.stringify(w));
 check('and the bank under `b`', w.b === 900);
 check('and stamps the version it was written by', w.v === VERSION);
 check('what is written comes back as what it was', restore(w).film === 7);
+check('and the cart rung rides along under `d`', w.d === 2, JSON.stringify(w));
+check('which also comes back as what it was', restore(w).cartTier === 2);
 // Borrowed gear must never reach the save, or a match would overwrite the roll
 // it was lent.
 check('a multiplayer ride writes nothing at all', persisted({ ...kit, mp: 1 }) === null);

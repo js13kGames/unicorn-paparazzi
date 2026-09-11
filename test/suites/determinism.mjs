@@ -31,7 +31,7 @@ const check = (name, got, want) => {
 const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
               trackRadiusFrac:.25, unicornDensity:.003, driftChance:.08,
               poseWeights:[.80,.10,.08,.02],
-              cartSpeed:8 };
+              cartTiers:[8,10,13,17] };
 const w = buildWorld(4242, cfg);
 
 // --- the shipped frame loop, driven by a fake clock -----------------------
@@ -99,6 +99,7 @@ const hash = (h) => {
   const mix = (v) => { a = Math.imul(a ^ (Math.round(v * 4096) | 0), 16777619) >>> 0; };
   for (let i = 0; i < h.n; i++) {
     mix(h.x[i]); mix(h.z[i]); mix(h.pose[i]); mix(h.phase[i]); mix(h.step[i]); mix(h.hold[i]);
+    mix(h.yaw[i]); mix(h.speed[i]);
   }
   return a;
 };

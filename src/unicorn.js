@@ -16,6 +16,7 @@ export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet'
 
 export const POSE_NAMES = ['standing', 'eating', 'sitting', 'neighing'];
 export const POSE_FRAMES = 16;
+const TAU = Math.PI * 2;
 export const POSE_ROWS = POSE_NAMES.length * POSE_FRAMES;
 
 // --- skeleton ------------------------------------------------------------
@@ -100,7 +101,7 @@ export function buildModel() {
 // part plus a body lift, which is all the articulation this model needs.
 function poseAngles(pose, ph) {
   const a = new Float32Array(PARTS * 2);
-  const s = Math.sin(ph * Math.PI * 2), s2 = Math.sin(ph * Math.PI * 4);
+  const s = Math.sin(ph * TAU), s2 = Math.sin(ph * TAU * 2);
   let lift = 0;
   const set = (p, rx, rz) => { a[p * 2] = rx; a[p * 2 + 1] = rz || 0; };
 
@@ -234,7 +235,9 @@ function makeHerd(list, cfg, seed) {
     toX: Float32Array.from(list.x),
     toZ: Float32Array.from(list.z),
     step: new Float32Array(n),          // progress through the current step
+    speed: new Float32Array(n),         // how fast this one walks, around 1
     yaw: new Float32Array(n),
+    aim: new Float32Array(n),           // the heading yaw is turning towards
     color: Uint8Array.from(list.color),
     horns: Uint8Array.from(list.horns),
     pose: new Uint8Array(n),
@@ -243,7 +246,12 @@ function makeHerd(list, cfg, seed) {
     instances: new Float32Array(n * 8),
   };
   for (let i = 0; i < n; i++) {
-    h.yaw[i] = rnd() * Math.PI * 2;
+    h.aim[i] = h.yaw[i] = rnd() * TAU;
+    // Irwin-Hall n=3: a bell centred on 1 that tails off around 0.5x and 1.5x.
+    // Three uniform draws are the cheapest normal-ish distribution there is, and
+    // they sit in the loop that already draws five times per animal -- which is
+    // what keeps the count unconditional, and the herd the same on both machines.
+    h.speed[i] = 0.5 + (rnd() + rnd() + rnd()) / 3;
     h.phase[i] = rnd();
     h.step[i] = rnd();
     h.pose[i] = rollPose(rnd(), cfg.poseWeights);
@@ -276,7 +284,7 @@ export function updateHerd(h, world, cfg, dt) {
 
     // Only a standing unicorn wanders; the other poses are stationary.
     if (h.pose[i] === 0) {
-      h.step[i] += dt / STEP_TIME;
+      h.step[i] += dt * h.speed[i] / STEP_TIME;
       while (h.step[i] >= 1) {
         h.step[i] -= 1;
         h.fromX[i] = h.toX[i];
@@ -289,13 +297,21 @@ export function updateHerd(h, world, cfg, dt) {
         if (ok && (dx || dz)) {
           h.toX[i] = nx;
           h.toZ[i] = nz;
-          h.yaw[i] = Math.atan2(-dx, -dz);
+          h.aim[i] = Math.atan2(-dx, -dz);
         }
       }
       const t = h.step[i];
       const e = t * t * (3 - 2 * t);        // ease so steps don't look robotic
       h.x[i] = h.fromX[i] + (h.toX[i] - h.fromX[i]) * e;
       h.z[i] = h.fromZ[i] + (h.toZ[i] - h.fromZ[i]) * e;
+      // Turn to face where the step is going rather than snapping to it. The
+      // headings are 45 degrees apart, so a snap read as the whole animal
+      // flicking round between one footfall and the next. Shortest way round,
+      // or a turn across the seam would spin the long way. No rnd() in here, so
+      // the draw sequence -- and the shared herd -- is untouched.
+      let d = h.aim[i] - h.yaw[i];
+      d -= Math.round(d / TAU) * TAU;
+      h.yaw[i] += d * Math.min(1, dt * 8);
     }
   }
 }

@@ -84,7 +84,7 @@ module.exports = {
                 // The ladder keys. LADDERS carries these as strings and index.js
                 // spends them as `state[key]`, so the dotted reads elsewhere have to
                 // keep matching the string.
-                'maxZoom', 'res', 'shutterTier',
+                'maxZoom', 'res', 'shutterTier', 'cartTier',
               ],
             },
           },

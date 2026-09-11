@@ -20,6 +20,7 @@ const cfg = {
   // is a price nobody pays and the ladder is one longer than the money.
   zoomLevels: [1, 1.2, 2, 4, 8, 16], resBonus: [1000, 1500, 3000, 6000],
   shutterTiers: [0.8, 0.55, 0.35, 0.2],
+  cartTiers: [8, 10, 13, 17],
 };
 
 // The same shape src/index.js offers() builds, without booting the game.
@@ -27,8 +28,13 @@ const LADDERS = [
   ['zoom', cfg.zoomLevels, [0, 400, 900, 1800, 3200], 'maxZoom', '×'],
   ['dpi', cfg.resBonus, [500, 1200, 2600], 'res', ''],
   ['speed', cfg.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
+  ['cart', cfg.cartTiers, [400, 1000, 2200], 'cartTier', ''],
 ];
 const FILM = 100;
+// Film is appended after the ladders, so its button index is however many
+// ladders there are. Derived, because spelling it out is what broke these
+// checks when the cart ladder arrived.
+const FILM_I = LADDERS.length;
 // Mirrors index.js price(): a frame costs a hundred dollars per ride taken, and
 // `|| 1` keeps the very first shop visit from handing out free film.
 const price = (st) => FILM * (st.rides || 1);
@@ -54,7 +60,7 @@ const check = (name, got, want) => {
 
 const render = (st) => {
   const state = { bank: 2140, film: 12,
-                  maxZoom: 1, res: 0, shutterTier: 0, ...st };
+                  maxZoom: 1, res: 0, shutterTier: 0, cartTier: 0, ...st };
   ui.showShop(state, cfg, offersFor(state), () => {}, () => {}, () => {});
   return nodes.card.innerHTML;
 };
@@ -65,7 +71,7 @@ const text = mid.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 console.log('        ' + text.slice(0, 220) + '\n');
 
 check('the ladders are named', text,
-      (t) => /zoom/.test(t) && /dpi/.test(t) && /speed/.test(t));
+      (t) => /zoom/.test(t) && /dpi/.test(t) && /speed/.test(t) && /cart/.test(t));
 // No header row: it measured 35 bytes, and the columns read without one.
 check('the table carries no header row', mid, (h) => !/current|Upgrade/.test(h));
 
@@ -89,7 +95,7 @@ check('the table is three columns all the way down', mid, (h) => {
   const cells = [...h.matchAll(/<tr class="r">([\s\S]*?)<\/tr>/g)]
     .map((m) => (m[1].match(/<td/g) || []).length);
   console.log('        rows x cells: ' + cells.join(' '));
-  return cells.length === 4 && new Set(cells).size === 1 && cells[0] === 3;
+  return cells.length === 5 && new Set(cells).size === 1 && cells[0] === 3;
 });
 
 // --- film is a stock, but it is still a row ---
@@ -118,7 +124,7 @@ check('a frame beyond the bank is offered but disabled', dear,
       (h) => /<button[^>]*disabled[^>]*>\+1 \$400<\/button>/.test(h));
 
 check('one button per ladder, plus the one film quantity',
-      (mid.match(/data-i="\d"/g) || []).length, 4);
+      (mid.match(/data-i="\d"/g) || []).length, FILM_I + 1);
 // Money is marked as money everywhere it appears, so a price is never read as
 // a tier value.
 check('the header is the bank alone, since film has its own row', mid,
@@ -142,7 +148,7 @@ check('an empty roll cannot be ridden', dry, (h) => /id="e" disabled/.test(h));
 // at, so the reason sits under both buttons in the loss color.
 check('and a line under the buttons says why', dry, (h) => /class="h m">no film</.test(h));
 check('but can still be refilled, since the money is there', dry,
-      (h) => /data-i="3"(?! disabled)/.test(h));
+      (h) => new RegExp('data-i="' + FILM_I + '"(?! disabled)').test(h));
 const loaded = render({ film: 1, bank: 0 });
 check('and a single frame is enough to ride on', loaded, (h) => !/id="e" disabled/.test(h));
 check('and then nothing says otherwise', loaded, (h) => !/no film/.test(h));
@@ -160,7 +166,7 @@ check('with no film, an upgrade that eats the last frame is refused', corner,
 check('while one that leaves a frame behind is still on sale', corner,
       (h) => /data-i="2"(?! disabled)/.test(h));
 check('but film itself is always on sale -- it is the way out', corner,
-      (h) => /data-i="3"(?! disabled)/.test(h));
+      (h) => new RegExp('data-i="' + FILM_I + '"(?! disabled)').test(h));
 // Exactly a frame's worth left over is fine: the rule reserves one frame, not
 // one frame and a margin.
 const exact = render({ film: 0, bank: 500, res: 0, shutterTier: 0 });
@@ -172,14 +178,14 @@ check('with film in hand you may spend to the last dollar', stocked,
       (h) => /data-i="0"(?! disabled)/.test(h));
 
 // --- a maxed ladder must not offer anything ---
-const maxed = render({ maxZoom: 5, res: 3, shutterTier: 3, bank: 99999 });
+const maxed = render({ maxZoom: 5, res: 3, shutterTier: 3, cartTier: 3, bank: 99999 });
 check('a maxed ladder has no button at all', maxed, (h) => !/data-i="[012]"/.test(h));
 check('and reads as standing on its top rung', maxed,
       (h) => h.includes('<b>16×</b>') && h.includes('<b>6000</b>'));
 // Film has no top: there is always more to buy, which is what stops a fully
 // upgraded player being unable to spend their way out of an empty roll.
 check('but film is still on sale when every ladder is maxed', maxed,
-      (h) => /data-i="3"/.test(h));
+      (h) => new RegExp('data-i="' + FILM_I + '"').test(h));
 
 // --- clicking ---
 let bought = null, rode = false, menued = false;
