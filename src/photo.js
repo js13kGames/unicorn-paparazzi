@@ -116,6 +116,13 @@ export const TERRAIN = 65535;
 // ground it is standing on, and the gaps between its legs are all terrain, so
 // bare contact says nothing.
 const NEARER = 2;
+// What a head pixel is worth against a flank pixel when the outline is measured.
+// A unicorn cut off at the neck, or standing behind a rock that hides its face,
+// is a worse photograph than the same animal missing a hindquarter -- so the
+// head and the horn count for more of the outline, in both directions: they
+// raise the penalty when they are the part that is cut, and they raise the
+// denominator, so losing a flank instead now costs slightly less than it did.
+const HEAD_W = 3;
 
 export function tally(px, W, H, herd, rect) {
   const r = rect || { x0: 0, y0: 0, w: W, h: H };
@@ -140,6 +147,8 @@ export function tally(px, W, H, herd, rect) {
         seen.set(id, s);
       }
       s.n++;
+      // Alpha carries the head flag out of the ID pass.
+      const hw = px[o + 3] > 127 ? HEAD_W : 1;
       s.sx += cx; s.sy += cy;
       if (cx < s.minx) s.minx = cx;
       if (cx > s.maxx) s.maxx = cx;
@@ -153,13 +162,13 @@ export function tally(px, W, H, herd, rect) {
       for (let k = 0; k < 4; k++) {
         const nx = x + (k === 0 ? -1 : k === 1 ? 1 : 0);
         const ny = y + (k === 2 ? -1 : k === 3 ? 1 : 0);
-        if (nx < r.x0 || nx >= x1 || ny < r.y0 || ny >= y1) { s.outline++; s.edge++; continue; }
+        if (nx < r.x0 || nx >= x1 || ny < r.y0 || ny >= y1) { s.outline += hw; s.edge += hw; continue; }
         const b = at(nx, ny);
         if (b === id) continue;
-        s.outline++;
+        s.outline += hw;
         if (!b || depth(nx, ny) > depth(x, y) - NEARER) continue;   // sky, or behind
-        if (b === TERRAIN) s.env++;
-        else s.occ++;
+        if (b === TERRAIN) s.env += hw;
+        else s.occ += hw;
       }
     }
   }

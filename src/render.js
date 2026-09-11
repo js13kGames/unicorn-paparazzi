@@ -69,6 +69,9 @@ uniform vec3 pal[6];
 out vec3 wp;
 out vec3 vc;
 flat out int vid;
+// Head and horn, for the ID pass: alpha there was a constant 1.0 doing nothing,
+// and the scoring wants to know which end of the animal got cut off.
+flat out float vh;
 
 void main() {
   int part = int(a.x);
@@ -93,6 +96,7 @@ void main() {
      : role == 3 ? pal[ci] * 0.42                 // hooves and muzzle
      : vec3(0.98, 0.94, 0.78);                    // horns, however many
   vid = gl_InstanceID;
+  vh = float(part == 2 || part == 3);
   gl_Position = vp * vec4(wp, 1.0);
 }`;
 
@@ -101,6 +105,7 @@ precision highp float;
 in vec3 wp;
 in vec3 vc;
 flat in int vid;
+flat in float vh;
 uniform vec3 eye;
 uniform vec3 sky;
 uniform float fog;
@@ -112,7 +117,7 @@ void main() {
     // Flat per-instance color so a readback can measure each unicorn exactly.
     int id = vid + 1;
     o = vec4(float(id & 255) / 255.0, float((id >> 8) & 255) / 255.0,
-             clamp(length(wp - eye) / 256.0, 0.0, 1.0), 1.0);
+             clamp(length(wp - eye) / 256.0, 0.0, 1.0), vh);
   } else {
     o = vec4(shade(wp, faceted(wp, eye), vc, eye, sky, fog), 1.0);
   }

@@ -10,14 +10,17 @@ const W = 320, H = 180;
 const herd = { color:[], pose:[], horns:[] };
 for (let i=0;i<12;i++){ herd.color[i]=i%6; herd.pose[i]=0; herd.horns[i]=0; }
 
-// [id, x, y, w, h, depth]. Blue is distance/256, so a smaller depth is nearer;
-// the tally only treats a neighbour as occluding when it is genuinely in front.
+// [id, x, y, w, h, depth, head]. Blue is distance/256, so a smaller depth is
+// nearer; the tally only treats a neighbour as occluding when it is genuinely in
+// front. Alpha is the head flag the ID pass writes -- left 0 by every fixture
+// below except the head ones, which is the whole animal reading as flank.
 function buffer(rects) {
   const px = new Uint8Array(W*H*4);
-  for (const [id,x0,y0,w,h,d=128] of rects)
+  for (const [id,x0,y0,w,h,d=128,head=0] of rects)
     for (let y=y0;y<y0+h;y++) for (let x=x0;x<x0+w;x++) {
       if (x<0||y<0||x>=W||y>=H) continue;
       const o=(y*W+x)*4; px[o]=id&255; px[o+1]=(id>>8)&255; px[o+2]=d;
+      px[o+3]=head?255:0;
     }
   return px;
 }
@@ -282,6 +285,41 @@ check('unicorn contact is not counted as scenery', crowd.cEnv, 0);
 // same contact fraction: scenery must bite harder than a neighbour
 check('scenery (exponential) costs more than a unicorn (linear) at equal contact',
       behind.envLoss > crowd.occLoss, true);
+
+// ---- the head is worth more of the outline than a flank ----
+// The animal is 40x40 with its left eight columns flagged as head and horn, so
+// a block flush against its left side hides the face and one flush against its
+// right side hides the same number of pixels of rump.
+const headed = (blockX) => score([
+  [TERRAIN, blockX, cy, 40, 40, 100],
+  [1, cx, cy, 40, 40, 128],
+  [1, cx, cy, 8, 40, 128, 1],
+]).subjects[0];
+const faceHidden = headed(cx - 40), rumpHidden = headed(cx + 40);
+console.log('        face hidden  ' + (faceHidden.cEnv*100).toFixed(0) + '% of outline -> -' +
+            faceHidden.envLoss.toFixed(1) + ' pts');
+console.log('        rump hidden  ' + (rumpHidden.cEnv*100).toFixed(0) + '% of outline -> -' +
+            rumpHidden.envLoss.toFixed(1) + ' pts');
+check('the same block costs more over the face than over the rump',
+      faceHidden.envLoss > rumpHidden.envLoss, true);
+check('and by roughly the weight, not a rounding error',
+      faceHidden.cEnv / rumpHidden.cEnv > 2.5, true);
+// The flip side of raising the denominator: a flank-only loss is now cheaper
+// than it was before the head carried any extra weight.
+const unflagged = score([
+  [TERRAIN, cx + 40, cy, 40, 40, 100],
+  [1, cx, cy, 40, 40, 128],
+]).subjects[0];
+check('an animal with no head flagged scores exactly as it always did',
+      +unflagged.cEnv.toFixed(6), 0.25);
+check('and flagging a head makes losing the far side hurt less',
+      rumpHidden.cEnv < unflagged.cEnv, true);
+// Cropping is the same measurement, so the frame edge follows the same rule:
+// a head cut off by the edge of the photograph costs more than a tail.
+const cropped = (x) => score([[1, x, cy, 40, 40, 128], [1, x, cy, 8, 40, 128, 1]],
+                             0.5).subjects[0];
+const faceCut = cropped(Math.round(W*0.25) - 20);
+check('a head cut by the frame costs something', faceCut.cropLoss > 0, true);
 
 // the exponential curve itself
 const eq = (c) => Math.exp(-2.5*c);
