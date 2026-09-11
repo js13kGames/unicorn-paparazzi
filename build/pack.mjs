@@ -27,6 +27,18 @@ const OUT = path.join(DOCS, 'game.zip');
 // This happens in the build, not in the source: index.html stays the readable
 // place to author markup and CSS.
 function fold(html) {
+  // The manifest link and the service-worker registration exist for the GitHub
+  // Pages build, where docs/ is served as a normal multi-file site with both
+  // files sitting beside the page. The archive is a single index.html with
+  // neither of them in it, so shipping the tags would mean two dead references
+  // -- 404s in the console, which the jam rules forbid -- paid for in shell
+  // characters, the most expensive bytes in the file.
+  for (const re of [/<link[^>]+rel=["']?manifest["']?[^>]*>/,
+                    /<script>[^<]*serviceWorker[\s\S]*?<\/script>/]) {
+    if (!re.test(html)) throw new Error('could not find the Pages-only tag to strip: ' + re);
+    html = html.replace(re, '');
+  }
+
   // webpack injects the script tag into <head>, not <body>. Left in place it
   // ships as a dead reference to a file the archive does not contain -- a 404 in
   // the console, which the jam rules forbid.

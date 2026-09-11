@@ -21,6 +21,14 @@
        raw bytes in the zip. That one meta tag measured 26 of them, which bought
        a tinted address bar on mobile and nothing else. Comments here are
        stripped at build time, so saying so is free. -->
+  <!-- GitHub Pages only. docs/ is served as a normal multi-file site, so the
+       hosted build can carry a manifest and a service worker that the jam
+       archive -- one self-contained index.html with nothing beside it -- cannot.
+       Both are stripped in build/pack.mjs before the shell is measured, so they
+       cost the zip nothing; the copies they point at are placed in docs/ by
+       CopyPlugin. -->
+  <link rel="manifest" href="manifest.json">
+  <script>navigator.serviceWorker&&addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js"))</script>
   <style>
     /* Deliberately lean: this stylesheet rides inside the compressed payload,
        and unique prose is the one thing the packer cannot squeeze. */
