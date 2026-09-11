@@ -80,13 +80,18 @@ export function createPhotoRig(gl, canvas, draw) {
   // `res` is the camera tier, and it sets the JPEG quality: the cheap camera
   // develops a heavily compressed photograph. Cosmetic by construction -- the ID
   // pass below reads the GL buffer, never the JPEG, so no score can move.
-  function capture(cam, fovy, herd, fx, fy, res) {
+  function capture(cam, fovy, herd, fx, fy, res, mp) {
     const cw = canvas.width * fx, ch = canvas.height * fy;
     tctx.drawImage(canvas, (canvas.width - cw) / 2, (canvas.height - ch) / 2, cw, ch,
                    0, 0, thumb.width, thumb.height);
     const url = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
-    wctx.drawImage(thumb, 0, 0, wire.width, wire.height);
-    const small = wire.toDataURL('image/jpeg', 0.8);
+    // The 540p copy exists only to fit on the wire. Solo play never sends one,
+    // and a second JPEG encode per shot is real work on a phone.
+    let small = '';
+    if (mp) {
+      wctx.drawImage(thumb, 0, 0, wire.width, wire.height);
+      small = wire.toDataURL('image/jpeg', 0.8);
+    }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     draw(cam, fovy, true, ID_W, ID_H);

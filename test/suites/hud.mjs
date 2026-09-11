@@ -151,6 +151,11 @@ check('and shuts up once the pointer is held', nodes.hud.textContent, (s) => !/c
 document.pointerLockElement = null;
 ui.updateHud({ ...state, mode: 'title' }, 0.4, 0);
 check('a card on screen is not a lost pointer', nodes.hud.textContent, (s) => !/click to look/.test(s));
+// A phone has no pointer to lose, so the hint could only ever be wrong there --
+// it would sit on screen for the whole ride telling you to do the one thing the
+// device cannot do.
+ui.updateHud({ ...state, mode: 'ride', t: 1 }, 0.4, 0);
+check('and a touch device is never told to click', nodes.hud.textContent, (s) => !/click to look/.test(s));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

@@ -37,9 +37,10 @@ export function updateHud(state, ride, clock) {
   // pointerlockchange event, which meant the one moment it mattered -- sitting
   // unlocked, wondering why the camera will not turn -- was the moment it had
   // already expired. It is a state now, so it is on screen for exactly as long
-  // as it is true.
+  // as it is true. A phone never has a pointer to lose, so `state.t` keeps the
+  // hint off a screen where it could only ever be wrong.
   el.hud.textContent = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
-    (state.mode === 'ride' && !document.pointerLockElement ? '  ·  click to look' : '');
+    (state.mode === 'ride' && !state.t && !document.pointerLockElement ? '  ·  click to look' : '');
   // Under the frame count: the lens, or a winding dot while the shutter is
   // still recovering. The bank used to read here, but money is a between-rides
   // number -- what you actually want mid-ride is which zoom you are on, and the

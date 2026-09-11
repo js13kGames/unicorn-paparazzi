@@ -167,22 +167,82 @@ state.zoom = Math.min(state.zoom, state.maxZoom);
 
 // --- input ---------------------------------------------------------------
 
+// Straight up and straight down are both degenerate for view(), which builds its
+// basis from yaw and pitch alone -- so neither look path is allowed to reach
+// them.
+const LIM = Math.PI / 2 - 0.05;
+const clampPitch = () => (cam.pitch = Math.max(-LIM, Math.min(LIM, cam.pitch)));
+
 addEventListener('mousemove', (e) => {
   if (state.mode !== 'ride' || document.pointerLockElement !== canvas) return;
   cam.yaw -= e.movementX * 0.0022;
   cam.pitch -= e.movementY * 0.0022;
-  const lim = Math.PI / 2 - 0.05;
-  cam.pitch = Math.max(-lim, Math.min(lim, cam.pitch));
+  clampPitch();
 });
+
+// A phone has no pointer lock, so none of the desktop input set applies: the
+// look cannot be mouse deltas, and the shutter cannot be a click that only
+// counts while locked. This one test picks the whole alternative.
+const TOUCH = matchMedia('(pointer:coarse)').matches;
+state.t = TOUCH;
+
+// You aim a phone the way you aim a camera: the lens is the back of the device,
+// which is the -Z axis of the frame alpha/beta/gamma describe. Roll is dropped
+// on the floor -- view() cannot express it, and a photograph does not want it.
+let yawOff;
+if (TOUCH) addEventListener('deviceorientation', (e) => {
+  if (state.mode !== 'ride' || e.alpha == null) return;
+  const D = Math.PI / 180;
+  const a = e.alpha * D, b = e.beta * D, g = e.gamma * D;
+  const cg = Math.cos(g), sg = Math.sin(g), sb = Math.sin(b);
+  const x = -sg * Math.cos(a) - cg * sb * Math.sin(a);
+  const y = -sg * Math.sin(a) + cg * sb * Math.cos(a);
+  const yaw = Math.atan2(-x, y);
+  // The first reading is the origin. A ride starts looking down the track
+  // rather than snapping to wherever the compass thinks north is -- and alpha's
+  // drift, and the absolute/relative split between platforms, stop mattering
+  // because only the change from that first reading is ever used.
+  if (yawOff === undefined) yawOff = cam.yaw - yaw;
+  cam.yaw = yaw + yawOff;
+  cam.pitch = Math.asin(-cg * Math.cos(b));
+  clampPitch();
+});
+
+// iOS hands out the orientation stream only on request, and only from inside a
+// gesture. Every tap that starts or continues a ride is one, and asking again
+// once granted resolves without prompting, so this needs no state of its own.
+const askIMU = () => DeviceOrientationEvent.requestPermission?.().catch(() => {});
+
+// Two fingers work the lens, measured against the span the pinch started at and
+// re-based on every step, so one long slow pinch walks the whole ladder. `multi`
+// outlives the gesture: letting go of a pinch also fires a click, and that click
+// must not cost a frame of film.
+let pinch = 0, multi = 0;
+if (TOUCH) {
+  addEventListener('touchstart', (e) => { if (e.touches.length < 2) multi = pinch = 0; });
+  addEventListener('touchmove', (e) => {
+    const t = e.touches;
+    if (state.mode !== 'ride' || t.length < 2) return;
+    multi = 1;
+    const d = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    if (!pinch) pinch = d;
+    const step = d > pinch * 1.3 ? 1 : d < pinch * 0.77 ? -1 : 0;
+    if (step) { pinch = d; zoomBy(step); }
+  });
+}
 
 // A trackpad pinch reaches the page as ctrl+wheel, which is also the browser's
 // page-zoom gesture -- so reaching for the lens would zoom the whole document
 // instead. Cancelling that needs a non-passive listener. Ordinary wheel is only
 // swallowed while riding, so the shop panel can still scroll.
+// Three things work the lens -- the wheel, the +/- keys and a pinch -- and all
+// three want the same clamp, so they share one.
+const zoomBy = (n) => (state.zoom = Math.max(0, Math.min(state.maxZoom, state.zoom + n)));
+
 addEventListener('wheel', (e) => {
   if (e.ctrlKey || state.mode === 'ride') e.preventDefault();
   if (state.mode !== 'ride' || !state.maxZoom) return;
-  state.zoom = Math.max(0, Math.min(state.maxZoom, state.zoom + (e.deltaY > 0 ? -1 : 1)));
+  zoomBy(e.deltaY > 0 ? -1 : 1);
 }, { passive: false });
 
 // Safari sends pinch as its own gesture events rather than ctrl+wheel. Cancelling
@@ -200,12 +260,16 @@ function primary() {
     state.mode = 'ride';
     ui.hidePanel();
     ui.setChrome(true);
-    lock();
+    // The tap that starts the ride is the gesture iOS wants for the orientation
+    // stream; a mouse wants the pointer instead.
+    TOUCH ? askIMU() : lock();
   } else if (state.mode === 'ride') {
     // Escape releases the pointer but leaves you riding, so a click has to hand
     // the mouse back. Without this it fell through to the shutter, and the only
-    // way to look around again was to spend a frame of film.
-    if (document.pointerLockElement === canvas) shutterQueued = true;
+    // way to look around again was to spend a frame of film. A tap has no lock
+    // to get back, so it always shoots -- unless it is the tail of a pinch.
+    if (TOUCH) multi || (askIMU(), shutterQueued = true);
+    else if (document.pointerLockElement === canvas) shutterQueued = true;
     else lock();
   }
 }
@@ -219,8 +283,8 @@ addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey) return;
   if (e.code === 'Space') { e.preventDefault(); primary(); return; }
   // +/- work the zoom as well as the wheel, which is awkward on a trackpad.
-  if (e.key === '+' || e.key === '=') state.zoom = Math.min(state.maxZoom, state.zoom + 1);
-  else if (e.key === '-') state.zoom = Math.max(0, state.zoom - 1);
+  if (e.key === '+' || e.key === '=') zoomBy(1);
+  else if (e.key === '-') zoomBy(-1);
 });
 
 // --- photographs ---------------------------------------------------------
@@ -234,7 +298,7 @@ function takePhoto() {
   // every roll in it is empty.
   if (state.mp && !state.film) net.noFilm();
   ui.flash();
-  const photo = photoRig.capture(cam, fov(), herd, state.fx, state.fy, state.res);
+  const photo = photoRig.capture(cam, fov(), herd, state.fx, state.fy, state.res, state.mp);
   const scored = scorePhoto(photo, CONFIG, state);
   state.photos.push(photo);
   state.scored.push(scored);

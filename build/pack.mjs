@@ -59,7 +59,7 @@ async function main() {
 
   // Chosen by sweeping seeds and keeping the smallest; any fixed value works, this
 // one happens to pack best.
-const SEED = Number(process.env.RR_SEED || 77);
+const SEED = Number(process.env.RR_SEED || 101);
 
 // Roadroller's parameter search is randomised, so identical source produced
   // builds 22 bytes apart run to run. That is not just untidy: a build measured
