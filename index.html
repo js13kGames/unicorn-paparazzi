@@ -68,19 +68,24 @@
     #track { left: 10px; right: 10px; bottom: 10px; height: 4px; background: #0004 }
     #bar { height: 100%; width: 0; background: #fff }
 
-    #panel { inset: 0; display: none; place-items: center; background: #a22b; pointer-events: auto }
+    #panel { inset: 0; display: none; place-items: center; background: #421c; pointer-events: auto }
     #panel.on { display: grid }
+    /* No fill and no border: one system everywhere. The card used to be a dark
+       #201 box with a #fff3 rule around it, which the title card then had to
+       undo -- so the menu and every other screen read as two different pieces
+       of software. Now the scrim is the background on all five screens and the
+       structure is carried by what is already there: the outlined buttons and
+       the .r row rules. */
     #card {
       width: min(720px, 92vw); max-height: 88vh; overflow: auto; touch-action: pan-y;
-      background: #201; border: 1px solid #fff3; padding: 18px 20px
+      padding: 18px 20px
     }
-    /* Exactly the viewport, and nothing to scroll. #card is content-box with
-       20px of side padding, so the old `width: 100vw` made the title card 40px
-       wider than the screen -- and `overflow: auto` then answered that, and any
-       column taller than 88vh, with a scrollbar whose gutter pulled the centred
-       title and buttons a few pixels off centre. */
+    /* All that is left of the title card is layout: the full width and no
+       padding it needs for the 6em display face, no scroll so the tall column
+       is never given a scrollbar whose gutter would pull it off centre, and the
+       flex column that stacks the title over the menu. */
     #card.t {
-      background: none; border: 0; width: 100%; padding: 0; overflow: visible;
+      width: 100%; padding: 0; overflow: visible;
       display: flex; flex-direction: column; align-items: center
     }
     h1 { font: 700 44px serif; margin: 0 0 10px }
@@ -94,6 +99,13 @@
     /* No tabular-nums: the page is set in a monospace face, so digits already line up. */
     td.n { text-align: right }
     td.i { width: 92px; padding-right: 10px }
+    /* The lobby roster is the only place row3 is called with neither a thumbnail
+       nor a score, so an empty .i cell is what identifies it -- no class to pass
+       and no second builder. Collapsing the empty picture column lets the name
+       centre across the whole table instead of hanging off the left of it, and
+       the empty score cell beside it has no width to pull it back. */
+    td.i:empty { width: 0; padding: 0 }
+    td.i:empty ~ td { text-align: center }
     /* Single letters because every one of these is written out in ui.js many
        times over, and the stylesheet rides inside the compressed payload with
        the markup. Measured at 14 bytes; CSS comments like this one are stripped
@@ -112,11 +124,9 @@
     /* After .h, so a footer line can take the loss color: `class="h m"` is a
        hint that is also a problem, and .m has to win the tie. */
     .m { color: #f86 }
-    /* One control everywhere: an outline on the panel, filling in on hover. The
-       shop used to carry solid #245 buttons while the title card overrode them
-       to transparent, which read as two different controls on two screens. The
-       inputs are outlined too -- an exception keeping the old solid fill for
-       them cost 14 bytes, and the empty box already reads as a field. */
+    /* One control everywhere: an outline on the scrim, filling in on hover.
+       The inputs are outlined too -- an exception keeping a solid fill for them
+       cost 14 bytes, and the empty box already reads as a field. */
     button, input {
       background: none; color: #fff; border: 1px solid #fff3;
       padding: 10px 16px; font: inherit; cursor: pointer; min-width: 88px
@@ -124,7 +134,11 @@
     /* Scoped to the title card, where the buttons are the menu and carry the
        display face the title is set in. */
     .t button { font: 2em serif }
-    button:hover:not(:disabled) { background: #533 }
+    /* Fills in to its own outline. The old hover was a solid #533, which now
+       sits within a few points of the brown scrim and would barely register;
+       #fff3 is the border colour the button already carries, so it is a value
+       the packer has seen three times over. */
+    button:hover:not(:disabled) { background: #fff3 }
     button:disabled { opacity: .35; cursor: default }
   </style>
 </head>

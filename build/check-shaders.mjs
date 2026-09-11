@@ -67,7 +67,9 @@ for (const name of shaders) {
 
   // Every function this shader declares is callable by it.
   const declaredFns = new Set();
-  for (const m of body.matchAll(/^\w+\s+(\w+)\s*\(/gm)) declaredFns.add(m[1]);
+  // A declaration starts the shader or follows the `;`/`}` that ended the last
+  // one -- it no longer starts a line, because the loader folds each shader flat.
+  for (const m of body.matchAll(/(?:^|[;}])\s*\w+\s+(\w+)\s*\(/gm)) declaredFns.add(m[1]);
   for (const m of body.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)) {
     const fn = m[1];
     if (BUILTINS.has(fn) || declaredFns.has(fn)) continue;
@@ -80,7 +82,7 @@ for (const name of shaders) {
 
   // every declared in/uniform must be used somewhere else in the shader
   const names = [];
-  for (const m of body.matchAll(/^(in|uniform)\s+\w+\s+(\w+)/gm)) names.push(m[2]);
+  for (const m of body.matchAll(/(?:^|[;}])\s*(?:flat\s+)?(in|uniform)\s+\w+\s+(\w+)/gm)) names.push(m[2]);
   declared[name] = names;
   for (const n of names) {
     const uses = body.split(new RegExp('\\b' + n + '\\b')).length - 1;

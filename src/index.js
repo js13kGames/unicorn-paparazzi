@@ -500,14 +500,16 @@ function back() {
 
 function title() {
   state.mode = 'title';
-  // Reset is always offered. It used to be conditional on `saved.v`, but `saved`
-  // is the snapshot taken at boot and nothing refreshes it, so on a first
-  // session the flag stayed false however much you played -- and a player who
-  // burned all ten frames on their first ride reached the dead end with the one
-  // button that gets out of it missing. It only came back after a ride, because
-  // a ride reloads the page and re-reads the save. The cost of always drawing it
-  // is that a brand-new player is offered a wipe of nothing, which does nothing.
-  ui.showTitle(solo, lobby, restart, broke());
+  // Reset only when there is something to reset -- a wipe offered to a player
+  // with nothing to wipe is a button that does nothing.
+  //
+  // Read LIVE, through loadSave(), not from the `saved` snapshot taken at boot.
+  // That is the whole trick: `saved` never refreshes, so gating on `saved.v` kept
+  // the button hidden through a first session however far the player got -- and
+  // a player who burned all ten frames on their first ride reached the dead end
+  // with the one button that gets out of it missing. persist() has always run by
+  // the time broke() can be true, so the dead end is still offered its way out.
+  ui.showTitle(solo, lobby, restart, broke(), loadSave().v);
 }
 
 // The menu is reachable from the shop without a reload, and by then the world

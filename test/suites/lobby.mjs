@@ -49,17 +49,17 @@ const click = (id) => {
 
 // --- the title -----------------------------------------------------------
 const hits = [];
-const showTitle = (reset, lost) =>
-  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost);
+const showTitle = (reset, lost, saved = 1) =>
+  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost, saved);
 
-showTitle(0);
+showTitle(0, 0, 0);
 check('the title offers both ways in', /id="go"[\s\S]*id="mp"/.test(card()));
-// Reset is unconditional. It used to be hidden until index.js could see a save,
-// but that flag is read once at boot and never refreshed, so a first-session
-// player who burned their whole roll met the dead end with no way off it. The
-// price of always drawing it is a wipe offered to someone with nothing to wipe.
-check('and Reset, always, because the dead end needs it',
-      card(), (h) => h.includes('id="x"'));
+// Nothing on disk yet, so there is nothing to wipe and no button for it. What
+// makes this safe is that index.js reads the save live rather than from its boot
+// snapshot -- see save.mjs, where a stale read is what once walled in a
+// first-session player who burned their whole roll.
+check('but not Reset, with nothing yet to reset',
+      card(), (h) => !h.includes('id="x"'));
 click('mp');
 check('the multiplayer button opens the lobby', hits.pop(), 'mp');
 check('and the click never reaches the panel underneath', stopped);
@@ -67,7 +67,7 @@ click('go');
 check('the other button rides alone', hits.pop(), 'solo');
 
 showTitle(() => hits.push('reset'));
-check('a returning player is offered Reset too', card(), (h) => h.includes('>Reset<'));
+check('a returning player is offered Reset', card(), (h) => h.includes('>Reset<'));
 click('x');
 check('and it wipes rather than riding', hits.pop(), 'reset');
 
@@ -81,6 +81,8 @@ check('losing says why', lost, (h) => /film/.test(h));
 check('and takes away the ride you cannot pay for', lost, (h) => !h.includes('id="go"'));
 check('and multiplayer with it, since the match is over too',
       lost, (h) => !h.includes('id="mp"'));
+// persist() has run by the time the roll can be empty, so the dead end always
+// arrives with a save behind it and this button is always there.
 check('leaving Reset as the only way on', lost, (h) => h.includes('>Reset<'));
 click('x');
 check('which still wipes', hits.pop(), 'reset');

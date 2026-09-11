@@ -151,14 +151,14 @@ export function createRenderer(canvas, world, herd) {
 
   const N = world.N, wy = WATER_Y;
   const wPos = new Float32Array([0, wy, N, N, wy, N, N, wy, 0, 0, wy, N, N, wy, 0, 0, wy, 0]);
-  const wCol = new Uint8Array(24);
-  const wNrm = new Int8Array(24);
-  for (let i = 0; i < 6; i++) { wCol.set([46, 108, 190, 165], i * 4); wNrm[i * 4 + 1] = 127; }
-  const water = vao(gl, [
-    [P, buffer(gl, wPos), 3, gl.FLOAT, false],
-    [C, buffer(gl, wCol), 4, gl.UNSIGNED_BYTE, true],
-    [NM, buffer(gl, wNrm), 4, gl.BYTE, true],
-  ]);
+  // Every vertex of the sea shares one colour and one normal, so it carries
+  // neither. An attribute whose array is switched off in this VAO reads the
+  // context's constant for that slot instead, and those two constants are set
+  // once here: the terrain's own buffers stay bound to the same slots in its
+  // own VAO, and nothing else ever looks at them.
+  const water = vao(gl, [[P, buffer(gl, wPos), 3, gl.FLOAT, false]]);
+  gl.vertexAttrib4f(C, 46 / 255, 108 / 255, 190 / 255, 1);
+  gl.vertexAttrib4f(NM, 0, 1, 0, 0);
 
   // --- herd ---
   const hp = program(gl, HERD_VS, HERD_FS);
@@ -202,9 +202,6 @@ export function createRenderer(canvas, world, herd) {
       view([cam.x, cam.y, cam.z], cam.yaw, cam.pitch)
     );
 
-    gl.disable(gl.BLEND);
-    gl.depthMask(true);
-
     // Terrain still draws during the ID pass so it occludes unicorns correctly;
     // it just writes the background color.
     gl.useProgram(tp);
@@ -221,6 +218,19 @@ export function createRenderer(canvas, world, herd) {
     gl.drawElements(gl.TRIANGLES, world.trackMesh.count, gl.UNSIGNED_INT, 0);
     gl.enable(gl.CULL_FACE);
 
+    // The sea is one flat quad, drawn here while the terrain program and its
+    // uniforms are still current -- so it costs a bind and a draw and nothing
+    // else. It used to be a translucent pass of its own at the end of the frame,
+    // which bought a glimpse of the shallows through the surface for a blend
+    // mode, a blend function and a depth-mask dance around it. Opaque, the
+    // shoreline still reads: the fog and the sun in shade() are what make it
+    // water, not what is underneath it. Skipped in the ID pass, where the sea is
+    // not a subject and the sea floor is the thing being measured.
+    if (!idPass) {
+      gl.bindVertexArray(water);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
     gl.useProgram(hp);
     gl.uniformMatrix4fv(hp.u.vp, false, vp);
     gl.uniform3f(hp.u.eye, cam.x, cam.y, cam.z);
@@ -236,15 +246,6 @@ export function createRenderer(canvas, world, herd) {
     gl.bindVertexArray(herdVao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, model.count, herd.n);
 
-    if (!idPass) {
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      gl.depthMask(false);
-      gl.useProgram(tp);
-      gl.bindVertexArray(water);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      gl.depthMask(true);
-    }
     gl.bindVertexArray(null);
   }
 

@@ -98,17 +98,21 @@ function onCard(fn) {
 // copy is nearly free, while in the shell it was 32 characters of plain text.
 document.title = 'Unicorn Paparazzi';
 
-export function showTitle(onSolo, onMulti, onReset, lost) {
+export function showTitle(onSolo, onMulti, onReset, lost, saved) {
   // The class centres the title and the buttons in a full-height column.
   //
   // `lost` is the dead end -- no film and no money for any -- and it is this
   // card rather than one of its own, because everything it needs to say is
   // already here and only the two things you can no longer do come off.
+  //
+  // `saved` is whether there is a run on disk to wipe. index.js reads it live
+  // rather than from its boot snapshot, so the dead end -- which can only be
+  // reached after a run has been written -- still gets the button.
   panel('<h1>Unicorn Paparazzi</h1>' +
         (lost ? '<h2>Out of film</h2>'
               : '<p><button id="go">Solo</button></p>' +
                 '<p><button id="mp">Multiplayer</button></p>') +
-        '<p><button id="x">Reset</button></p>', 't');
+        (saved ? '<p><button id="x">Reset</button></p>' : ''), 't');
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
 }
 
@@ -300,8 +304,11 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
   // which was a table of markup for something read once -- and a maxed ladder
   // now simply has no button rather than a row of dimmed text.
   let rows = '', film = '';
+  // The rung you own is bold rather than green: .p is the gain colour, and on
+  // the shop every one of these is simply where you stand, not a win. Bold
+  // against the dim .d label is enough to separate the two.
   const row = (label, now, buys) => '<tr class="r"><td class="d">' + label +
-    '</td><td class="n"><b class="p">' + now + '</b></td><td class="n">' + buys + '</td></tr>';
+    '</td><td class="n"><b>' + now + '</b></td><td class="n">' + buys + '</td></tr>';
   offers.forEach((o, i) => {
     // index.js decides what you can afford, because affordability is not just
     // the price: with an empty roll an upgrade must leave a frame's worth in

@@ -1,7 +1,15 @@
-// Executes the shipped page's script in a stubbed DOM. There is no GL here, so
-// success is defined as reaching the WebGL2 context call and failing there --
-// that proves the packed blob decodes, evaluates, finds its DOM elements, and
-// gets all the way through world generation and herd spawning first.
+// Executes the shipped page's script in a stubbed DOM, with a stub standing in
+// for WebGL2 as well, so the whole module runs: decode, evaluate, find its DOM
+// elements, generate the world, spawn the herd, build both programs, size the
+// canvas and draw the title card. Success is reaching the end of it with nothing
+// thrown.
+//
+// It stops there. Nothing here renders a pixel, and requestAnimationFrame never
+// calls back, so this says nothing about what the frame looks like -- it is the
+// guard for the class of failure that kills the page before it can look like
+// anything at all. It exists because a `let` declared below a function that runs
+// during module evaluation shipped once: the read throws, the page is blank, and
+// the old version of this file stopped at the GL call just above the damage.
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -17,10 +25,37 @@ const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</scri
 const injected = new Set();
 const missing = new Set();
 const touched = new Set();
+// WebGL2, near enough to get through gl.js: SCREAMING_CASE is a constant, and
+// every constant gets its own number so the two getProgramParameter questions
+// can be told apart. Everything else is a method that does nothing, except the
+// handful gl.js reads an answer back from.
+const K = {};
+let nextK = 1;
+const constant = (k) => (K[k] || (K[k] = nextK++));
+const glStub = new Proxy({}, {
+  get(_, k) {
+    if (typeof k !== 'string') return undefined;
+    if (/^[A-Z][A-Z0-9_]*$/.test(k)) return constant(k);
+    return (...a) => {
+      // A link that failed throws; a program with no active uniforms simply
+      // leaves p.u empty, and every later uniform write lands on undefined.
+      if (k === 'getProgramParameter') return a[1] === constant('ACTIVE_UNIFORMS') ? 0 : 1;
+      if (k === 'getShaderParameter') return 1;
+      if (k === 'getAttribLocation' || k === 'getUniformLocation') return 0;
+      if (k.startsWith('create')) return {};
+      return undefined;
+    };
+  },
+});
+
+// The photo rig's thumbnail canvases want a 2D context, which does no more here
+// than accept the calls.
+const ctx2d = new Proxy({}, { get: () => () => undefined });
+
 const node = (id) => ({
   id, style: {}, className: '', textContent: '', innerHTML: '', width: 0, height: 0,
   addEventListener() {}, requestPointerLock() {}, appendChild() {},
-  getContext() { return null; },                 // no GL in Node
+  getContext(type) { return type === '2d' ? ctx2d : glStub; },
   toDataURL() { return 'data:,'; },
   drawImage() {}, getBoundingClientRect: () => ({ width: 0, height: 0 }),
 });
@@ -30,6 +65,10 @@ const sandbox = {
   performance,
   Math, Date, JSON, Map, Set, Promise, Uint8Array, Uint16Array, Uint32Array,
   Int8Array, Float32Array, ArrayBuffer, String, Number, Object, Array, Error,
+  Proxy, Reflect, matchMedia: () => ({ matches: false }),
+  // A desktop browser with no headset: the title card asks `navigator.xr` whether
+  // to offer the VR button, and a phone asks matchMedia whether it is a phone.
+  navigator: {},
   document: {
     head: {
       insertAdjacentHTML(_, html) { collectIds(html); },
@@ -84,9 +123,9 @@ if (!injected.size) {
   process.exit(1);
 }
 
-if (err && /no gl/.test(err.message)) {
-  console.log('  reached the WebGL2 context call — everything before it ran clean');
-  process.exit(0);
+if (err) {
+  console.error('\n  THREW during module evaluation: ' + err.stack);
+  process.exit(1);
 }
-console.error('  UNEXPECTED: ' + (err ? err.stack : 'script completed without reaching GL'));
-process.exit(1);
+console.log('  the whole module initialised: world, herd, both GL programs, the title card');
+process.exit(0);

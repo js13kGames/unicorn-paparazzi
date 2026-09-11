@@ -70,8 +70,11 @@ check('the ladders are named', text,
 check('the table carries no header row', mid, (h) => !/current|Upgrade/.test(h));
 
 // --- three columns: name, what you own, the one rung you can buy ---
-check('the rung you are standing on is shown', mid, (h) => /<b class="p">2×<\/b>/.test(h));
-check('and the sensor reads as its score rate', mid, (h) => /<b class="p">1500<\/b>/.test(h));
+// Bold, not green: .p is the gain colour, and where you stand on a ladder is
+// not a win. It stays off every rung on this screen, film's included.
+check('the rung you are standing on is shown', mid, (h) => /<b>2×<\/b>/.test(h));
+check('and the sensor reads as its score rate', mid, (h) => /<b>1500<\/b>/.test(h));
+check('and no rung is coloured as a gain', mid, (h) => !/class="p"/.test(h));
 check('the next rung is a button carrying its own price', mid,
       (h) => /<button data-i="0"[^>]*>4× \$900<\/button>/.test(h));
 check('and the sensor button too', mid,
@@ -95,7 +98,7 @@ check('the table is three columns all the way down', mid, (h) => {
 // three columns as the ladders: what it is, what you hold, what you can buy.
 check('film is a row like the rest', mid, (h) => /<td class="d">film<\/td>/.test(h));
 check('the shop says how much film you are holding', mid,
-      (h) => /<td class="d">film<\/td><td class="n"><b class="p">12<\/b>/.test(h));
+      (h) => /<td class="d">film<\/td><td class="n"><b>12<\/b>/.test(h));
 check('a single frame is offered at its price', mid, (h) => /<button[^>]*>\+1 \$100<\/button>/.test(h));
 // One quantity, since the price climbs: a bulk button with no bulk discount was
 // a four-figure control that spent most of the game greyed out.
@@ -172,7 +175,7 @@ check('with film in hand you may spend to the last dollar', stocked,
 const maxed = render({ maxZoom: 5, res: 3, shutterTier: 3, bank: 99999 });
 check('a maxed ladder has no button at all', maxed, (h) => !/data-i="[012]"/.test(h));
 check('and reads as standing on its top rung', maxed,
-      (h) => h.includes('<b class="p">16×</b>') && h.includes('<b class="p">6000</b>'));
+      (h) => h.includes('<b>16×</b>') && h.includes('<b>6000</b>'));
 // Film has no top: there is always more to buy, which is what stops a fully
 // upgraded player being unable to spend their way out of an empty roll.
 check('but film is still on sale when every ladder is maxed', maxed,

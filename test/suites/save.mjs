@@ -187,21 +187,33 @@ const titleSrc = /^function title\(\)[\s\S]*?^}$/m.exec(src)[0];
 const titled = (film, bank) => {
   let lost;
   const state = { film, bank };
-  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'saved', 'restart',
+  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'saved', 'loadSave', 'restart',
                titleSrc + ';title()')(
     state, () => !state.film && state.bank < FILM,
-    { showTitle: (a, b, c, d) => { lost = d; } }, 0, 0, { v: 4 }, 0);
+    { showTitle: (a, b, c, d) => { lost = d; } }, 0, 0, { v: 4 }, () => ({ v: 4 }), 0);
   return !!lost;
 };
 check('the title shows the dead end when there is no way to buy a frame',
       titled(0, 0) === true);
 check('and does not when there is', titled(0, FILM) === false);
-// The dead end's only way out is Reset, so title() must never decide not to
-// draw it. It used to hand ui.showTitle a falsy handler when the boot-time save
-// snapshot had no version -- which on a first session it never did, however far
-// the player got -- and the screen became a wall.
-check('and Reset is handed over unconditionally, never gated on the save',
-      !/saved\.v \?/.test(titleSrc), titleSrc);
+// Reset is gated on there being a save to wipe -- but on a LIVE read of it.
+// `saved` is the snapshot taken at boot and nothing refreshes it, so gating on
+// `saved.v` hid the button through a whole first session however far the player
+// got, and the dead end, whose only way out is Reset, became a wall.
+const titleCode = titleSrc.replace(/\/\/.*$/gm, '');
+check('Reset is gated on a save', /loadSave\(\)/.test(titleCode), titleCode);
+check('and never on the stale boot snapshot',
+      !/\bsaved\b/.test(titleCode), titleCode);
+
+// The live read must actually reach ui.showTitle, or the gate is decorative.
+{
+  let saw;
+  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'loadSave', 'restart',
+               titleSrc + ';title()')(
+    { film: 1, bank: 0 }, () => false,
+    { showTitle: (a, b, c, d, e) => { saw = e; } }, 0, 0, () => ({}), 0);
+  check('so a player with nothing saved is offered no wipe', !saw);
+}
 
 // A frame is money now, so it has to leave the save the instant it is spent.
 // Without this a reload mid-ride hands the frames back and the roll is free.

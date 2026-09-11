@@ -34,6 +34,13 @@ module.exports = {
     minimize: true,
     minimizer: [
       new TerserPlugin({
+        // The service worker is copied, not bundled, and it is NOT part of the
+        // jam zip -- but the minimizer still ran over it, and the property
+        // mangler renamed the ServiceWorker API out from under it: `waitUntil`
+        // became `i` and `respondWith` became `t`, so install threw and every
+        // fetch event threw after it. Terser's DOM list does not carry those
+        // names. Nothing here is worth a byte to us, so it is simply excluded.
+        exclude: /service-worker/,
         extractComments: false,
         terserOptions: {
           ecma: 2020,
