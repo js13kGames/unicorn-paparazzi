@@ -220,7 +220,18 @@ resize();
 // The photograph's own vertical fov. What the screen shows is derived from it
 // per frame, so the window's shape changes how much you can see AROUND the
 // frame and nothing about the frame itself.
-const fov = () => CONFIG.baseFov / CONFIG.zoomLevels[state.zoom];
+// The rung the wheel is on stays an integer -- the HUD, the shop ladder and the
+// save all read state.zoom -- and this is the lens actually in front of the film,
+// easing towards that rung instead of cutting to it.
+//
+// Eased on the ANGLE, not the zoom factor. Every rung roughly halves the angle,
+// so each step takes about the same time; on the factor, 1x->1.2x would crawl
+// and 8x->16x would lurch. Both readers take the eased value -- the frustum that
+// gets drawn and the one the photograph is taken with -- so what you shot is
+// always exactly what you were looking at, mid-zoom or not.
+const aimFov = () => CONFIG.baseFov / CONFIG.zoomLevels[state.zoom];
+let fovNow = CONFIG.baseFov;
+const fov = () => fovNow;
 state.zoom = Math.min(state.zoom, state.maxZoom);
 
 // --- input ---------------------------------------------------------------
@@ -577,6 +588,9 @@ const STEP = 1 / 60;
 let acc = 0;
 
 function tick() {
+  // In the fixed step rather than the frame, so the lens travels at the same
+  // rate on a 60Hz display and a 144Hz one.
+  fovNow += (aimFov() - fovNow) * 0.2;
   clock += STEP;
   distance += pace() * STEP;
   updateHerd(herd, world, CONFIG, STEP);
