@@ -29,16 +29,19 @@ const LADDERS = [
   ['speed', cfg.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
 ];
 const FILM = 100;
-const frames = (n, st) => ({ n, price: FILM * n, ok: st.bank >= FILM * n });
+// Mirrors index.js price(): a frame costs a hundred dollars per ride taken, and
+// `|| 1` keeps the very first shop visit from handing out free film.
+const price = (st) => FILM * (st.rides || 1);
+const frames = (st) => ({ price: price(st), ok: st.bank >= price(st) });
 // `ok` mirrors index.js: affordability is not just the price. With an empty
 // roll an upgrade has to leave a frame's worth in the bank, or the shop sells
 // you into the dead end -- nothing to shoot and no way to buy anything to shoot.
 const offersFor = (st) => {
-  const keep = st.film ? 0 : FILM;
+  const keep = st.film ? 0 : price(st);
   return [...LADDERS.map(([label, v, p, key, sfx]) => ({
     label, v, p, sfx, at: st[key], price: p[st[key]],
     ok: st.bank - p[st[key]] >= keep,
-  })), frames(1, st), frames(10, st)];
+  })), frames(st)];
 };
 
 let fails = 0;
@@ -94,10 +97,25 @@ check('film is a row like the rest', mid, (h) => /<td class="d">film<\/td>/.test
 check('the shop says how much film you are holding', mid,
       (h) => /<td class="d">film<\/td><td class="n"><b class="p">12<\/b>/.test(h));
 check('a single frame is offered at its price', mid, (h) => /<button[^>]*>\+1 \$100<\/button>/.test(h));
-check('and ten frames at ten times it', mid, (h) => /<button[^>]*>\+10 \$1000<\/button>/.test(h));
+// One quantity, since the price climbs: a bulk button with no bulk discount was
+// a four-figure control that spent most of the game greyed out.
+check('film is sold one frame at a time', mid,
+      (h) => (h.match(/\+1 \$/g) || []).length === 1);
+// The price is the ride count, and the shop is where the player finds that out:
+// the buttons are the only place the rise is ever stated.
+const later = render({ bank: 9000, rides: 4 });
+check('a later ride quotes a dearer frame', later,
+      (h) => /<button[^>]*>\+1 \$400<\/button>/.test(h));
+check('and nothing else on the screen moved', later,
+      (h) => /2× \$400<\/button>/.test(h));
+// A rise the player cannot cover is where the run actually ends, and a greyed
+// button with the price still on it is what says so.
+const dear = render({ bank: 150, film: 0, rides: 4 });
+check('a frame beyond the bank is offered but disabled', dear,
+      (h) => /<button[^>]*disabled[^>]*>\+1 \$400<\/button>/.test(h));
 
-check('one button per ladder, plus the two film quantities',
-      (mid.match(/data-i="\d"/g) || []).length, 5);
+check('one button per ladder, plus the one film quantity',
+      (mid.match(/data-i="\d"/g) || []).length, 4);
 // Money is marked as money everywhere it appears, so a price is never read as
 // a tier value.
 check('the header is the bank alone, since film has its own row', mid,
@@ -158,7 +176,7 @@ check('and reads as standing on its top rung', maxed,
 // Film has no top: there is always more to buy, which is what stops a fully
 // upgraded player being unable to spend their way out of an empty roll.
 check('but film is still on sale when every ladder is maxed', maxed,
-      (h) => /data-i="3"/.test(h) && /data-i="4"/.test(h));
+      (h) => /data-i="3"/.test(h));
 
 // --- clicking ---
 let bought = null, rode = false, menued = false;

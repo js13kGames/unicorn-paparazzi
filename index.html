@@ -56,21 +56,23 @@
     }
     #roll img { width: 100%; border: 1px solid #fff6; display: block }
 
-    /* The frame outline is the whole viewfinder now. A centred crosshair lived
-       here and cost 42 bytes -- the single most expensive decoration left in the
-       stylesheet -- and the 16:9 border already says exactly what will be in the
-       photograph, which is the part the player is actually aiming. */
-    #vf { border: 1px solid #fff6 }
+    /* The crosshair as two centred gradient strips rather than two pseudo-elements
+       with their own position, offsets and content: same 20px cross, far less CSS. */
+    #vf {
+      border: 1px solid #fff6;
+      background: linear-gradient(#fff9, #fff9) center/20px 1px no-repeat,
+                  linear-gradient(#fff9, #fff9) center/1px 20px no-repeat;
+    }
 
 
     #track { left: 10px; right: 10px; bottom: 10px; height: 4px; background: #0004 }
     #bar { height: 100%; width: 0; background: #fff }
 
-    #panel { inset: 0; display: none; place-items: center; background: #f86b; pointer-events: auto }
+    #panel { inset: 0; display: none; place-items: center; background: #a22b; pointer-events: auto }
     #panel.on { display: grid }
     #card {
       width: min(720px, 92vw); max-height: 88vh; overflow: auto; touch-action: pan-y;
-      background: #123; border: 1px solid #fff3; padding: 18px 20px
+      background: #201; border: 1px solid #fff3; padding: 18px 20px
     }
     /* Exactly the viewport, and nothing to scroll. #card is content-box with
        20px of side padding, so the old `width: 100vw` made the title card 40px
@@ -84,7 +86,7 @@
     h1 { font: 700 44px serif; margin: 0 0 10px }
     #card.t h1 { font-size: 6em }
     /* Top margin so stacked result cards do not run into each other. */
-    h2 { font-size: 14px; margin: 18px 0 12px; font-weight: 400; color: #9bc }
+    h2 { font-size: 14px; margin: 18px 0 12px; font-weight: 400; color: #c97 }
     h1, h2 { text-align: center }
     #card img { width: 100%; display: block; margin-bottom: 12px; background: #000 }
     table { width: 100%; border-collapse: collapse; font-size: 12px }
@@ -103,10 +105,10 @@
     tr.o { cursor: pointer }
     tr.o:hover td { background: #fff1 }
     .r td { border-top: 1px solid #fff3; padding-top: 8px }
-    .d { color: #8ab }
-    .p { color: #8d9 }
+    .d { color: #b86 }
+    .p { color: #9b6 }
     .b { font-size: 17px }
-    .h { margin-top: 14px; color: #79a; font-size: 12px; text-align: center }
+    .h { margin-top: 14px; color: #a76; font-size: 12px; text-align: center }
     /* After .h, so a footer line can take the loss color: `class="h m"` is a
        hint that is also a problem, and .m has to win the tie. */
     .m { color: #f86 }
@@ -122,7 +124,7 @@
     /* Scoped to the title card, where the buttons are the menu and carry the
        display face the title is set in. */
     .t button { font: 2em serif }
-    button:hover:not(:disabled) { background: #357 }
+    button:hover:not(:disabled) { background: #533 }
     button:disabled { opacity: .35; cursor: default }
   </style>
 </head>

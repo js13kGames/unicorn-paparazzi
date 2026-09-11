@@ -311,7 +311,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
     // A filmless offer is a quantity of frames rather than a rung, so it has no
     // next tier to name -- but it is bought the same way, and a row of its own
     // under the ladders reads better than a stray line of buttons below them.
-    if (!o.v) return void (film += ' ' + btn('+' + o.n + ' $' + o.price));
+    if (!o.v) return void (film += ' ' + btn('+1 $' + o.price));
     const next = o.at + 1;
     rows += row(o.label, o.v[o.at] + o.sfx,
       next < o.v.length ? btn(o.v[next] + o.sfx + ' $' + o.price) : '');

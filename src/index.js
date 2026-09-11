@@ -70,6 +70,10 @@ function persist() {
      
       g: state.go, c: state.code, h: state.host, n: state.name,
       b: state.bank, z: state.maxZoom, r: state.res, f: state.film,
+      // No SAVE_VERSION bump: a save from before the escalating price simply
+      // has no `s`, which reads 0, which prices film at $100 -- exactly what
+      // that save already expected. A bump would cost bytes and change nothing.
+      s: state.rides,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
@@ -95,6 +99,10 @@ const state = {
   ready: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
   shutterTier: saved.t || 0,
+  // Rides finished, and so the price of a frame: film costs $100 x this. It is
+  // the only number in the save that only ever goes up, and the reason a solo
+  // game ends -- see price() below.
+  rides: saved.s || 0,
   code: '',              // the lobby we are in, '' when playing alone
   host: 0,
   name: saved.n || '',   // what other riders see us called
@@ -143,10 +151,22 @@ const LADDERS = [
 // which is the whole reason the shutter is worth aiming.
 const FILM = 100;
 
+// ...and it is a hundred dollars MORE after every ride. A flat price meant a
+// camera that had outgrown it could ride forever; rising, it eventually outruns
+// any roll, so the game is "shoot the best frame you can, and stay in as long as
+// you can afford to". `|| 1` covers the first shop visit -- and every save
+// written before this existed -- which would otherwise be handing out free film.
+const price = () => FILM * (state.rides || 1);
+
 // Film is not a ladder -- there are no tiers to climb, only frames to stock up
 // on -- but it is shaped like one here so buy() stays a single function: an
 // offer is anything with a price and a way to spend it.
-const frames = (n) => ({ n, price: FILM * n, ok: state.bank >= FILM * n, buy: () => (state.film += n) });
+//
+// One frame at a time, since the price began climbing. The roll of ten was a
+// bulk button with no bulk discount, and at $400 a frame it was a $4000 control
+// that spent most of the game greyed out -- the quantity, the multiplication and
+// the label that had to name it all went with it.
+const frames = () => ({ price: price(), ok: state.bank >= price(), buy: () => state.film++ });
 
 // `ok` is affordability, and it is not simply "can I cover the price". With an
 // empty roll the last $100 is not money, it is the next ride: spend it on a
@@ -156,12 +176,12 @@ const frames = (n) => ({ n, price: FILM * n, ok: state.bank >= FILM * n, buy: ()
 // IS the way out -- and once there is a roll in the camera the reserve lifts
 // and you may spend to the last dollar.
 const offers = () => {
-  const keep = state.film ? 0 : FILM;
+  const keep = state.film ? 0 : price();
   return [...LADDERS.map(([label, v, p, key, sfx]) => ({
     label, v, p, sfx, at: state[key], price: p[state[key]],
     ok: state.bank - p[state[key]] >= keep,
     buy: () => state[key]++,
-  })), frames(1), frames(10)];
+  })), frames()];
 };
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
@@ -333,7 +353,9 @@ function endRun() {
   state.mode = 'results';
   // Borrowed gear earns no money: a multiplayer ride would otherwise be the
   // cheapest way to farm the shop.
-  if (!state.mp) for (const s of state.scored) state.bank += s.total;
+  // The ride counter sits inside the same guard for the same reason: a
+  // borrowed-gear ride must not make film more expensive back home either.
+  if (!state.mp) { for (const s of state.scored) state.bank += s.total; state.rides++; }
   persist();
   // One result per rider per ride: the total, and the best single frame.
   let best = 0;
@@ -373,7 +395,10 @@ function showDetail(i) {
 
 // The dead end: no frames left and not enough money to buy one. Nothing you can
 // do from here changes either number, so the only honest offer is a fresh start.
-const broke = () => !state.film && state.bank < FILM;
+// Phrased through the shop's own offer rather than restating its arithmetic: the
+// dead end is "no frames, and the cheapest thing that would fix that is refused".
+// `frames()` is a call the packer has already seen, which the long form was not.
+const broke = () => !state.film && !frames().ok;
 
 function showShop() {
   state.mode = 'shop';
