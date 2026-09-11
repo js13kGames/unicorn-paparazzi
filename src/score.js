@@ -20,7 +20,7 @@ export function scorePhoto(photo, cfg, state) {
     // out at 100 each.
     const size = coverage * bonus;
     // Rarer poses are worth more, measured against the commonest one -- so
-    // merely standing about, which is what they do 80% of the time, earns
+    // merely walking about, which is what they do 80% of the time, earns
     // nothing at all.
     const pose = Math.round(((common - cfg.poseWeights[s.pose]) / common) * 100);
 

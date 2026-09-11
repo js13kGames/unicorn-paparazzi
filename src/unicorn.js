@@ -14,7 +14,7 @@ export const COLORS = [
 ];
 export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet'];
 
-export const POSE_NAMES = ['standing', 'eating', 'sitting', 'neighing'];
+export const POSE_NAMES = ['walking', 'eating', 'sitting', 'neighing'];
 export const POSE_FRAMES = 16;
 const TAU = Math.PI * 2;
 export const POSE_ROWS = POSE_NAMES.length * POSE_FRAMES;
@@ -105,12 +105,17 @@ function poseAngles(pose, ph) {
   let lift = 0;
   const set = (p, rx, rz) => { a[p * 2] = rx; a[p * 2 + 1] = rz || 0; };
 
-  if (pose === 0) {                       // standing: breathing and a tail swish
-    lift = 0.012 * s;
+  if (pose === 0) {                       // walking: a trot on the diagonals
+    // Front left swings with back right, and the other pair opposes them, which
+    // is the cheapest gait that reads as walking rather than paddling: one sine
+    // and its negative across four legs. The body bobs at twice the leg rate --
+    // once per footfall rather than once per stride -- which is what s2 is for.
+    lift = 0.03 * s2;
     set(NECK, -0.25);
-    set(HEAD, 0.10 + 0.05 * s);
+    set(HEAD, 0.10 + 0.04 * s2);
     set(TAIL, -0.15, 0.30 * s);
-    for (const l of [LEG_FL, LEG_FR, LEG_BL, LEG_BR]) set(l, 0.02 * s);
+    set(LEG_FL, 0.32 * s); set(LEG_BR, 0.32 * s);
+    set(LEG_FR, -0.32 * s); set(LEG_BL, -0.32 * s);
   } else if (pose === 1) {                // eating: muzzle down in the grass
     set(NECK, -1.30);
     set(HEAD, -0.50 + 0.10 * s2);
@@ -282,7 +287,7 @@ export function updateHerd(h, world, cfg, dt) {
     }
     h.phase[i] = (h.phase[i] + dt / POSE_CYCLE[h.pose[i]]) % 1;
 
-    // Only a standing unicorn wanders; the other poses are stationary.
+    // Only a walking unicorn wanders; the other poses are stationary.
     if (h.pose[i] === 0) {
       h.step[i] += dt * h.speed[i] / STEP_TIME;
       while (h.step[i] >= 1) {
@@ -290,7 +295,13 @@ export function updateHerd(h, world, cfg, dt) {
         h.fromX[i] = h.toX[i];
         h.fromZ[i] = h.toZ[i];
         // One tile up, down or sideways -- the same +1/0/-1 walk the terrain uses.
-        const dx = ((rnd() * 3) | 0) - 1, dz = ((rnd() * 3) | 0) - 1;
+        // Standing still is NOT one of the nine outcomes: the pair (0,0) came up
+        // one step in nine, and now that the legs move that read as an animal
+        // marking time on the spot. `|| (dx ? 0 : 1)` only fires when both rolled
+        // zero, so it is still exactly two draws every time through -- which is
+        // what keeps the two machines in step.
+        const dx = ((rnd() * 3) | 0) - 1;
+        const dz = (((rnd() * 3) | 0) - 1) || (dx ? 0 : 1);
         const nx = h.toX[i] + dx, nz = h.toZ[i] + dz;
         const gi = (nz | 0) * N + (nx | 0);
         const ok = nx > 1 && nz > 1 && nx < N - 1 && nz < N - 1 && world.elev[gi] >= 0;
@@ -300,6 +311,12 @@ export function updateHerd(h, world, cfg, dt) {
           h.aim[i] = Math.atan2(-dx, -dz);
         }
       }
+      // The stride IS the step: one tile crossed, one gait cycle. Left on the
+      // free-running POSE_CYCLE timer the legs would swing at their own rate
+      // and the animal would still be gliding, just with its legs moving --
+      // and a fast walker would stride no quicker than a slow one. This one
+      // assignment is what couples the two, and what makes h.speed visible.
+      h.phase[i] = h.step[i];
       const t = h.step[i];
       const e = t * t * (3 - 2 * t);        // ease so steps don't look robotic
       h.x[i] = h.fromX[i] + (h.toX[i] - h.fromX[i]) * e;
