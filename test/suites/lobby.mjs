@@ -247,7 +247,7 @@ nodes.card.onclick({ stopPropagation() {},
   target: { closest: (q) => (q === '.o' ? { dataset: { i: '1' } } : null) } });
 check('and a shot in the roll still opens on its index', picked, 1);
 
-// --- gains, losses and multipliers are coloured ---------------------------
+// --- gains, losses and multipliers are colored ---------------------------
 // The breakdown is a wall of numbers; the sign is the fastest thing to read.
 // A plain subtotal must stay neutral -- naively testing the character after the
 // first would paint "43" red, since its tail parses as 3.
@@ -255,7 +255,7 @@ check('and a shot in the roll still opens on its index', picked, 1);
   const card = ui.photoCard('', [
     ['red neighing', '366'], [' 8.5% × 1000dpi', '+85'], [' pose', '+98'],
     [' obscured', '-20'], [' bicorn', '×2'], ['green', '43'],
-    ['framing', '×111%'], ['2 colours', '×2'],
+    ['framing', '×111%'], ['2 colors', '×2'],
   ], 'a heading', 911);
   const cls = {};
   for (const m of card.matchAll(/<td>(?:&nbsp;)?([^<]*)<\/td><td class="([^"]*)">([^<]*)</g)) {

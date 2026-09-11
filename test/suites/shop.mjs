@@ -68,28 +68,31 @@ check('and the sensor button too', mid,
 check('rungs beyond the next are not on screen at all', mid, (h) => !/8×/.test(h));
 check('nor their prices', mid, (h) => !/1800/.test(h) && !/3200/.test(h));
 // A ragged row ends early and its rule stops short of the table edge instead of
-// dividing the whole row, so every ladder must be the same width.
+// dividing the whole row, so every row -- film included -- must be the same
+// width, however many buttons the last cell is carrying.
 check('the table is three columns all the way down', mid, (h) => {
   const cells = [...h.matchAll(/<tr class="r">([\s\S]*?)<\/tr>/g)]
     .map((m) => (m[1].match(/<td/g) || []).length);
-  console.log('        cells per ladder row: ' + cells.join(' '));
-  return cells.length === 3 && new Set(cells).size === 1 && cells[0] === 3;
+  console.log('        rows x cells: ' + cells.join(' '));
+  return cells.length === 4 && new Set(cells).size === 1 && cells[0] === 3;
 });
 
-// --- film is a stock, not a ladder ---
-// It buys frames at a flat price rather than climbing tiers, so it sits in the
-// footer with the stock you are holding rather than in the ladder table.
-check('the shop says how much film you are holding', text, (t) => / Film 12 /.test(t));
-check('a single frame is offered at its price', mid, (h) => /\$100 <button[^>]*>\+1<\/button>/.test(h));
-check('and ten frames at ten times it', mid, (h) => /\$1000 <button[^>]*>\+10<\/button>/.test(h));
-check('film is not a ladder row', mid, (h) => !/<td class="d">[Ff]ilm<\/td>/.test(h));
+// --- film is a stock, but it is still a row ---
+// It buys frames at a flat price rather than climbing tiers, so its last cell
+// holds both quantities instead of one next rung -- but it reads down the same
+// three columns as the ladders: what it is, what you hold, what you can buy.
+check('film is a row like the rest', mid, (h) => /<td class="d">film<\/td>/.test(h));
+check('the shop says how much film you are holding', mid,
+      (h) => /<td class="d">film<\/td><td class="n"><b class="p">12<\/b>/.test(h));
+check('a single frame is offered at its price', mid, (h) => /<button[^>]*>\+1 \$100<\/button>/.test(h));
+check('and ten frames at ten times it', mid, (h) => /<button[^>]*>\+10 \$1000<\/button>/.test(h));
 
 check('one button per ladder, plus the two film quantities',
       (mid.match(/data-i="\d"/g) || []).length, 5);
 // Money is marked as money everywhere it appears, so a price is never read as
 // a tier value.
-check('the bank and the roll are read together in the header', mid,
-      (h) => /<h2>\$2140 · Film 12<\/h2>/.test(h));
+check('the header is the bank alone, since film has its own row', mid,
+      (h) => /<h2>\$2140<\/h2>/.test(h));
 
 // --- affordability ---
 const broke = render({ bank: 0, maxZoom: 1, res: 1, shutterTier: 1 });
@@ -106,7 +109,7 @@ check('nothing is disabled when the bank is full', rich, (h) => !/data-i="\d+" d
 const dry = render({ film: 0, bank: 500 });
 check('an empty roll cannot be ridden', dry, (h) => /id="e" disabled/.test(h));
 // A greyed-out button with no reason on it is a dead end the player has to guess
-// at, so the reason sits under both buttons in the loss colour.
+// at, so the reason sits under both buttons in the loss color.
 check('and a line under the buttons says why', dry, (h) => /class="h m">no film</.test(h));
 check('but can still be refilled, since the money is there', dry,
       (h) => /data-i="3"(?! disabled)/.test(h));

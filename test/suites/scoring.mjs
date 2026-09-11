@@ -5,7 +5,7 @@ const cfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000], min
 const st = { res: 0 };
 const W = 320, H = 180;
 
-// Fixture: id N maps to herd index N-1. Colour cycles 0..5; everyone is an adult
+// Fixture: id N maps to herd index N-1. Color cycles 0..5; everyone is an adult
 // standing, so each check can turn on exactly one variable at a time.
 const herd = { color:[], pose:[], horns:[] };
 for (let i=0;i<12;i++){ herd.color[i]=i%6; herd.pose[i]=0; herd.horns[i]=0; }
@@ -113,12 +113,12 @@ check('the floor is a fraction, not a pixel count',
 
 // --- bonuses (all adults, so the age multiplier stays out of it) ---
 const row = (n) => Array.from({length:n},(_,i)=>[i+1, 10+i*45, cy, 40, 40]);
-check('1 colour -> no multiplier', score(row(1)).multiplier, 1);
-check('2 colours -> x2', score(row(2)).multiplier, 2);
-check('3 colours -> x3', score(row(3)).multiplier, 3);
-check('6 colours -> x6 then x2 rainbow = x12', score(row(6)).multiplier, 12);
-check('6 colours still earns the rainbow bonus', score(row(6)).bonuses.some(b=>b.label==='RAINBOW'), true);
-check('same colour twice is still x1',
+check('1 color -> no multiplier', score(row(1)).multiplier, 1);
+check('2 colors -> x2', score(row(2)).multiplier, 2);
+check('3 colors -> x3', score(row(3)).multiplier, 3);
+check('6 colors -> x6 then x2 rainbow = x12', score(row(6)).multiplier, 12);
+check('6 colors still earns the rainbow bonus', score(row(6)).bonuses.some(b=>b.label==='RAINBOW'), true);
+check('same color twice is still x1',
       score([[1,40,cy,40,40],[7,200,cy,40,40]]).multiplier, 1);
 
 
@@ -340,7 +340,8 @@ const neighing = score([[1,cx,cy,40,40]]);
 check('a pose worth points gets its own row, and it names the pose',
       rowsOf(neighing).includes(' pose · neighing'), true);
 check('and it carries the points, signed', valueOf(neighing, ' pose · neighing'), '+98');
-check('the pose is named in the subject header', neighing.b[0][0], 'red neighing', 0);
+// The pose row below says "neighing" already, so the header is the color alone.
+check('the subject header is the color alone', neighing.b[0][0], 'red', 0);
 herd.pose[0] = 0;
 
 // The three ways a subject can be spoiled are one number to the player.

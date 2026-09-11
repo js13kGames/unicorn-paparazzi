@@ -12,7 +12,7 @@ export const CONFIG = {
   terrainSmooth: 2,       // [1,2,1] blur passes turning bands into slopes
   terrainDetail: 0.35,    // fine relief added back after blurring, in bands
   unicornDensity: 0.003,
-  driftChance: 0.08,      // chance a unicorn wears an off-biome colour
+  driftChance: 0.08,      // chance a unicorn wears an off-biome color
   poseWeights: [0.80, 0.10, 0.08, 0.02],
   trackRadiusFrac: 0.25,
   shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive

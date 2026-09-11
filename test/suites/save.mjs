@@ -43,7 +43,7 @@ const check = (n, ok, d) => { if(!ok) fails++; console.log((ok?'  ok  ':'FAIL  '
 
 // A save from an older version, carrying fields this build no longer knows.
 boot({ v: 2, b: 4200, z: 2, r: 1, f: 3, a: [0,0,0,0,0,0,0], p: [0,0,0,0,0,0,0], w: false });
-check('an old colour-array save still loads', true);
+check('an old color-array save still loads', true);
 
 // A current save must be taken at face value.
 boot({ v: 3, b: 900, z: 1, r: 0, f: 0, a: 7, s: 3, w: true });

@@ -15,8 +15,8 @@ Run one suite with `npm test <prefix>`, e.g. `npm test scoring`.
 
 | | what it protects |
 | --- | --- |
-| `scoring` | the whole rubric: absolute-pixel size, pose rarity, outline contact (crop / scenery / crowd), composition, colour and horn bonuses, the bait penalty |
-| `lures` | lures gather, reach differs between weak and strong, and they pull every colour |
+| `scoring` | the whole rubric: absolute-pixel size, pose rarity, outline contact (crop / scenery / crowd), composition, color and horn bonuses, the bait penalty |
+| `lures` | lures gather, reach differs between weak and strong, and they pull every color |
 | `flight` | ballistics against the real launch constants read out of `src/index.js`; a 45° throw must still carry ~190 units |
 | `cooldown` | the shutter **gate**, driven from the real `takePhoto` guard. An earlier version tested only the readout, so a cooldown that blocked nothing passed |
 | `water` | the track never lifts open sea above the waterline |
@@ -37,7 +37,7 @@ range?"). `profile` and `water` shaped the track-over-sea work.
 node test/tools/scene.mjs out.png      # the world from four points on the track
 node test/tools/model.mjs out.png      # the unicorn in every pose
 node test/tools/capture.mjs out.png    # shots scored through the real ID pass
-node test/tools/rainbow.mjs            # can a strong lure stage six colours?
+node test/tools/rainbow.mjs            # can a strong lure stage six colors?
 ```
 
 They need the `canvas` dev dependency.

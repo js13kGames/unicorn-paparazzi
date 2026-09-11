@@ -1,6 +1,6 @@
 // Taking a photograph is two renders. The visible one becomes the thumbnail the
 // player reviews; a second pass into a small offscreen buffer paints each
-// unicorn in a flat colour keyed to its instance id, and reading that back gives
+// unicorn in a flat color keyed to its instance id, and reading that back gives
 // -- exactly, and with correct occlusion -- who is in frame, how much of the
 // frame each one fills, whether any is clipped by an edge, and where its centre
 // of mass sits. Every term in the scoring rubric falls out of that one buffer.
@@ -106,7 +106,7 @@ export function createPhotoRig(gl, canvas, draw) {
 }
 
 // Walk the ID buffer once, accumulating per-unicorn pixel count, bounding box
-// and centroid. Pose, colour and age are snapshotted here because the herd keeps
+// and centroid. Pose, color and age are snapshotted here because the herd keeps
 // moving while the photos wait to be scored.
 // Scenery's sentinel id. The herd is a few hundred animals, so real ids never
 // come near it.

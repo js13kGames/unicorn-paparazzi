@@ -30,7 +30,7 @@ const cv = createCanvas(640*2, 360*Math.ceil(views.length/2));
 const ctx = cv.getContext('2d');
 
 views.forEach((v, n) => {
-  const colour = shot(...v, false);
+  const color = shot(...v, false);
   const ids = shot(...v, true);
   const W = ids.W, H = ids.H;
 
@@ -43,13 +43,13 @@ views.forEach((v, n) => {
   const scored = scorePhoto({ url:'', w:W, h:H, subjects: tally(px, W, H, herd) }, cfg, st);
 
   const img = ctx.createImageData(W,H);
-  for(let k=0;k<W*H;k++){ img.data[k*4]=colour.px[k*3]; img.data[k*4+1]=colour.px[k*3+1]; img.data[k*4+2]=colour.px[k*3+2]; img.data[k*4+3]=255; }
+  for(let k=0;k<W*H;k++){ img.data[k*4]=color.px[k*3]; img.data[k*4+1]=color.px[k*3+1]; img.data[k*4+2]=color.px[k*3+2]; img.data[k*4+3]=255; }
   ctx.putImageData(img, (n%2)*640, ((n/2)|0)*360);
 
   console.log('--- shot ' + n + ' -> ' + scored.total + ' points ' +
     '(base ' + Math.round(scored.base) + ' x' + scored.multiplier + ')');
   for (const s of scored.subjects) {
-    console.log('    ' + s.colour.padEnd(14) +
+    console.log('    ' + s.color.padEnd(14) +
       s.poseName.padEnd(10) +
       (s.coverage*100).toFixed(2).padStart(6) + '% ' +
       'size ' + s.size.toFixed(1).padStart(5) +

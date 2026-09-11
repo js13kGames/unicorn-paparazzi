@@ -7,7 +7,7 @@ const SKY = [0.62, 0.78, 0.95];
 
 const FOG_DISTANCE = 190;
 
-// Shared lighting: one sun plus distance fog into the sky colour. The terrain
+// Shared lighting: one sun plus distance fog into the sky color. The terrain
 // supplies smooth per-vertex normals; the unicorns take theirs from screen-space
 // derivatives, which keeps them crisply faceted against the soft ground.
 const SHADE = `vec3 shade(vec3 wp, vec3 n, vec3 base, vec3 eye, vec3 sky, float fog) {
@@ -60,9 +60,9 @@ void main() {
 // the instance's current animation frame.
 const HERD_VS = `#version 300 es
 in vec3 p;
-in vec2 a;          // x: part index, y: colour role
+in vec2 a;          // x: part index, y: color role
 in vec4 ip;         // world x, y, z, yaw
-in vec4 iq;         // scale, colour index, pose row, spare
+in vec4 iq;         // scale, color index, pose row, spare
 uniform mat4 vp;
 uniform sampler2D poses;
 uniform vec3 pal[6];
@@ -109,7 +109,7 @@ out vec4 o;
 ${SHADE}
 void main() {
   if (idPass > 0.5) {
-    // Flat per-instance colour so a readback can measure each unicorn exactly.
+    // Flat per-instance color so a readback can measure each unicorn exactly.
     int id = vid + 1;
     o = vec4(float(id & 255) / 255.0, float((id >> 8) & 255) / 255.0,
              clamp(length(wp - eye) / 256.0, 0.0, 1.0), 1.0);
@@ -206,7 +206,7 @@ export function createRenderer(canvas, world, herd) {
     gl.depthMask(true);
 
     // Terrain still draws during the ID pass so it occludes unicorns correctly;
-    // it just writes the background colour.
+    // it just writes the background color.
     gl.useProgram(tp);
     gl.uniformMatrix4fv(tp.u.vp, false, vp);
     gl.uniform3f(tp.u.eye, cam.x, cam.y, cam.z);

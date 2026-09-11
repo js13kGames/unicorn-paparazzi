@@ -11,7 +11,7 @@ export function scorePhoto(photo, cfg, state) {
   for (const [id, s] of photo.subjects) {
     const coverage = s.n / total;
     // A subject too small to identify should not count at all -- otherwise a
-    // dozen distant specks hand out a huge colour-variety multiplier.
+    // dozen distant specks hand out a huge color-variety multiplier.
     if (coverage < cfg.minCoverage) continue;
 
     // Share of the frame, paid at this sensor's rate -- which is what makes a
@@ -43,8 +43,8 @@ export function scorePhoto(photo, cfg, state) {
 
     subjects.push({
       id,
-      colour: COLOR_NAMES[s.color],
-      colourIndex: s.color,
+      color: COLOR_NAMES[s.color],
+      colorIndex: s.color,
       poseName: POSE_NAMES[s.pose],
       horns: s.horns,
       // Normalised centroid, y flipped into image space (readPixels is bottom-up).
@@ -92,7 +92,9 @@ export function scorePhoto(photo, cfg, state) {
 function breakdown(subjects, framing, bonuses, dpi) {
   const out = [];
   for (const s of subjects) {
-    out.push([s.colour + (s.pose ? ' ' + s.poseName : ''), '' + Math.round(s.subtotal)]);
+    // Just the color: a scored pose already names itself on its own detail row
+    // below, and heading the subject with it too read as a stutter.
+    out.push([s.color, '' + Math.round(s.subtotal)]);
     // The size row shows its own arithmetic: the share of the frame this animal
     // fills, times what the sensor pays for a share. They multiply out to
     // exactly the points beside them, which is the only thing on screen that
@@ -135,11 +137,11 @@ function compose(subjects) {
 
 function bonusList(subjects) {
   const out = [];
-  const colours = new Set(subjects.map((s) => s.colourIndex));
-  if (colours.size >= 2) {
-    out.push({ label: colours.size + ' colours', factor: colours.size });
+  const colors = new Set(subjects.map((s) => s.colorIndex));
+  if (colors.size >= 2) {
+    out.push({ label: colors.size + ' colors', factor: colors.size });
   }
-  if (colours.size === 6) {
+  if (colors.size === 6) {
     out.push({ label: 'RAINBOW', factor: 2 });
   }
   return out;

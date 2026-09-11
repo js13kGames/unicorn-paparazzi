@@ -43,7 +43,7 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
   const lit=(nx,ny,nz)=>{ const l=Math.hypot(nx,ny,nz)||1; return 0.42+0.58*Math.max(0,(nx*sun[0]+ny*sun[1]+nz*sun[2])/l/sl); };
 
   // c0/c1/c2 are per-vertex lit RGB; interpolating them approximates what the
-  // GPU does when it interpolates normal + colour and lights per fragment.
+  // GPU does when it interpolates normal + color and lights per fragment.
   function tri(p0,p1,p2, c0,c1,c2, dist0,dist1,dist2, alpha) {
     if (p0[2]<=0.2||p1[2]<=0.2||p2[2]<=0.2) return;
     const minx=Math.max(0,Math.floor(Math.min(p0[0],p1[0],p2[0])));
@@ -72,7 +72,7 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
     }
   }
 
-  // --- terrain (indexed, per-vertex normal + colour, exactly as uploaded) ---
+  // --- terrain (indexed, per-vertex normal + color, exactly as uploaded) ---
   const m = world.mesh, S = m.S;
   const V = S*S;
   const sp2 = new Float32Array(V*4);

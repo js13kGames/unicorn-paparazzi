@@ -46,7 +46,7 @@ export function updateHud(state, ride, clock) {
   // number -- what you actually want mid-ride is which zoom you are on, and the
   // lens has no other readout. CONFIG.zoomLevels is [1, 2, 4, 8, 16], so the
   // level is just the index shifted; the shop suite holds that ladder to it.
-  el.film.innerHTML = 'Film <b>' + state.film + '</b><br><small>' +
+  el.film.innerHTML = 'film <b>' + state.film + '</b><br><small>' +
     (clock < state.ready ? '·' : '×' + (1 << state.zoom)) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
@@ -161,7 +161,7 @@ export function photoCard(url, rows, heading, total) {
     const sub = label[0] === ' ';
     // A gain reads green and a loss red. A multiplier is judged against parity
     // -- x2 is a gain, and framing rides below x100% as often as above it. Only
-    // a signed or multiplied value is coloured, so plain totals stay neutral.
+    // a signed or multiplied value is colored, so plain totals stay neutral.
     const k = value[0];
     const c = k === '-' ? ' m'
       : k !== '+' && k !== '×' ? ''
@@ -258,32 +258,35 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
 export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
-  // Three columns: what the ladder is, the rung you are standing on, and the one
-  // rung you can buy with its price inside the button. The whole ladder used to
-  // be drawn, which was a table of markup for something read once -- and a maxed
-  // ladder now simply has no button rather than a row of dimmed text.
+  // Three columns: what the line is, where you stand on it, and what you can
+  // buy with the price inside the button. The whole ladder used to be drawn,
+  // which was a table of markup for something read once -- and a maxed ladder
+  // now simply has no button rather than a row of dimmed text.
   let rows = '', film = '';
+  const row = (label, now, buys) => '<tr class="r"><td class="d">' + label +
+    '</td><td class="n"><b class="p">' + now + '</b></td><td class="n">' + buys + '</td></tr>';
   offers.forEach((o, i) => {
     const btn = (label) => '<button data-i="' + i + '"' +
       (state.bank >= o.price ? '' : ' disabled') + '>' + label + '</button>';
-    // A filmless offer is a quantity of frames rather than a rung. Film is not a
-    // ladder and does not belong in the ladder table, so it goes to the footer.
-    if (!o.v) return void (film += ' $' + o.price + ' ' + btn('+' + o.n));
+    // A filmless offer is a quantity of frames rather than a rung, so it has no
+    // next tier to name -- but it is bought the same way, and a row of its own
+    // under the ladders reads better than a stray line of buttons below them.
+    if (!o.v) return void (film += ' ' + btn('+' + o.n + ' $' + o.price));
     const next = o.at + 1;
-    rows += '<tr class="r"><td class="d">' + o.label +
-      '</td><td class="n"><b class="p">' + o.v[o.at] + o.sfx + '</b></td><td class="n">' +
-      (next < o.v.length ? btn(o.v[next] + o.sfx + ' $' + o.price) : '') + '</td></tr>';
+    rows += row(o.label, o.v[o.at] + o.sfx,
+      next < o.v.length ? btn(o.v[next] + o.sfx + ' $' + o.price) : '');
   });
+  rows += row('film', state.film, film);
   panel(
     '<h1>SHOP</h1>' +
-    // Money and film are the two things you spend, so they are read together.
-    '<h2>$' + state.bank + ' · Film ' + state.film + '</h2>' +
+    // Only the bank: film now has its own row, and printing it twice on one
+    // short screen just made the header longer.
+    '<h2>$' + state.bank + '</h2>' +
     // A `current`/`Upgrade` header row here measured at 35 bytes -- a tenth of
     // everything the three-column rebuild saved -- and the columns read without
     // it: a name, the rung you own in green, and a button naming what it buys
     // and what it costs. Restore it here if the budget ever allows.
     '<table>' + rows + '</table>' +
-    '<p class="h">Film' + film + '</p>' +
     // A ride with an empty roll earns nothing and cannot be photographed, so it
     // is only offered once there is film to shoot it on.
     '<p class="h"><button id="e"' + (state.film ? '' : ' disabled') +
@@ -291,7 +294,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
     // Everything else you might want -- multiplayer, wiping the save -- lives on
     // the menu now, so the shop only has to be able to get you back there.
     '<button id="mp">Menu</button></p>' +
-    // Under both buttons, in the loss colour: a greyed-out button with no reason
+    // Under both buttons, in the loss color: a greyed-out button with no reason
     // on it is something the player has to guess at, and what is missing is on
     // sale two rows up.
     (state.film ? '' : '<p class="h m">no film</p>')

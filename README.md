@@ -7,7 +7,7 @@ island. You can look anywhere you like but you cannot stop, you have a fixed
 roll of film, and the herds do not wait. Photograph them; the photographs are
 scored; the points buy better glass.
 
-Get all six unicorn colours into one frame and you win.
+Get all six unicorn colors into one frame and you win.
 
 ### How it is put together
 
@@ -28,7 +28,7 @@ seed, so the same seed builds the same island on any machine.
 | `src/index.js` | `CONFIG`, state machine, main loop |
 
 **Terrain** is two fields. `band` holds quantised integer elevations and decides
-colour, biome and which unicorn colour lives where. A separate `height` field is
+color, biome and which unicorn color lives where. A separate `height` field is
 that same band blurred, with a fine noise layer added back, and it drives the
 geometry — so the ground rolls while the biomes stay put. The mesh is an indexed
 grid over the `(N+1)²` corners with analytic normals, which is why there are no
@@ -44,7 +44,7 @@ belongs to; the four poses × 16 animation frames are baked into a lookup textur
 of part matrices, so animating the whole herd costs one float per animal.
 
 **Scoring** works off an ID pass. After the shutter, the scene is drawn again
-into a small offscreen buffer with each unicorn in a flat colour keyed to its
+into a small offscreen buffer with each unicorn in a flat color keyed to its
 instance id. One `readPixels` gives every term in the rubric at once — who is in
 frame, how much of it each fills, who is clipped by an edge, and where each sits
 — with occlusion handled for free by the depth buffer.

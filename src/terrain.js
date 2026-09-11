@@ -9,7 +9,7 @@ export const WATER_Y = -0.2 * HEIGHT;
 const PATH_POINTS = 1024;
 
 // --- elevation bands -----------------------------------------------------
-// Bands are integers. They decide colour, biome and where each unicorn colour
+// Bands are integers. They decide color, biome and where each unicorn color
 // lives; the geometry uses a smoothed copy so the world isn't a staircase.
 
 // The fBm spans roughly 0.15-0.91 with a median near 0.49, so SEA sits at the
@@ -74,7 +74,7 @@ function median3(band, N) {
 // --- smoothed height -----------------------------------------------------
 
 // Separable [1,2,1] blur. Each pass spreads a one-band step over another tile,
-// turning the quantised plateaus into slopes without moving the colour bands.
+// turning the quantised plateaus into slopes without moving the color bands.
 function smoothHeight(band, N, passes) {
   let src = Float32Array.from(band);
   let dst = new Float32Array(N * N);
@@ -183,7 +183,7 @@ function carve(N, height, path) {
   for (let k = 0; k < N * N; k++) {
     if (weight[k] <= 0) continue;
     // Sea floor is never touched. Grading it up to meet the rails built a mound
-    // out of the bay, and the raised cells kept their water colouring, so the
+    // out of the bay, and the raised cells kept their water coloring, so the
     // crossing appeared to stand on blue supports. The track simply spans open
     // water instead.
     if (height[k] < 0) continue;
@@ -285,7 +285,7 @@ function buildTrackMesh(path, mesh, N) {
   return { pos, col, nrm, idx, count: idx.length };
 }
 
-// --- colour --------------------------------------------------------------
+// --- color --------------------------------------------------------------
 
 function tileColor(q, x, y, volcanic, out) {
   let r, g, b;
@@ -312,7 +312,7 @@ function tileColor(q, x, y, volcanic, out) {
 
 // --- mesh ----------------------------------------------------------------
 
-// An indexed grid over the (N+1)^2 corners. Corner height, colour and normal are
+// An indexed grid over the (N+1)^2 corners. Corner height, color and normal are
 // all averaged from the cells that touch the corner, so the surface, the shading
 // and the biome edges are continuous -- no walls, no stair-steps, no facets.
 function buildMesh(N, band, height, volcanic) {

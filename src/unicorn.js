@@ -2,8 +2,8 @@ import { multiply } from './mat.js';
 import { mulberry32 } from './rng.js';
 import { HEIGHT, elevAt } from './terrain.js';
 
-// Six coat colours, in rainbow order. A unicorn's mane and tail take the NEXT
-// colour along, so every animal is a little two-tone rainbow.
+// Six coat colors, in rainbow order. A unicorn's mane and tail take the NEXT
+// color along, so every animal is a little two-tone rainbow.
 export const COLORS = [
   [0.90, 0.24, 0.24],  // R
   [0.95, 0.55, 0.20],  // O
@@ -40,7 +40,7 @@ const SKELETON = [
   [BODY,  0.20, -0.24,  0.42],  // back right leg
 ];
 
-// Colour roles: 0 coat, 1 mane/tail, 2 horn, 3 hoof/muzzle, 4-6 extra horns.
+// Color roles: 0 coat, 1 mane/tail, 2 horn, 3 hoof/muzzle, 4-6 extra horns.
 //        part,  cx,    cy,    cz,   hx,    hy,    hz,   taper, role
 const BOXES = [
   [BODY,    0,  0.00,  0.00, 0.30,  0.28,  0.62,  1.00, 0],
@@ -178,8 +178,8 @@ export function buildPoseTable() {
 
 // --- population ----------------------------------------------------------
 
-// Each colour keeps to its home biome, so rare terrain means rare colours --
-// which is what makes an all-six-colour photograph hard to stage.
+// Each color keeps to its home biome, so rare terrain means rare colors --
+// which is what makes an all-six-color photograph hard to stage.
 function colorForBand(q, volcanic) {
   if (q >= 7) return 4;                      // blue: high peaks
   if (q >= 5) return volcanic ? 0 : 5;       // red on volcanoes, violet on mountains
@@ -199,7 +199,7 @@ export function spawn(world, cfg, seed) {
       const q = Math.round(world.elev[i]);
       if (q < 0) continue;                   // no unicorns in the sea
       if (rnd() >= cfg.unicornDensity) continue;
-      // A few drifters wear an off-biome colour, which is what makes a rainbow
+      // A few drifters wear an off-biome color, which is what makes a rainbow
       // shot possible at all near the track.
       const color = rnd() < cfg.driftChance
         ? (rnd() * 6) | 0

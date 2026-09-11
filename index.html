@@ -84,15 +84,21 @@
     .p { color: #8d9 }
     .b { font-size: 17px }
     .h { margin-top: 14px; color: #79a; font-size: 12px; text-align: center }
-    /* After .h, so a footer line can take the loss colour: `class="h m"` is a
+    /* After .h, so a footer line can take the loss color: `class="h m"` is a
        hint that is also a problem, and .m has to win the tie. */
     .m { color: #f86 }
+    /* One control everywhere: an outline on the panel, filling in on hover. The
+       shop used to carry solid #245 buttons while the title card overrode them
+       to transparent, which read as two different controls on two screens. The
+       inputs are outlined too -- an exception keeping the old solid fill for
+       them cost 14 bytes, and the empty box already reads as a field. */
     button, input {
-      background: #245; color: #def; border: 1px solid #fff3;
+      background: none; color: #fff; border: 1px solid #fff3;
       padding: 10px 16px; font: inherit; cursor: pointer; min-width: 88px
     }
-    /* Scoped to the title card, so the shop's own Multiplayer button is spared. */
-    .t button { background: none; font: 2em serif; color: #fff }
+    /* Scoped to the title card, where the buttons are the menu and carry the
+       display face the title is set in. */
+    .t button { font: 2em serif }
     button:hover:not(:disabled) { background: #357 }
     button:disabled { opacity: .35; cursor: default }
   </style>

@@ -61,7 +61,7 @@ state.film = 2; ui.updateHud(state, 0.4, 0);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
 state.film = 12;
 
-check('the film counter says what it is counting', film, (t) => /Film/.test(t));
+check('the film counter says what it is counting', film, (t) => /film/.test(t));
 
 // The flash fired once and then stuck on, because a reflow restarts a CSS
 // transition but not a CSS animation. It must now fire on EVERY shot.
@@ -113,7 +113,7 @@ check('thumbnails carry their data url', nodes.roll.children[1].src, 'data:image
 const scored = [
   { total: 900, url: 'a', subjects: [{}], bonuses: [], b: [['azure', '900'], [' size', '+900']] },
   { total: 60,  url: 'b', subjects: [],   bonuses: [], b: [] },
-  { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colours' }], b: [] },
+  { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colors' }], b: [] },
 ];
 let picked = null, shopped = false;
 ui.showResults({ bank: 1260 }, scored,
@@ -125,7 +125,7 @@ check('results list shows every shot', order.length, scored.length);
 // The empty label is built out of the words the other rows already use rather
 // than being prose of its own, so it reads "0 unicorns".
 check('a frame with nothing big enough is labelled', list, (s) => s.includes('0 unicorns'));
-check('bonuses appear in the row summary', list, (s) => s.includes('2 colours'));
+check('bonuses appear in the row summary', list, (s) => s.includes('2 colors'));
 check('bank is shown', list, (s) => s.includes('1260'));
 nodes.card.onclick({ target: { closest: (q) => (q === '.o' ? { dataset: { i: '2' } } : null) }, stopPropagation() {} });
 check('clicking a row opens that photo', picked, 2);
