@@ -41,11 +41,6 @@ export const CONFIG = {
   // longer the thing that makes film scarce, because film is priced to be scarce
   // on its own and a shutter that made you wait was a ride spent watching a dot.
   shutterTiers: [1, 0.5, 0.25, 0.1],
-  // World units per second, per drive train. A faster cart covers more of the
-  // loop between one frame and the next, so the same roll of film sees more of
-  // the map -- and more of the combinations that are only worth photographing
-  // together. Pinned for everyone in a match; see MP_GEAR.
-  cartTiers: [8, 10, 13, 17],
   eyeHeight: 2.4,
   baseFov: Math.PI / 3,
   // The first rung is free and barely a zoom at all: a new player who nudges the
@@ -104,13 +99,32 @@ const saved = read(SAVE_KEY);
 // with `g` is a match starting -- the same test the boot block below makes.
 if (!(saved.c && saved.g)) CONFIG.unicornDensity *= 1.05 ** (saved.s | 0);
 
-const seed = +location.hash.slice(1) || (Math.random() * 0x7fffffff) | 0;
+// Solo levels are fixed: level n is always the same world, the same herd and the
+// same black unicorns, on every run anyone ever plays. That is what makes a
+// speck on the horizon worth learning and a quota worth retrying -- against a
+// fresh random map neither would be a skill.
+//
+// The hash stays the first term and must: it is the whole of the shared-seed
+// channel for a match (host picks -> relay -> hash -> reload), and a guest whose
+// `s` differed would otherwise build a different world. `#1234` still forces one.
+const seed = +location.hash.slice(1) || 4242 + (saved.s | 0);
 const world = buildWorld(seed, CONFIG);
 const herd = spawn(world, CONFIG, seed);
 const renderer = createRenderer(canvas, world, herd);
 const photoRig = createPhotoRig(renderer.gl, canvas, renderer.draw);
 
 const SAVE_VERSION = 4;
+
+// Frames in the camera, every ride, for everyone. Film used to be the economy --
+// bought a frame at a time at a price that rose 1.5x a ride until it outran your
+// takings, which is how a run ended. The quota does that job now, and it does it
+// better: it asks you to take EIGHT GOOD PHOTOGRAPHS of a map you can learn,
+// where the price curve only ever asked you to survive arithmetic.
+//
+// Eight because the ride is 100 seconds and the slowest shutter is a second: a
+// comfortable roll you can still afford to waste a frame of. Declared up here
+// because the state literal below reads it.
+const FRAMES = 8;
 
 // A multiplayer ride is taken on borrowed gear, so it must never write gear or bank back
 // into the save. One guard covers every call site.
@@ -122,11 +136,17 @@ function persist() {
       t: state.shutterTier,
      
       g: state.go, c: state.code, h: state.host, n: state.name,
-      b: state.bank, z: state.maxZoom, r: state.res, f: state.film,
-      // No SAVE_VERSION bump: a save from before the escalating price simply
-      // has no `s`, which reads 0, which prices film at $100 -- exactly what
-      // that save already expected. A bump would cost bytes and change nothing.
-      s: state.rides, d: state.cartTier,
+      b: state.bank, z: state.maxZoom, r: state.res,
+      // The level reached. No SAVE_VERSION bump: an older save simply has no
+      // `s`, which reads 0, which is level one -- where that save would have
+      // started anyway. `f` (film) and `d` (cart tier) used to live here and
+      // are gone; both now read their default, which is the only value either
+      // of them can have. Do not reuse the letter `d` for anything new: saves
+      // in the wild still carry a cart tier under it.
+      s: state.rides,
+      // Whether the last ride missed its quota, which is the only way a run
+      // ends now. It has to survive the reload between the ride and the shop.
+      q: state.dead,
       // What the run has earned all told, as opposed to what is left in the
       // bank. The shop spends the bank down, so it is no measure of how the run
       // went -- and how the run went is the whole of the game-over card. Older
@@ -151,22 +171,21 @@ const state = {
   // Clamped: a save from a build with more tiers would index off the end of
   // resBonus, which is a NaN score rather than a visible failure.
   res: Math.min(saved.r || 0, 3),
-  // A stock, not a capacity: it is spent, bought and carried like the bank. `f`
-  // held a tier index before v4, so anything older -- or nothing at all -- is
-  // handed a fresh roll rather than having its tier read as a frame count.
-  film: saved.v > 3 ? saved.f : 10,
+  // A capacity now, not a stock: every ride is a page load, so the initialiser
+  // IS the refill. Film stopped being the economy when the quota took over as the
+  // way to lose -- there is nothing to buy, nothing to hoard, and no reason to
+  // carry a count across a ride.
+  film: FRAMES,
   zoom: 0,
   ready: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
   shutterTier: saved.t || 0,
-  // No SAVE_VERSION bump, for the same reason as `s` below: a save from before
-  // the drive train simply has no `d`, which reads 0, which is the rung every
-  // one of those saves was already standing on.
-  cartTier: saved.d || 0,
-  // Rides finished, and so the price of a frame: film costs $100 x this. It is
-  // the only number in the save that only ever goes up, and the reason a solo
-  // game ends -- see price() below.
+  // Rides finished, which is the level number: it picks the seed, sets the
+  // quota, and thickens the herd. The only number in the save that only ever
+  // goes up.
   rides: saved.s || 0,
+  // Set when a ride comes in under its quota, read by broke(). A run ends here.
+  dead: saved.q || 0,
   earned: saved.e || 0,       // gross takings of the whole run; see persist()
   code: '',              // the lobby we are in, '' when playing alone
   host: 0,
@@ -180,7 +199,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { maxZoom: 3, res: 3, film: 10, shutterTier: 1, cartTier: 1 };
+const MP_GEAR = { maxZoom: 3, res: 3, shutterTier: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -227,55 +246,39 @@ const LADDERS = [
   // payload already carries as an element id. 'shutter' was seven characters of
   // prose the packer had never seen; this is free.
   ['flash', CONFIG.shutterTiers, [150, 250, 350], 'shutterTier', 's'],
-  // ...and the cart is simply how fast you are going, which is what the rider
-  // experiences. The unit is what makes the number mean anything: `13` alone
-  // could have been a tier, a rank or a multiplier.
-  ['speed', CONFIG.cartTiers, [400, 550, 700], 'cartTier', 'm/s'],
 ];
 
-// How fast the cart is running, in world units per second.
-const pace = () => CONFIG.cartTiers[state.cartTier];
+// How fast the cart is running, in world units per second. It was a ladder once,
+// priced by guess rather than measurement because the sim samples the lap every
+// 18 units and so could never see what a faster cart actually bought. A level is
+// a fixed thing you learn now, and a cart that ran it at a different speed in
+// every run was working against that.
+const pace = 10;
 
-// Dollars a frame, on the first ride. A photograph has to beat this to have been
-// worth taking, which is the whole reason the shutter is worth aiming -- and at
-// $20 the first roll is something a beginner can actually restock.
-const FILM = 20;
+// Every ladder is simply "can I cover the price" now. There used to be a reserve
+// here -- with an empty roll the last $100 was not money, it was the next ride,
+// so an upgrade had to leave a frame's worth behind or the shop would sell you
+// into a dead end it could not get you out of. Film is free, so there is no dead
+// end to be sold into and nothing to hold back for.
+const offers = () => LADDERS.map(([label, v, p, key, sfx]) => ({
+  label, v, p, sfx, at: state[key], price: p[state[key]],
+  ok: state.bank >= p[state[key]],
+  buy: () => state[key]++,
+}));
 
-// ...and half as much again after every ride. A flat price meant a camera that
-// had outgrown it could ride forever; rising, it eventually outruns any roll, so
-// the game is "shoot the best frame you can, and stay in as long as you can
-// afford to". It has to rise GEOMETRICALLY to do that: a photographer whose
-// takings grow with their gear will outrun any straight line, and income
-// compounds here, because every extra frame you can afford earns more frames
-// still. 1.5x a ride catches it while still leaving the early rides cheap --
-// which the old quadratic, starting at $1400, emphatically did not.
-const price = () => FILM * 1.5 ** state.rides | 0;
-
-// Film is not a ladder -- there are no tiers to climb, only frames to stock up
-// on -- but it is shaped like one here so buy() stays a single function: an
-// offer is anything with a price and a way to spend it.
+// What this ride has to earn to go on to the next. The shape the film price had,
+// and for the same reason: takings compound with gear, so only a geometric demand
+// keeps up with them. Gentle at the start -- the first levels are where the game
+// is taught -- and tightening once there is real glass on the camera.
 //
-// One frame at a time, since the price began climbing. The roll of ten was a
-// bulk button with no bulk discount, and at $400 a frame it was a $4000 control
-// that spent most of the game greyed out -- the quantity, the multiplication and
-// the label that had to name it all went with it.
-const frames = () => ({ price: price(), ok: state.bank >= price(), buy: () => state.film++ });
-
-// `ok` is affordability, and it is not simply "can I cover the price". With an
-// empty roll the last $100 is not money, it is the next ride: spend it on a
-// lens and the shop has sold you into the dead end, with nothing to photograph
-// and no way to buy anything to photograph it with. So while there is no film,
-// an upgrade has to leave a frame's worth behind. Film itself is exempt -- it
-// IS the way out -- and once there is a roll in the camera the reserve lifts
-// and you may spend to the last dollar.
-const offers = () => {
-  const keep = state.film ? 0 : price();
-  return [...LADDERS.map(([label, v, p, key, sfx]) => ({
-    label, v, p, sfx, at: state[key], price: p[state[key]],
-    ok: state.bank - p[state[key]] >= keep,
-    buy: () => state[key]++,
-  })), frames()];
-};
+// Fitted with `node test/tools/economy.mjs --sweep`, which plays a thousand runs
+// per skill band against a trial curve. $250 x 1.45^n is the one that spreads the
+// bands widest: a careless player gets 6 rides out of a run, a careful one 12.
+// The first level asks about a fifth of what a median first ride takes, and the
+// curve only closes on the player around ride ten -- which is the gentle ramp
+// this wants, since the opening levels are where the game is taught.
+const GOAL = 250, GROWTH = 1.45;
+const goal = (n) => GOAL * GROWTH ** n | 0;
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 const RIDE_SECONDS = 100;
@@ -442,7 +445,11 @@ function takePhoto() {
   if (state.film <= 0 || clock < state.ready) return;
   state.ready = clock + CONFIG.shutterTiers[state.shutterTier];
   state.film--;
-  persist();
+  // No persist() here any more. A frame used to be money, so it had to leave the
+  // save the instant it was spent or a reload mid-ride handed the roll back
+  // free. The roll refills every ride now, so that write was a JSON serialise
+  // and a localStorage hit on every shutter press for a field nothing reads.
+  //
   // Tell the room the moment the roll runs out, so the others can know when
   // every roll in it is empty.
   if (state.mp && !state.film) net.noFilm();
@@ -480,14 +487,17 @@ function endRun() {
   const paid = state.scored.reduce((a, s) => a + s.total, 0);
   // Borrowed gear earns no money: a multiplayer ride would otherwise be the
   // cheapest way to farm the shop.
-  // The ride counter sits inside the same guard for the same reason: a
-  // borrowed-gear ride must not make film more expensive back home either -- nor
-  // hang its photographs on a solo run's game-over card.
+  // The level counter sits inside the same guard for the same reason: a
+  // borrowed-gear ride must not advance a solo run's level -- nor hang its
+  // photographs on that run's game-over card, nor end it by missing a quota a
+  // match never set.
   if (!state.mp) {
     state.bank += paid;
     state.earned += paid;
-    state.rides++;
     keepBest(shot, state.photos[best]);
+    // Checked against the level just ridden, before the counter moves on.
+    if (paid < goal(state.rides)) state.dead = 1;
+    state.rides++;
   }
   persist();
   net.done(paid, state.photos.length ? state.photos[best].small : '',
@@ -520,17 +530,16 @@ function showDetail(i) {
   ui.showPhoto(state.scored[i], showResults);
 }
 
-// The dead end: no frames left and not enough money to buy one. Nothing you can
-// do from here changes either number, so the only honest offer is a fresh start.
-// Phrased through the shop's own offer rather than restating its arithmetic: the
-// dead end is "no frames, and the cheapest thing that would fix that is refused".
-// `frames()` is a call the packer has already seen, which the long form was not.
-const broke = () => !state.film && !frames().ok;
+// The dead end: the last ride came in under its quota. Nothing you can do from
+// the shop changes that, so the only honest offer is a fresh start. It used to be
+// "no frames and no money for any", which was the same shape of dead end reached
+// by arithmetic instead of by photography.
+const broke = () => state.dead;
 
 function showShop() {
   state.mode = SHOP;
   if (broke()) return title();
-  ui.showShop(state, CONFIG, offers(), buy, ride, title);
+  ui.showShop(state, CONFIG, offers(), buy, ride, title, goal(state.rides));
 }
 
 function buy(i) {
@@ -644,22 +653,16 @@ function title() {
   // The picture is read live for the same reason `saved.v` is: the dead end is
   // reached after a ride has already written one, and the boot snapshot predates
   // it.
-  ui.showTitle(solo, lobby, restart, broke(), read(SAVE_KEY).v, read(PIC_KEY), state.earned);
+  ui.showTitle(solo, lobby, restart, broke(), read(SAVE_KEY).v, read(PIC_KEY), state.earned,
+               goal(state.rides - 1));
 }
 
 // The menu is reachable from the shop without a reload, and by then the world
 // has been ridden -- the film is spent and the cart is round the track. A fresh
 // boot has not, so it can just start where it stands rather than paying for a
-// second worldgen.
-function solo() {
-  // An empty roll is not a ride: the shutter would be dead for the whole track
-  // and the only thing waiting at the end is the shop. So go there now. broke()
-  // has already turned this card into the dead end when there is no money
-  // either, so reaching here means the frames are affordable.
-  if (!state.film) showShop();
-  else if (distance) ride();
-  else primary();
-}
+// second worldgen. There used to be a third case here, for a roll with no frames
+// in it; a ride always starts with eight now, so it could not be reached.
+const solo = () => (distance ? ride() : primary());
 
 // Whatever screen is up, redraw it: the roster and the results board both move
 // on their own as riders arrive, finish and leave.
@@ -702,7 +705,7 @@ function tick() {
   // rate on a 60Hz display and a 144Hz one.
   fovNow += (aimFov() - fovNow) * 0.2;
   clock += STEP;
-  distance += pace() * STEP;
+  distance += pace * STEP;
   updateHerd(herd, world, CONFIG, STEP);
 }
 
@@ -724,7 +727,7 @@ function frame(now) {
   // The cart alone is smoothed across the leftover accumulator, so it does not
   // judder on a display faster than the tick rate. Presentation only -- this
   // never feeds back into the simulation.
-  const p = pathAt(world.path, distance + pace() * acc);
+  const p = pathAt(world.path, distance + pace * acc);
   cam.x = p.x;
   // Ride the rails: the ground where there is ground, the span where there is not.
   cam.y = Math.max(elevAt(world, p.x, p.z), p.y) + CONFIG.eyeHeight;
@@ -741,7 +744,8 @@ function frame(now) {
     takePhoto();
   }
 
-  ui.updateHud(state, ride, clock, CONFIG.zoomLevels);
+  ui.updateHud(state, ride, clock, CONFIG.zoomLevels, state.mp ? 0 :
+               [state.scored.reduce((a, s) => a + s.total, 0), goal(state.rides)]);
 
   if (state.mode === RIDE) {
     if (ride >= 1) endRun();

@@ -9,16 +9,22 @@ Scan to join a multiplayer room from your phone.
 Theme: **Rainbows and Unicorns**.
 
 A cart carries you once around a rail loop through a procedurally generated
-island. You can look anywhere you like but you cannot stop, you have a fixed
-roll of film, and the herds do not wait. Photograph them; the photographs are
+island. You can look anywhere you like but you cannot stop, you have eight
+frames of film, and the herds do not wait. Photograph them; the photographs are
 scored; the points buy better glass.
 
-Get all six unicorn colors into one frame and you win.
+Every ride is a level with a takings target, and the target climbs faster than
+your camera does. Miss it and the run is over.
+
+Get all six unicorn colors into one frame for the rainbow bonus — and keep the
+black unicorns out of shot, because one anywhere in frame is worth zero.
 
 ### How it is put together
 
 Everything is raw WebGL2 — no framework. The whole world is derived from one
-seed, so the same seed builds the same island on any machine.
+seed, so the same seed builds the same island on any machine. Solo levels are
+numbered seeds, so level *n* is the same island and the same herd for everyone,
+every run.
 
 | file | |
 | --- | --- |

@@ -70,8 +70,33 @@ state.zoom = CFG.length - 1; ui.updateHud(state, 0.4, 0, CFG);
 check('and follows the lens up the ladder', nodes.film.innerHTML,
       (s) => s.includes('×' + CFG[CFG.length - 1]));
 state.zoom = 0; ui.updateHud(state, 0.4, 0, CFG);
-check('money stays off the ride hud', nodes.film.innerHTML, (s) => !s.includes('$'));
+check('money stays off the film box', nodes.film.innerHTML, (s) => !s.includes('$'));
 check('ride bar tracks progress', nodes.bar.style.width, '40.0%');
+
+// --- the quota, live -------------------------------------------------------
+// The one number that is worth money mid-ride. The bank is still a between-rides
+// number and stays off the screen; what this ride has taken against what it owes
+// is the whole of the tension, and it reads under the frame count -- beside the
+// frames it is telling you whether to spend, rather than off in the corner with
+// the ride progress where it was easy to miss.
+ui.updateHud(state, 0.4, 0, CFG, [282, 3000]);
+check('the quota reads as a score against a target', nodes.film.innerHTML,
+      (s) => s.includes('$282 / $3000'));
+check('and sits under the frame count, not in the progress corner',
+      nodes.film.innerHTML.indexOf('$282') > nodes.film.innerHTML.indexOf('film'), true);
+check('so the ride progress is left alone', nodes.hud.textContent, 'ride 40%');
+// At a glance: am I safe yet. Red short of the target, green once it is met.
+check('short of the target it reads as a loss', nodes.film.innerHTML,
+      (s) => /class="m"/.test(s));
+ui.updateHud(state, 0.4, 0, CFG, [3000, 3000]);
+check('and exactly on it reads as a gain', nodes.film.innerHTML,
+      (s) => /class="p"/.test(s));
+ui.updateHud(state, 0.4, 0, CFG, [4200, 3000]);
+check('as does clearing it outright', nodes.film.innerHTML, (s) => /class="p"/.test(s));
+// A match sets no quota, and index.js passes 0 rather than a pair. A stray "$0 /
+// $0" on a versus ride would read as a target nobody could ever miss.
+ui.updateHud(state, 0.4, 0, CFG, 0);
+check('a match shows no quota at all', nodes.film.innerHTML, (s) => !s.includes('$'));
 check('low-film warning off at 12', nodes.film.className, (c) => !/low/.test(c));
 state.film = 2; ui.updateHud(state, 0.4, 0, CFG);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));

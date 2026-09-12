@@ -164,6 +164,67 @@ check('same color twice is still x1',
 
 check('empty frame scores 0', score([]).total, 0);
 
+// --- small unicorns: a point each, and a vote on what colors are in frame ---
+// The herd on the horizon used to be dropped on the floor, for a good reason --
+// a dozen distant specks handing out a huge color multiplier. They are back
+// because the color bonus is worth far less than it was, and because a herd in
+// the distance is genuinely part of the picture.
+//
+// 10x10 is 100 pixels against a 115-pixel floor, so these are below it by
+// construction -- see the coverage checks above.
+const speck = (id, i) => [id, 6 + i * 14, 6, 10, 10];
+const smalls = (n, from = 0) => Array.from({ length: n }, (_, i) => speck(from + i + 1, i));
+const withSmalls = (n) => score([[1, cx, cy, 40, 40], ...smalls(n, 1)]);
+check('a speck is not a subject', withSmalls(3).subjects.length, 1);
+// Flat, and outside framing: one point is one point wherever it stands.
+check('but it is worth a point', withSmalls(3).total - withSmalls(0).total >= 3, true);
+// The whole reason they are counted: ids 2..7 cycle colors 1..5,0, so six specks
+// beside a red subject is six colors in frame.
+check('and it votes on the color count',
+      withSmalls(5).bonuses[0].label, '6 colors');
+// ...but not on the rainbow. Six colors in frame earns the 20% steps; the
+// doubling still demands six animals photographed properly, or the shot of the
+// whole valley from as far back as possible is the best one in the game again.
+check('specks cannot buy the rainbow',
+      withSmalls(5).bonuses.some((b) => b.label === 'RAINBOW'), false);
+check('six real subjects still can',
+      score(row(6)).bonuses.some((b) => b.label === 'RAINBOW'), true);
+// Framing is the composition of what you photographed. A speck in the corner of
+// the frame must not drag the arrangement of the animals you meant to shoot.
+check('and they stay out of framing entirely',
+      withSmalls(5).framing, withSmalls(0).framing);
+
+// The card groups them, rather than spending a row on each single point.
+{
+  const b = withSmalls(3).b;
+  const head = b.find((r) => r[0] === 'small unicorns');
+  check('the card groups them under one heading', !!head, true);
+  check('and the heading carries what they came to', head && head[1], '+3');
+  // The label carries the count the way the size row carries its arithmetic.
+  check('with a row per color, counted', b.some((r) => r[0] === ' orange \u00b7 1'), true);
+  // Detail rows, so ui.js dims and indents them under the heading -- and they sit
+  // under it rather than anywhere on the card. Counted from the heading down,
+  // because the subject's own ` size \u00b7 4.8% ...` row is the same shape.
+  const at = b.findIndex((r) => r[0] === 'small unicorns');
+  check('and those rows are details, sitting under the heading',
+        b.slice(at + 1).filter((r) => /^ \w+ \u00b7 \d+$/.test(r[0])).length, 3);
+}
+
+// The dreaded one reaches all the way out to the horizon. Unfair in a random
+// world; fair in a fixed one, which is exactly why the seeds were pinned.
+herd.color[7] = 6;
+{
+  const voided = score([[1, cx, cy, 40, 40], [8, 6, 6, 10, 10]]);
+  check('a black speck voids the photograph', voided.total, 0);
+  check('and says so on the card',
+        voided.b.some((r) => r[0] === 'black unicorn' && r[1] === '-100%'), true);
+  // It is still listed among the smalls -- the card has to show what it was that
+  // cost you the shot, or a zero arrives with no explanation.
+  check('while still being named among the smalls',
+        voided.b.some((r) => r[0] === ' black \u00b7 1'), true);
+}
+herd.color[7] = 7 % 6;
+
 // --- extra horns: paid per animal, not per photograph ---
 // A bicorn used to double the whole shot, so one in the corner doubled what six
 // other unicorns had earned. It now multiplies only its own subtotal.

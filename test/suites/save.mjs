@@ -74,47 +74,41 @@ const restore = (saved) => {
     return new Function('saved', 'CONFIG', 'return ' + m[1])(saved, CONFIG);
   };
   return { bank: grab('bank'), maxZoom: grab('maxZoom'), res: grab('res'),
-           film: grab('film'), shutterTier: grab('shutterTier'), rides: grab('rides'),
-           cartTier: grab('cartTier') };
+           shutterTier: grab('shutterTier'), rides: grab('rides'),
+           dead: grab('dead') };
 };
 
 const old = restore({ v: 2, b: 4200, z: 2, r: 1, f: 3, a: [0,0,0,0,0,0,0] });
 check('an old save keeps its bank', old.bank === 4200, String(old.bank));
 check('an old save keeps its upgrades', old.maxZoom === 2 && old.res === 1);
-// `f` held a tier index (0-4) before v4 and holds a frame count from v4 on.
-// Read the old meaning with the new one and a veteran boots with three frames.
-check('a pre-v4 save is handed a fresh roll, not its old tier index',
-      old.film === 10, String(old.film));
-check('and v3 -- the version that actually shipped -- is handed one too',
-      restore({ v: 3, b: 900, f: 3 }).film === 10);
-const v4 = restore({ v: 4, b: 0, f: 7 });
-check('a v4 save keeps its actual stock', v4.film === 7, String(v4.film));
-// The obvious `saved.f || 10` would quietly refill an empty roll forever, which
-// is the whole failure state gone.
-const dry = restore({ v: 4, b: 0, f: 0 });
-check('and an empty roll stays empty rather than falling back', dry.film === 0, String(dry.film));
+
+// Film is not in the save at all any more -- it refills to FRAMES every ride, so
+// there is no stock to carry and nothing to migrate. `f` is still written by old
+// builds and sitting in saves in the wild; it must simply be ignored.
+const FRAMES = +/^const FRAMES = (\d+);/m.exec(src)[1];
+check('the roll is a fixed size, not a saved stock', FRAMES > 0, String(FRAMES));
+check('and film is no longer a field of the state literal',
+      !/^  film: saved\./m.test(src));
+// Likewise the cart tier: the ladder is gone, and `d` is dead weight in old
+// saves. Nothing may quietly start reading it again -- an existing save carries
+// a cart tier under that letter and would be misread as something else.
+check('the cart tier is gone from the save', !/\bd: state\./.test(src));
+check('and nothing reads `d` back out', !/saved\.d\b/.test(src));
 
 const fresh = restore({});
-check('a fresh player starts at zero everywhere but the roll',
+check('a fresh player starts at zero everywhere',
       // ...but the zoom starts on the free rung, not at nothing: index 1 is the
       // 1.2x step every camera owns so the wheel does something on day one.
       !fresh.bank && fresh.maxZoom === 1 && !fresh.res && !fresh.shutterTier);
-check('and a fresh player is staked ten frames', fresh.film === 10, String(fresh.film));
-// The ride counter is what film costs, so a save from before it existed has to
-// read as "one ride's worth" rather than zero -- zero would be free film, which
-// is the failure state sold back to anyone with an old save.
 check('a fresh player has taken no rides', fresh.rides === 0, String(fresh.rides));
-// The drive train took no SAVE_VERSION bump, so every save ever written is
-// missing `d` -- and every one of them was standing on rung 0 when it was
-// written, which is exactly what a missing key reads as.
-check('a fresh player is on the slowest cart', fresh.cartTier === 0, String(fresh.cartTier));
-check('and so is every save written before the cart could be bought',
-      restore({ v: 4, b: 900, f: 3 }).cartTier === 0);
-check('a save that has bought one keeps it', restore({ v: 4, d: 2 }).cartTier === 2);
+check('and is not already dead', !fresh.dead, String(fresh.dead));
 check('a save from before the counter existed reads as none taken',
       restore({ v: 4, b: 900, f: 3 }).rides === 0);
 check('and one that has been ridden keeps its count',
       restore({ v: 4, s: 6 }).rides === 6);
+// The quota flag has to survive the reload between the ride that missed it and
+// the shop that reports it, which is the only reason it is in the save.
+check('a run that missed its quota stays missed', restore({ v: 4, q: 1 }).dead === 1);
 
 // res indexes resBonus/resNames directly, so an out-of-range save used to give a
 // NaN score rather than a visible failure.
@@ -122,110 +116,70 @@ check('a camera tier beyond the ladder is clamped', restore({ r: 9 }).res, 3);
 check('and a legitimate top tier survives', restore({ r: 3 }).res, 3);
 
 // --- the dead end --------------------------------------------------------
-// "No frames, and not enough money for one" is the whole failure condition, and
-// both halves of it are off-by-one bait: a <= would strand a player who can
-// still afford a frame, and dropping the film test would end a run mid-roll.
-// Lifted from the real source rather than restated.
-const FILM = +/^const FILM = (\d+);/m.exec(src)[1];
-// price() now sits between FILM and everything that spends it, so every fragment
-// lifted out below has to be handed it too -- run without it they throw, which
-// is how this suite found out the shape had changed.
-const priceSrc = /^const price = .+$/m.exec(src)[0];
-const econ = 'const FILM = ' + FILM + ';' + priceSrc + ';';
-const framesSrc = /^const frames = .+$/m.exec(src)[0];
+// "The last ride came in under its quota" is the whole failure condition now.
+// It used to be "no frames, and not enough money for one", which ended a run by
+// arithmetic; this ends one by photography.
 const brokeSrc = /^const broke = .+$/m.exec(src)[0];
-check('the dead-end test is still there to test', !!brokeSrc && FILM > 0);
-// broke() is phrased through frames(1) now, so it has to be lifted with it --
-// which is the point: there is one definition of what a frame costs, not two.
-// Ride 0, not 1: `rides` is rides FINISHED, so the untouched save that walks
-// into the first shop is on 0 and pays the base price. The old default of 1
-// happened to read the same only while the curve started its multiplier there.
-const isBroke = (film, bank, rides = 0) =>
-  new Function('state', econ + framesSrc + ';' + brokeSrc + ';return broke()')(
-    { film, bank, rides });
-check('no frames and no money is the dead end', isBroke(0, 0) === true);
-check('a penny short of a frame is still the dead end',
-      isBroke(0, FILM - 1) === true);
-check('but exactly the price of a frame is not', isBroke(0, FILM) === false);
-check('and frames in hand are never the dead end, however broke',
-      isBroke(1, 0) === false);
-// ...and the bar rises with every ride, which is the only reason the dead end is
-// reachable at all: a flat price that a good camera has outgrown is not an end.
-// The curve is geometric now, so these are phrased through the lifted price()
-// rather than through a multiple of FILM -- restating the shape here is what
-// made them fail the moment it changed.
-const priceAt = (rides) =>
-  new Function('state', econ + 'return price()')({ rides });
-check('the dead end moves up with the ride count',
-      isBroke(0, priceAt(3) - 1, 3) === true, String(priceAt(3)));
-check('and is cleared by the price of a frame at that ride',
-      isBroke(0, priceAt(3), 3) === false);
-// ...and it rises faster than a straight line, or income outruns it forever.
-check('and it climbs faster than linearly',
-      priceAt(4) > priceAt(2) * 2, priceAt(2) + ' -> ' + priceAt(4));
+check('the dead-end test is still there to test', !!brokeSrc);
+const isBroke = (dead) => new Function('state', brokeSrc + ';return !!broke()')({ dead });
+check('a missed quota is the dead end', isBroke(1) === true);
+check('and a run still going is not', isBroke(0) === false);
 
-// --- what the shop sells -------------------------------------------------
-const mk = (held, rides = 0) => {
-  const state = { film: held, rides };
-  const o = new Function('state', econ + framesSrc + ';return frames()')(state);
-  o.buy();
-  return { price: o.price, film: state.film };
-};
-check('a single frame costs the price of a frame', mk(0).price === FILM);
-check('buying puts exactly one frame in the roll', mk(2).film === 3);
-// The whole point of the change: the same frame costs more after every ride.
-check('a frame costs the risen price for the ride count',
-      mk(0, 4).price === priceAt(4), String(mk(0, 4).price));
-// Before the first ride the multiplier is 1.5^0, which is exactly the base price
-// -- so the first roll is the cheapest one and nothing is ever free.
-check('the first frame is never free', mk(0, 0).price === FILM,
-      String(mk(0, 0).price));
-// ...and it really does climb from there rather than sitting flat for a ride.
-check('and the second ride already costs more', mk(0, 1).price > FILM,
-      String(mk(0, 1).price));
-// The roll of ten is gone: with the price climbing it was a four-figure button
-// that spent most of its life greyed out. Nothing should be able to quietly
-// reintroduce a bulk quantity without this suite saying so.
-check('film is sold one frame at a time', !/frames\(\d/.test(src));
+// --- the quota curve -----------------------------------------------------
+// Lifted whole rather than reconstructed from a power: it was reconstructed
+// once, and when the shape changed the pattern quietly stopped matching and left
+// this suite checking a curve the game no longer had.
+const goalSrc = /^const GOAL = .+\nconst goal = .+$/m.exec(src)[0];
+const goalAt = (n) => new Function('n', goalSrc + ';return goal(n)')(n);
+check('the first level asks for something', goalAt(0) > 0, String(goalAt(0)));
+check('and every level asks for more than the last',
+      [0,1,2,3,4,5].every((n) => goalAt(n + 1) > goalAt(n)));
+// It has to climb GEOMETRICALLY: takings compound with gear, and a player whose
+// income compounds will outrun any straight line forever.
+check('and it climbs faster than linearly',
+      goalAt(4) > goalAt(2) * 2, goalAt(2) + ' -> ' + goalAt(4));
+
+// The film economy is gone entire, and nothing may quietly bring a piece of it
+// back -- a price, a purchasable frame, or a bulk roll.
+check('nothing prices film any more', !/const (FILM|price) = /.test(src));
+check('and nothing sells it', !/frames\(/.test(src));
 
 // The shop is where the dead end is discovered -- it is what the end of a run
 // and a plain reload both land on -- so the routing out of it is the thing that
 // actually decides whether losing is reachable at all.
 const shopSrc = /^function showShop\(\)[\s\S]*?^}$/m.exec(src)[0];
-const routed = (film, bank) => {
+const routed = (dead) => {
   let to = null;
-  const state = { film, bank };
-  new Function('state', 'broke', 'ui', 'CONFIG', 'offers', 'buy', 'ride', 'title', 'SHOP',
-               shopSrc + ';showShop()')(
-    state, () => !state.film && state.bank < FILM,
+  const state = { dead, rides: 0 };
+  new Function('state', 'broke', 'ui', 'CONFIG', 'offers', 'buy', 'ride', 'title',
+               'SHOP', 'goal', shopSrc + ';showShop()')(
+    state, () => state.dead,
     { showShop: () => { to = 'shop'; } }, {}, () => [], 0, 0,
-    () => { to = 'title'; }, SHOP);
+    () => { to = 'title'; }, SHOP, () => 0);
   return to;
 };
-check('a player who cannot buy a frame is sent to the dead end',
-      routed(0, 0) === 'title', String(routed(0, 0)));
-check('one who can afford a frame still gets the shop', routed(0, FILM) === 'shop');
-check('and so does one with film already in hand', routed(3, 0) === 'shop');
+check('a player who missed the quota is sent to the dead end',
+      routed(1) === 'title', String(routed(1)));
+check('and one still in the run gets the shop', routed(0) === 'shop');
 
 // The title carries the dead end too, because a lobby you walk out of lands
 // there rather than on the shop. If it stopped asking, Solo would ride a whole
 // ride with a dead shutter.
 const titleSrc = /^function title\(\)[\s\S]*?^}$/m.exec(src)[0];
-const titled = (film, bank) => {
+const titled = (dead) => {
   let lost;
-  const state = { film, bank };
+  const state = { dead, rides: 0 };
   new Function('state', 'broke', 'ui', 'solo', 'lobby', 'saved', 'restart',
-               'read', 'SAVE_KEY', 'PIC_KEY', 'TITLE', titleSrc + ';title()')(
-    state, () => !state.film && state.bank < FILM,
+               'read', 'SAVE_KEY', 'PIC_KEY', 'TITLE', 'goal', titleSrc + ';title()')(
+    state, () => state.dead,
     { showTitle: (a, b, c, d) => { lost = d; } }, 0, 0, { v: 4 }, 0,
     // Both the save and the best photograph are read live off their own keys,
     // so title() needs the reader and both keys handed to it here.
-    (k) => (k === 'saf' ? { v: 4 } : {}), 'saf', 'pic', TITLE);
+    (k) => (k === 'saf' ? { v: 4 } : {}), 'saf', 'pic', TITLE, () => 0);
   return !!lost;
 };
-check('the title shows the dead end when there is no way to buy a frame',
-      titled(0, 0) === true);
-check('and does not when there is', titled(0, FILM) === false);
+check('the title shows the dead end when the quota was missed', titled(1) === true);
+check('and does not while the run is still going', titled(0) === false);
 // Reset is gated on there being a save to wipe -- but on a LIVE read of it.
 // `saved` is the snapshot taken at boot and nothing refreshes it, so gating on
 // `saved.v` hid the button through a whole first session however far the player
@@ -239,15 +193,17 @@ check('and never on the stale boot snapshot',
 {
   let saw;
   new Function('state', 'broke', 'ui', 'solo', 'lobby', 'restart',
-               'read', 'SAVE_KEY', 'PIC_KEY', 'TITLE', titleSrc + ';title()')(
-    { film: 1, bank: 0 }, () => false,
+               'read', 'SAVE_KEY', 'PIC_KEY', 'TITLE', 'goal', titleSrc + ';title()')(
+    { rides: 0 }, () => false,
     { showTitle: (a, b, c, d, e) => { saw = e; } }, 0, 0, 0,
-    () => ({}), 'saf', 'pic', TITLE);
+    () => ({}), 'saf', 'pic', TITLE, () => 0);
   check('so a player with nothing saved is offered no wipe', !saw);
 }
 
-// A frame is money now, so it has to leave the save the instant it is spent.
-// Without this a reload mid-ride hands the frames back and the roll is free.
+// The shutter spends a frame, and -- since the roll refills every ride -- must
+// NOT write the save doing it. That write existed when a frame was money and a
+// reload mid-ride would otherwise hand the roll back free; now it is a JSON
+// serialise and a localStorage hit per shutter press for a field nothing reads.
 const shotSrc = /^function takePhoto\(\)[\s\S]*?^}$/m.exec(src)[0];
 const shot = (film) => {
   const state = { film, ready: 0, shutterTier: 0, res: 0, fx: 1, fy: 1,
@@ -261,9 +217,9 @@ const shot = (film) => {
   return { left: state.film, saved };
 };
 check('taking a photograph spends a frame', shot(5).left === 4);
-check('and writes it to the save there and then, not at the end of the ride',
-      shot(5).saved[0] === 4, JSON.stringify(shot(5).saved));
-check('a shutter with no film left writes nothing', shot(0).saved.length === 0);
+check('and does not touch the save doing it',
+      shot(5).saved.length === 0, JSON.stringify(shot(5).saved));
+check('a shutter with no film left spends nothing', shot(0).left === 0);
 
 // The other half of the round trip. restore() above pins what each key is read
 // back as; nothing pinned what gets written under it, so `f` could stop carrying
@@ -277,54 +233,32 @@ const persisted = (st) => {
   return out;
 };
 const kit = { shutterTier: 1, go: 0, code: '', host: 0, name: 'Ann',
-              bank: 900, maxZoom: 2, res: 1, film: 7, cartTier: 2 };
+              bank: 900, maxZoom: 2, res: 1, rides: 6, dead: 0, film: 7 };
 const w = persisted(kit);
-check('the save writes the roll under `f`', w.f === 7, JSON.stringify(w));
-check('and the bank under `b`', w.b === 900);
+check('the save writes the bank under `b`', w.b === 900, JSON.stringify(w));
+check('and the level under `s`', w.s === 6);
 check('and stamps the version it was written by', w.v === VERSION);
-check('what is written comes back as what it was', restore(w).film === 7);
-check('and the cart rung rides along under `d`', w.d === 2, JSON.stringify(w));
-check('which also comes back as what it was', restore(w).cartTier === 2);
+check('what is written comes back as what it was', restore(w).rides === 6);
+// The roll is not money any more -- it refills every ride -- so writing it would
+// be a field nothing ever reads.
+check('and the roll is not written at all', w.f === undefined, JSON.stringify(w));
+// Nor the cart rung, whose ladder is gone.
+check('nor the cart rung', w.d === undefined, JSON.stringify(w));
+// The quota flag is, though: it has to survive the reload between the ride that
+// missed it and the shop that reports it.
+check('a missed quota is written under `q`',
+      persisted({ ...kit, dead: 1 }).q === 1);
 // Borrowed gear must never reach the save, or a match would overwrite the roll
 // it was lent.
 check('a multiplayer ride writes nothing at all', persisted({ ...kit, mp: 1 }) === null);
 
-// Where the money actually moves. The film offers go through this same function
-// as the ladders, so what has to hold is that the bank falls by exactly the
-// price and the roll rises by exactly what was bought -- and that neither
-// happens when it cannot be afforded.
+// Where the money actually moves. buy() is the till, and it does not trust the
+// card it was handed: the shop greys what you cannot afford, but the guard has
+// to stand here too, or the only thing between the player and a negative bank is
+// a disabled attribute.
 const buySrc = /^function buy\(i\)[\s\S]*?^}$/m.exec(src)[0];
-const framesOf = (state) =>
-  new Function('state', econ + framesSrc + ';return frames()')(state);
-const spend = (bank, film, rides = 1) => {
-  const state = { bank, film, rides };
-  new Function('state', 'offers', 'persist', 'showShop', buySrc + ';buy(0)')(
-    state, () => [framesOf(state)], () => {}, () => {});
-  return state;
-};
-// Priced off the lifted price() rather than off a remembered $100, so these say
-// "the till charges what the shop quoted" in a way that survives a retune.
-const one = priceAt(1);
-check('buying a frame costs exactly the price of a frame',
-      spend(one + 400, 0).bank === 400, String(spend(one + 400, 0).bank));
-check('and puts exactly one frame in the roll', spend(one + 400, 0).film === 1);
-check('the exact price is affordable', spend(one, 0).film === 1);
-// A pound short has to buy nothing at all -- not a frame on credit, and not a
-// negative bank, which would read as a fortune next time it is compared.
-// The till charges what the shop quoted, and the shop quotes the current ride.
-check('the till charges the risen price, not the base one',
-      spend(priceAt(5) + 500, 0, 5).bank === 500,
-      String(spend(priceAt(5) + 500, 0, 5).bank));
-const short = spend(one - 1, 0);
-check('a pound short buys nothing', short.film === 0 && short.bank === one - 1,
-      JSON.stringify(short));
-
-// buy() is the till, and it does not trust the card it was handed: the shop
-// greys an upgrade that would eat your last frame's worth, but the guard has to
-// stand here too, or the only thing between the player and the dead end is a
-// disabled attribute.
 const sell = (offer) => {
-  const state = { bank: 450, film: 0, rides: 1 };
+  const state = { bank: 450 };
   new Function('state', 'offers', 'persist', 'showShop', buySrc + ';buy(0)')(
     state, () => [offer], () => {}, () => {});
   return state;
@@ -368,8 +302,10 @@ const mp = mpBoot({ v: VERSION, g: 1, c: '4821', h: 1 });
 check('a multiplayer ride is flagged as one', mp.state.mp === 1);
 check('and restores which lobby it belongs to, and who hosted it',
       mp.state.code === '4821' && mp.state.host === 1);
+// Film is not in the loadout any more -- every ride, solo or match, starts with
+// the same fixed roll -- so what MP_GEAR still has to override is the camera.
 check('and rides the fixed loadout, whatever the save held',
-      mp.state.res > 0 && mp.state.maxZoom > 0 && mp.state.film === 10);
+      mp.state.res > 0 && mp.state.maxZoom > 0);
 check('the markers are cleared, so a stray refresh drops out of multiplayer',
       mp.state.go === 0 && mp.writes.length === 1);
 check('and that write went out BEFORE the gear was swapped, so it saved the real one',
@@ -503,21 +439,22 @@ const ends = (ride, state, allSpent = false) => {
   return over;
 };
 
-// The ride counter rides inside endRun's solo-only payout guard, because a
-// borrowed-gear ride must not make film dearer back home either. Lifted from the
-// source so the two can never come apart.
+// The level counter rides inside endRun's solo-only payout guard, because a
+// borrowed-gear ride must not advance a solo run's level. Lifted from the source
+// so the two can never come apart.
 const payout = /^ {2}if \(!state\.mp\) \{[\s\S]*?^ {2}\}$/m.exec(src);
 check('the solo-only settle-up is still one guarded block', !!payout);
-// Four things hang off that one guard now: the bank, the lifetime takings, the
-// ride counter, and the best photograph the game-over card is built from. Every
-// one of them has to stay out of a borrowed-gear ride, so they are tested
-// together through the lifted block rather than one at a time.
-const settle = (state) => {
+// Five things hang off that one guard now: the bank, the lifetime takings, the
+// best photograph the game-over card is built from, the quota check, and the
+// level counter. Every one of them has to stay out of a borrowed-gear ride, so
+// they are tested together through the lifted block rather than one at a time.
+// `goal` is handed in so these can set the bar where each check wants it.
+const settle = (state, bar = 0) => {
   state.earned = state.earned || 0;
   state.photos = state.photos || [{ url: 'best.jpg' }];
   const paid = state.scored.reduce((a, s) => a + s.total, 0);
-  new Function('state', 'paid', 'shot', 'best', 'keepBest', payout[0])(
-    state, paid, state.scored[0], 0, (s) => { state.kept = s; });
+  new Function('state', 'paid', 'shot', 'best', 'keepBest', 'goal', payout[0])(
+    state, paid, state.scored[0], 0, (s) => { state.kept = s; }, () => bar);
   return state;
 };
 check('a solo ride banks the roll and counts the ride',
@@ -538,6 +475,20 @@ check('and adds nothing to the takings',
 // either -- the gear that took them was not the run's.
 check('and leaves no photograph behind',
       settle({ scored: [{ total: 30 }], bank: 5, mp: 1 }).kept === undefined);
+
+// --- the quota, settled ---------------------------------------------------
+// The only way a run ends. It is checked against the level just ridden, before
+// the counter moves on -- an off-by-one here would bill you for the next level's
+// bar while you were still on this one.
+check('a ride that clears its quota leaves the run alive',
+      !settle({ scored: [{ total: 300 }], bank: 0, rides: 2 }, 300).dead);
+check('and one that falls a pound short ends it',
+      settle({ scored: [{ total: 299 }], bank: 0, rides: 2 }, 300).dead === 1);
+check('exactly the quota is a pass, not a miss',
+      !settle({ scored: [{ total: 300 }], bank: 0, rides: 2 }, 300).dead);
+// A match sets no quota at all, and must never end a solo run by missing one.
+check('a borrowed-gear ride cannot kill a run',
+      !settle({ scored: [{ total: 0 }], bank: 0, rides: 2, mp: 1 }, 300).dead);
 
 // keepBest is the only writer of that key, and it writes only on a new high --
 // otherwise every ride would overwrite the run's best with its own.

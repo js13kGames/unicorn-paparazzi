@@ -53,9 +53,9 @@ const hits = [];
 // record index.js keeps under its own localStorage key -- and what the whole run
 // earned. Every other state of this card ignores both.
 const PIC = { p: 'best.jpg', b: [['violet', '820'], [' size', '+820']], n: 820 };
-const showTitle = (reset, lost, saved = 1, pic = {}, earned = 0) =>
+const showTitle = (reset, lost, saved = 1, pic = {}, earned = 0, missed = 0) =>
   ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost, saved,
-               pic, earned);
+               pic, earned, missed);
 
 showTitle(0, 0, 0);
 check('the title offers both ways in', /id="go"[\s\S]*id="mp"/.test(card()));
@@ -77,12 +77,13 @@ click('x');
 check('and it wipes rather than riding', hits.pop(), 'reset');
 
 // --- the dead end --------------------------------------------------------
-// No film and no money for any. It is this card rather than one of its own, so
-// what has to hold is that the two things you cannot afford are gone and the
-// one thing that still works is not.
-showTitle(() => hits.push('reset'), 1, 1, PIC, 4300);
+// A ride that came in under its quota. It is this card rather than one of its
+// own, so what has to hold is that the two things you cannot afford are gone and
+// the one thing that still works is not.
+showTitle(() => hits.push('reset'), 1, 1, PIC, 4300, 3000);
 const lost = card();
-check('losing says why', lost, (h) => /film/.test(h));
+// The figure it names is the one that was missed, not the bank and not the take.
+check('losing says why', lost, (h) => h.includes('missed $3000'));
 check('and says it is over as well as why',
       lost, (h) => h.includes('Game over'));
 // The only reading the run ever gets: the best frame of the whole game, its

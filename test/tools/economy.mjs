@@ -37,20 +37,24 @@ const lift = (re, what) => {
   return m[1];
 };
 const CONFIG = (0, eval)('(' + lift(/export const CONFIG = (\{[\s\S]*?\n\});/, 'CONFIG') + ')');
-const FILM = +lift(/const FILM = (\d+);/, 'FILM');
+const FRAMES = +lift(/const FRAMES = (\d+);/, 'FRAMES');
 const RIDE_SECONDS = +lift(/const RIDE_SECONDS = (\d+);/, 'RIDE_SECONDS');
-// The shape of the cost curve, lifted too -- `** 2` in the source has to be a 2
-// here or every run length the sim reports is measured against the wrong game.
-const FILM_POW = /state\.rides \|\| 1\) \*\* (\d+(?:\.\d+)?)/.exec(SRC);
+// The quota curve, lifted whole rather than reconstructed from a power -- the
+// numbers this tool exists to fit are the two constants inside it, so reading
+// them out of anywhere but the source would be measuring the wrong game.
+const goalSrc = lift(/^(const GOAL = .+\nconst goal = .+)$/m, 'goal()');
+const goal = new Function('n', goalSrc + ';return goal(n)');
+// playRun reads the curve through this, so the sweep below can swap in a trial
+// curve and measure the same loop the game actually runs.
+let goalFn = goal;
 // The ladder table names CONFIG.*, so it has to be evaluated somewhere CONFIG is
 // in scope -- hence the direct eval rather than the indirect one used above.
 const ladders = ((C) =>
   eval(lift(/const LADDERS = (\[[\s\S]*?\n\]);/, 'LADDERS').replace(/CONFIG\./g, 'C.'))
     .map(([label, v, p, key]) => ({ label, v, p, key })))(CONFIG);
 
-const START = { bank: 0, film: 10, rides: 0, maxZoom: 1, res: 0, shutterTier: 0, cartTier: 0 };
-const TUNE = { film: FILM, pow: FILM_POW ? +FILM_POW[1] : 1, res: 1 };
-const priceOf = (rides) => TUNE.film * (rides || 1) ** TUNE.pow;
+const START = { bank: 0, film: FRAMES, rides: 0, maxZoom: 1, res: 0, shutterTier: 0 };
+const TUNE = { res: 1 };
 
 // ---------------------------------------------------------------------------
 // Stage A -- sample photographs
@@ -196,12 +200,12 @@ const opportunities = (st) => RIDE_SECONDS / CONFIG.shutterTiers[st.shutterTier]
 // stays in shot for as long as it takes the cart to change its bearing. Reach
 // grows with zoom, so the decorrelation distance does too.
 //
-// This is where the drive train earns its money: ground covered is cart speed
-// times ride length, so a faster cart passes more country and therefore more
-// genuinely different photographs, without costing a single frame.
+// Ground covered is cart speed times ride length, so the lap passes a fixed
+// amount of country -- the cart was a ladder once, and this is where it earned
+// its money.
 const SCENE = 18;
-const distinct = (st, zoom) =>
-  (RIDE_SECONDS * CONFIG.cartTiers[st.cartTier]) / (SCENE * zoom);
+const PACE = +lift(/^const pace = (\d+);/m, 'pace');
+const distinct = (st, zoom) => (RIDE_SECONDS * PACE) / (SCENE * zoom);
 
 // A skill band is two habits, not one number.
 //   aims  how many framings of a moment the player's eye considers before
@@ -268,7 +272,6 @@ function ride(st, table, rnd, band) {
     const q = 1 - rnd() * s;
     take += m[Math.min(m.length - 1, Math.floor(q * m.length))];
   }
-  st.film -= shots;
   return take;
 }
 
@@ -289,11 +292,10 @@ function expected(st, table, band) {
 function shop(st, table, band) {
   for (;;) {
     const baseline = expected(st, table, band);
-    const keep = st.film ? 0 : priceOf(st.rides);
     let pick = null, bestRate = 0;
     for (const l of ladders) {
       const price = l.p[st[l.key]];
-      if (!price || st.bank - price < keep) continue;
+      if (!price || st.bank < price) continue;
       const trial = { ...st, [l.key]: st[l.key] + 1 };
       const rate = (expected(trial, table, band) - baseline) / price;
       if (rate > bestRate) { bestRate = rate; pick = l; }
@@ -303,11 +305,9 @@ function shop(st, table, band) {
     st[pick.key]++;
     st.spent[pick.label] = (st.spent[pick.label] || 0) + 1;
   }
-  // Whatever is left becomes film, which is the only thing left to want.
-  const p = priceOf(st.rides);
-  const buy = Math.floor(st.bank / p);
-  st.film += buy;
-  st.bank -= buy * p;
+  // Whatever is left simply stays in the bank. It used to become film, which was
+  // the only thing left to want; the roll is free now, so saving towards the next
+  // rung is the only thing to do with a surplus.
 }
 
 function playRun(table, seed, band) {
@@ -315,12 +315,14 @@ function playRun(table, seed, band) {
   const st = { ...START, spent: {} };
   const income = [];
   for (let guard = 0; guard < 400; guard++) {
-    if (!st.film && st.bank < priceOf(st.rides)) break;     // the dead end
-    if (!st.film) shop(st, table, band);
-    if (!st.film) break;
-    income.push(ride(st, table, rnd, band));
-    st.bank += income[income.length - 1];
+    const take = ride(st, table, rnd, band);
+    income.push(take);
+    st.bank += take;
+    // The dead end: this ride came in under the level's quota. Checked against
+    // the level just ridden, before the counter moves on, exactly as endRun does.
+    const missed = take < goalFn(st.rides);
     st.rides++;
+    if (missed) break;
     shop(st, table, band);
   }
   return { rides: st.rides, income, spent: st.spent, st };
@@ -384,11 +386,8 @@ async function main() {
   // returns about the same points per dollar -- which is the whole definition of
   // "no dead buys".
   {
-    // Mid-run gear, including a drive train. That last part matters: the motor
-    // drive is worth nothing behind a slow cart, because the scenery does not
-    // turn over fast enough to be worth more frames a second. Cart first, then
-    // speed, is a real order of purchase and not an artefact.
-    const mid = { ...START, film: 12, maxZoom: 2, res: 1, shutterTier: 1, cartTier: 2 };
+    // Mid-run gear.
+    const mid = { ...START, maxZoom: 2, res: 1, shutterTier: 1 };
     const rows = [];
     for (const l of ladders) {
       for (let tier = 0; tier < l.p.length; tier++) {
@@ -439,29 +438,27 @@ function sweep(table) {
     for (let i = 0; i < 300; i++) r.push(playRun(t, i * 7919 + 1, band).rides);
     return pct(r, .5);
   };
-  console.log('\n=== sweep: sensor scale × cost curve (median rides per band) ===');
-  console.log('setting'.padEnd(30) + 'low'.padStart(6) + 'median'.padStart(8) + 'high'.padStart(6));
-  const RES = (process.env.SW_RES || '1').split(',').map(Number);
-  const POW = (process.env.SW_POW || '1,1.5,2').split(',').map(Number);
-  const FILMS = (process.env.SW_FILM || '100,400,1600,6400').split(',').map(Number);
-  for (const res of RES) {
-    for (const pow of POW) {
-      for (const film of FILMS) {
-        TUNE.res = res; TUNE.film = film; TUNE.pow = pow;
-        momentCache.clear();
-        const t = buildTable(samplesRef);
-        const row = ['low', 'median', 'high'].map((b) => String(runsFor(t, b)));
-        const runs = [];
-        for (let i = 0; i < 300; i++) runs.push(playRun(t, i * 7919 + 1, 'median'));
-        const med = runs.sort((a, b) => a.rides - b.rides)[150];
-        console.log(('dpi×' + res + '  $' + film + ' × r^' + pow).padEnd(30) +
-          row[0].padStart(6) + row[1].padStart(8) + row[2].padStart(6) +
-          '   ' + med.income.slice(0, 8).map(fmt).join(' ') +
-          '  [' + (Object.entries(med.spent).map(([k, v]) => k + '×' + v).join(' ') || '-') + ']');
-      }
+  console.log('\n=== sweep: quota curve (rides survived per band) ===');
+  console.log('setting'.padEnd(22) + 'low'.padStart(6) + 'median'.padStart(8) +
+              'high'.padStart(6) + '   median run income per ride');
+  const G0 = (process.env.SW_GOAL || '60,90,120,160,220').split(',').map(Number);
+  const GR = (process.env.SW_GROWTH || '1.3,1.45,1.6').split(',').map(Number);
+  const t0 = buildTable(samplesRef);
+  for (const g of G0) {
+    for (const gr of GR) {
+      // Override the lifted curve for this trial. playRun reads `goal` through
+      // this binding, so the sweep measures the same loop the game runs.
+      goalFn = (n) => g * gr ** n | 0;
+      const row = ['low', 'median', 'high'].map((b) => String(runsFor(t0, b)));
+      const runs = [];
+      for (let i = 0; i < 300; i++) runs.push(playRun(t0, i * 7919 + 1, 'median'));
+      const med = runs.sort((a, b) => a.rides - b.rides)[150];
+      console.log(('$' + g + ' x ' + gr + '^n').padEnd(22) +
+        row[0].padStart(6) + row[1].padStart(8) + row[2].padStart(6) +
+        '   ' + med.income.slice(0, 8).map(fmt).join(' '));
     }
   }
-  TUNE.film = FILM; TUNE.pow = FILM_POW ? +FILM_POW[1] : 1; TUNE.res = 1; momentCache.clear();
+  goalFn = goal;
 }
 
 if (process.argv[2] === '--sample') {

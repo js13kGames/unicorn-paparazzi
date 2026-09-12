@@ -29,7 +29,7 @@ export function setChrome(visible) {
   el.film.style.display = d;
 }
 
-export function updateHud(state, ride, clock, zoom) {
+export function updateHud(state, ride, clock, zoom, quota) {
   // The frame is the photograph now, so it outlines exactly what will be taken:
   // a fixed 16:9 rectangle, which needs its own inset on each axis.
   el.vf.style.inset = ((1 - state.fy) * 50).toFixed(1) + '% ' +
@@ -45,13 +45,21 @@ export function updateHud(state, ride, clock, zoom) {
   el.hud.textContent = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
     (state.mode === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '');
   // Under the frame count: the lens, or a winding dot while the shutter is
-  // still recovering. The bank used to read here, but money is a between-rides
-  // number -- what you actually want mid-ride is which zoom you are on, and the
-  // lens has no other readout. The ladder is read rather than derived: it used
-  // to be `1 << state.zoom`, which was true only while every rung was a power of
-  // two, and the free 1.2x rung is not one.
+  // still recovering. The ladder is read rather than derived: it used to be
+  // `1 << state.zoom`, which was true only while every rung was a power of two,
+  // and the free 1.2x rung is not one.
+  //
+  // ...and under that, what the ride has taken against what it owes. The bank
+  // used to read here and was taken out because money is a between-rides number.
+  // This is not that number: it is the one thing on screen that says whether the
+  // frames still in your hand have to count, and it belongs beside the count of
+  // them rather than in the corner with the ride progress, where it was easy to
+  // miss entirely. Red until the quota is met, green once it is -- at a glance,
+  // "am I safe yet". Solo only; a match sets no quota.
   el.film.innerHTML = 'film <b>' + state.film + '</b><br><small>' +
-    (clock < state.ready ? '·' : '×' + zoom[state.zoom]) + '</small>';
+    (clock < state.ready ? '·' : '×' + zoom[state.zoom]) + '</small>' +
+    (quota ? '<br><small class="' + (quota[0] >= quota[1] ? 'p' : 'm') +
+             '">$' + quota[0] + ' / $' + quota[1] + '</small>' : '');
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
 
@@ -99,8 +107,8 @@ function onCard(fn) {
 // copy is nearly free, while in the shell it was 32 characters of plain text.
 document.title = 'Unicorn Paparazzi';
 
-export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned) {
-  // `lost` is the dead end -- no film and no money for any -- and it is this
+export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, missed) {
+  // `lost` is the dead end -- a ride that came in under its quota -- and it is this
   // card rather than one of its own, because the one button that gets out of it
   // is already here and the rest of the menu simply comes off.
   //
@@ -117,7 +125,7 @@ export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned) {
   // is the menu and not this: the dead end carries a photograph and a table, and
   // a 6em headline over them crowds both off the screen.
   panel((lost ? '<h1>Game over</h1>' +
-                '<h2>out of film</h2>' +
+                '<h2>missed $' + missed + '</h2>' +
                 photoCard(pic.p, pic.b || [], 'Best picture', pic.n || 0) +
                 // Bare, and in the shop's own markup: under the run's best
                 // photograph and over the only button left, a figure in dollars
@@ -311,53 +319,45 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
-export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
+// `cfg` is unread -- the shop draws its values off the offers now. Dropping it
+// measured 3 bytes WORSE: the call site `ui.showShop(state, CONFIG, offers()...`
+// is a substring roadroller has already seen from the other ui.show* calls, and
+// the shorter one is new to it. Left in deliberately; see the note on `* 0.2` in
+// score.js for the same trade.
+export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
   // Three columns: what the line is, where you stand on it, and what you can
   // buy with the price inside the button. The whole ladder used to be drawn,
   // which was a table of markup for something read once -- and a maxed ladder
   // now simply has no button rather than a row of dimmed text.
-  let rows = '', film = '';
+  let rows = '';
   // The rung you own is bold rather than green: .p is the gain colour, and on
   // the shop every one of these is simply where you stand, not a win. Bold
   // against the dim .d label is enough to separate the two.
   const row = (label, now, buys) => '<tr class="r"><td class="d">' + label +
     '</td><td class="n"><b>' + now + '</b></td><td class="n">' + buys + '</td></tr>';
   offers.forEach((o, i) => {
-    // index.js decides what you can afford, because affordability is not just
-    // the price: with an empty roll an upgrade must leave a frame's worth in
-    // the bank, or the shop sells you into a dead end.
     const btn = (label) => '<button data-i="' + i + '"' +
       (o.ok ? '' : ' disabled') + '>' + label + '</button>';
-    // A filmless offer is a quantity of frames rather than a rung, so it has no
-    // next tier to name -- but it is bought the same way, and a row of its own
-    // under the ladders reads better than a stray line of buttons below them.
-    if (!o.v) return void (film += ' ' + btn('+1 $' + o.price));
     const next = o.at + 1;
     rows += row(o.label, o.v[o.at] + o.sfx,
       next < o.v.length ? btn(o.v[next] + o.sfx + ' $' + o.price) : '');
   });
-  rows += row('film', state.film, film);
   panel(
     '<h1>Shop</h1>' +
-    // Only the bank: film now has its own row, and printing it twice on one
-    // short screen just made the header longer.
     '<h2>$' + state.bank + '</h2>' +
+    // The quota, asked in full. This is the screen where it is a decision rather
+    // than a readout -- what you buy here is how you intend to make it -- so it
+    // gets the whole sentence, where the ride HUD gets two figures and a slash.
+    '<p class="h">Must get this ride: $' + quota + '</p>' +
     // A `current`/`Upgrade` header row here measured at 35 bytes -- a tenth of
     // everything the three-column rebuild saved -- and the columns read without
     // it: a name, the rung you own in green, and a button naming what it buys
     // and what it costs. Restore it here if the budget ever allows.
     '<table>' + rows + '</table>' +
-    // A ride with an empty roll earns nothing and cannot be photographed, so it
-    // is only offered once there is film to shoot it on.
-    '<p class="h"><button id="e"' + (state.film ? '' : ' disabled') +
-    '>Ride again</button> ' +
+    '<p class="h"><button id="e">Ride again</button> ' +
     // Everything else you might want -- multiplayer, wiping the save -- lives on
     // the menu now, so the shop only has to be able to get you back there.
-    '<button id="mp">Menu</button></p>' +
-    // Under both buttons, in the loss color: a greyed-out button with no reason
-    // on it is something the player has to guess at, and what is missing is on
-    // sale two rows up.
-    (state.film ? '' : '<p class="h m">no film</p>')
+    '<button id="mp">Menu</button></p>'
   );
   el.card.onclick = (e) => {
     const b = e.target.closest('button');
