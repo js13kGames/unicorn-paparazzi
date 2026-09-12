@@ -65,11 +65,17 @@ export function scorePhoto(photo, cfg, state) {
       cEdge, cEnv, cOcc,
       cropLoss, envLoss, occLoss,
       // The extra horns pay on the animal that grew them, and only its own
-      // subtotal moves: half as much again for a bicorn, up to two and a half
-      // times for a quadricorn. They used to pay double to quadruple, which on
-      // top of a rarity-scaled pose made one freak animal worth more than every
-      // deliberate decision in the photograph put together.
-      subtotal: (gross - cropLoss - envLoss - occLoss) * (1 + s.horns / 2),
+      // subtotal moves: 20% more per horn, so a quadricorn is worth half as much
+      // again. One step of the same 20% the colour bonus pays, which is the only
+      // thing on this card that lets a player read one multiplier and know what
+      // the next one would be worth. Written `* 0.2` rather than the colour
+      // bonus's equivalent `/ 5` purely because roadroller charges 3 bytes less
+      // for it, and we are sitting on the limit exactly.
+      //
+      // Cut twice now, from double-to-quadruple and then from x1.5-to-x2.5. A
+      // freak animal is a bonus on a photograph, not a substitute for taking one:
+      // it cannot outweigh getting close, and it should not.
+      subtotal: (gross - cropLoss - envLoss - occLoss) * (1 + s.horns * 0.2),
     });
   }
 
@@ -117,7 +123,7 @@ function breakdown(subjects, framing, bonuses, dpi) {
     // concerned. Sub-point losses read as "-0", which looks like a bug.
     const loss = s.cropLoss + s.envLoss + s.occLoss;
     if (loss > 0.5) out.push([' obscured', sign(-loss)]);
-    if (s.horns) out.push([' ' + HORNS[s.horns], pct(1 + s.horns / 2)]);
+    if (s.horns) out.push([' ' + HORNS[s.horns], pct(1 + s.horns * 0.2)]);
   }
   // Shown as the adjustment it is, not as a total: a shot scoring a twentieth of
   // its subtotals reads -95%, and a perfect frame +100%.

@@ -174,15 +174,16 @@ check('horns are no longer a photograph-wide bonus',
       score([[1,cx,cy,40,40]]).bonuses.length, 0);
 herd.horns[0] = 1;
 const times = (rects) => +(sub(rects)/plain).toFixed(3);
-check('a bicorn is worth half as much again', times([[1,cx,cy,40,40]]), 1.5, 1e-6);
+// 20% a horn, the same step the colour bonus pays -- see the note in score.js.
+check('a bicorn pays one step of 20%', times([[1,cx,cy,40,40]]), 1.2, 1e-6);
 check('and stays out of the photograph-wide multiplier',
       score([[1,cx,cy,40,40]]).multiplier, 1);
 check('and is named in its own breakdown rows, as an adjustment',
-      score([[1,cx,cy,40,40]]).b.some(r=>r[0]===' bicorn' && r[1]==='+50%'), true);
+      score([[1,cx,cy,40,40]]).b.some(r=>r[0]===' bicorn' && r[1]==='+20%'), true);
 herd.horns[0] = 2;
-check('a tricorn doubles its own', times([[1,cx,cy,40,40]]), 2, 1e-6);
+check('a tricorn pays two steps', times([[1,cx,cy,40,40]]), 1.4, 1e-6);
 herd.horns[0] = 3;
-check('a quadricorn two-and-a-halfs its own', times([[1,cx,cy,40,40]]), 2.5, 1e-6);
+check('a quadricorn pays three', times([[1,cx,cy,40,40]]), 1.6, 1e-6);
 
 // The point of the change: a horned animal must not lift the others.
 herd.horns[0] = 3; herd.horns[1] = 0;
@@ -193,7 +194,7 @@ herd.horns[0] = 3; herd.horns[1] = 0;
   check('the plain animal beside a quadricorn is untouched',
         +bare.toFixed(4), +score([[1,40,cy,40,40],[2,200,cy,40,40]]).subjects
           .find(s=>s.horns===0).subtotal.toFixed(4), 1e-9);
-  check('only the horned one is multiplied', +(horned/bare).toFixed(2) > 2.4, true);
+  check('only the horned one is multiplied', +(horned/bare).toFixed(2) > 1.5, true);
 }
 herd.horns[0] = 0; herd.horns[1] = 0;
 
@@ -457,7 +458,7 @@ check('a pose worth points gets its own row, and it names the pose',
 // Said the one way every other adjustment on this card is said, so a pose, a
 // horn, a framing penalty and a colour bonus all read as the same kind of thing.
 check('and it carries the gain as a signed percentage',
-      valueOf(neighing, ' pose · neighing'), '+90%');
+      valueOf(neighing, ' pose · neighing'), '+80%');
 // The pose row below says "neighing" already, so the header is the color alone.
 check('the subject header is the color alone', neighing.b[0][0], 'red', 0);
 herd.pose[0] = 0;

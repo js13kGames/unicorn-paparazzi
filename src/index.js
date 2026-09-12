@@ -30,8 +30,10 @@ export const CONFIG = {
   // separately -- how often a pose turns up, and what catching it is worth --
   // and could only ever pay strictly by rarity. Rarity is most of the story but
   // not all of it: a unicorn sitting down photographs better than the numbers
-  // alone would say. Read as +10%, +30%, +90% on the breakdown.
-  poseBonus: [1, 1.1, 1.3, 1.9],
+  // alone would say. Read as +20%, +40%, +80% on the breakdown -- one, two and
+  // four steps of the 20% the whole card is quantised to, so catching a pose is
+  // priced in the same unit as an extra colour or an extra horn.
+  poseBonus: [1, 1.2, 1.4, 1.8],
   trackRadiusFrac: 0.25,
   // Seconds between frames, per motor drive. A second on the cheapest body, a
   // tenth on the best: what the ladder buys now is the burst -- the three frames
