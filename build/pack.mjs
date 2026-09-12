@@ -82,9 +82,12 @@ async function main() {
   const { boot, shell } = fold(html);
   const source = boot + js;
 
-  // Chosen by sweeping seeds and keeping the smallest; any fixed value works, this
-// one happens to pack best.
-const SEED = Number(process.env.RR_SEED || 101);
+  // Chosen by sweeping seeds and keeping the smallest; any fixed value works,
+// this one happens to pack best. Worth re-sweeping when the budget gets tight:
+// the spread across seeds is ~35 bytes on this payload, which is more than most
+// source-level golf returns. `RR_SEED=<n> RR_LEVEL=2 node build/pack.mjs` packs
+// without rebuilding, so a sweep is about twenty seconds a seed.
+const SEED = Number(process.env.RR_SEED || 520);
 
 // Roadroller's parameter search is randomised, so identical source produced
   // builds 22 bytes apart run to run. That is not just untidy: a build measured

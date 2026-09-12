@@ -64,7 +64,7 @@ export const lobby = () => [...here.keys()].map(nameOf);
 // one. clean() also caps the length, which is why the field needs no maxlength.
 export const setName = (s) => {
   myName = clean(s);
-  send({ t: 'h', i: ME, r: 1, n: myName });
+  hello(1);
   return myName;
 };
 // Once nobody can take another photograph there is nothing left to ride for, so
@@ -101,7 +101,7 @@ export function connect(code, name, onGo, onChange) {
     if (e.data[0] === '@') {
       ME = e.data.slice(1);
       here.set(key(ME), myName);
-      send({ t: 'h', i: ME, n: myName });
+      hello();
       return onChange();
     }
     // A rider who leaves comes off the roster and off the film tally, so nobody
@@ -129,7 +129,7 @@ export function connect(code, name, onGo, onChange) {
       here.set(h, clean(m.n));
       if (m.e) spent.add(h);
       // Answer an arrival so it learns about us, but never answer an answer.
-      if (!m.r) send({ t: 'h', i: ME, r: 1, n: myName });
+      if (!m.r) hello(1);
     } else if (m.t === 'd' && typeof m.n === 'number') {
       const i = key(m.i);
       here.set(i, here.get(i) || '');    // a result is proof of presence
@@ -160,10 +160,17 @@ export function close() {
 
 const send = (o) => { if (online()) try { ws.send(JSON.stringify(o)); } catch (e) { /* dropped */ } };
 
+// Presence, and name. Every hello this side sends goes through here, so there is
+// one place that decides what a hello says. `r` marks a reply, so it does not
+// start an echo; `e` says the roll is empty. JSON.stringify drops an undefined
+// field, which is what keeps all three shapes in the protocol comment above one
+// call.
+const hello = (r, e) => send({ t: 'h', i: ME, n: myName, r, e });
+
 // Flagged as a reply so nobody answers it: this is news, not an arrival.
 export const noFilm = () => {
   spent.add(key(ME));
-  send({ t: 'h', i: ME, r: 1, e: 1, n: myName });
+  hello(1, 1);
 };
 
 export const go = (seed) => send({ t: 'g', s: seed });

@@ -2,13 +2,20 @@
 // output and mirroring the GLSL in render.js. Lets the look be judged without a
 // GPU: same normals, same fog, same palette.
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync } from 'fs';
 import { buildWorld, pathAt, elevAt, HEIGHT, WATER_Y } from '../.mirror/terrain.mjs';
 import { spawn, updateHerd, packInstances, buildModel, buildPoseTable, COLORS, PARTS } from '../.mirror/unicorn.mjs';
 
-const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:+(process.env.SMOOTH||3),
-              terrainDetail:+(process.env.DETAIL===undefined?0.35:process.env.DETAIL), trackRadiusFrac:.25, unicornDensity:+(process.env.DENSITY||0.003), adultChance:.75, driftChance:.08,
-              poseWeights:[.80,.10,.08,.02], };
+// The real CONFIG, read out of src/index.js, not a copy of it. The copy that
+// used to live here had drifted: it still carried an `adultChance` key the game
+// dropped, and it pinned driftChance at the pre-balance 0.08, so every tool
+// downstream of this file was quietly measuring a herd the game does not spawn.
+// Env vars still override, because sweeping terrain settings is what they are for.
+const SRC = readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8');
+const cfg = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(SRC)[1] + ')');
+if (process.env.SMOOTH) cfg.terrainSmooth = +process.env.SMOOTH;
+if (process.env.DETAIL !== undefined) cfg.terrainDetail = +process.env.DETAIL;
+if (process.env.DENSITY) cfg.unicornDensity = +process.env.DENSITY;
 const SEED = +(process.env.SEED || 12345);
 const world = buildWorld(SEED, cfg);
 const herd = spawn(world, cfg, SEED);
@@ -31,6 +38,9 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
   const R=[cy,0,-sy], U=[sp*sy,cp,sp*cy], B=[sy*cp,-sp,cy*cp];
   const zbuf = new Float32Array(W*H).fill(1e9);
   const px = new Uint8ClampedArray(W*H*3);
+  // What the real ID pass puts in alpha (render.js `vh`): 255 head or horn, 102
+  // neck, 0 flank. The rasteriser's px is RGB only, so it rides alongside.
+  const parts = new Uint8Array(W*H);
   for (let i=0;i<W*H;i++){ if(!idMode){px[i*3]=SKY[0]*255; px[i*3+1]=SKY[1]*255; px[i*3+2]=SKY[2]*255;} }
 
   const proj = (x,y,z) => {
@@ -44,7 +54,7 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
 
   // c0/c1/c2 are per-vertex lit RGB; interpolating them approximates what the
   // GPU does when it interpolates normal + color and lights per fragment.
-  function tri(p0,p1,p2, c0,c1,c2, dist0,dist1,dist2, alpha) {
+  function tri(p0,p1,p2, c0,c1,c2, dist0,dist1,dist2, alpha, partVal) {
     if (p0[2]<=0.2||p1[2]<=0.2||p2[2]<=0.2) return;
     const minx=Math.max(0,Math.floor(Math.min(p0[0],p1[0],p2[0])));
     const maxx=Math.min(W-1,Math.ceil(Math.max(p0[0],p1[0],p2[0])));
@@ -67,7 +77,7 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
       const g=l0*c0[1]+l1*c1[1]+l2*c2[1];
       const b=l0*c0[2]+l1*c1[2]+l2*c2[2];
       const rr=r*(1-fo)+SKY[0]*255*fo, gg=g*(1-fo)+SKY[1]*255*fo, bb=b*(1-fo)+SKY[2]*255*fo;
-      if (alpha===undefined) { zbuf[k]=zz; px[k*3]=rr; px[k*3+1]=gg; px[k*3+2]=bb; }
+      if (alpha===undefined) { zbuf[k]=zz; px[k*3]=rr; px[k*3+1]=gg; px[k*3+2]=bb; parts[k]=partVal||0; }
       else { px[k*3]=px[k*3]*(1-alpha)+rr*alpha; px[k*3+1]=px[k*3+1]*(1-alpha)+gg*alpha; px[k*3+2]=px[k*3+2]*(1-alpha)+bb*alpha; }
     }
   }
@@ -159,7 +169,9 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
       const P0=proj(...A),P1=proj(...B2),P2=proj(...C);
       const id=u+1;
       const fc = idMode ? [id&255, (id>>8)&255, Math.min(255, P0[3]/256*255)] : [base[0]*255*l, base[1]*255*l, base[2]*255*l];
-      tri(P0,P1,P2, fc, fc, fc, P0[3],P1[3],P2[3]);
+      const part = model.attr[t*2];
+      tri(P0,P1,P2, fc, fc, fc, P0[3],P1[3],P2[3], undefined,
+          part===2||part===3 ? 255 : part===1 ? 102 : 0);
     }
   }
 
@@ -167,23 +179,32 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
   const N=world.N, wy=WATER_Y;
   const wq=[[0,wy,N],[N,wy,N],[N,wy,0],[0,wy,0]].map(v=>proj(...v));
   const wl=lit(0,1,0), wc=idMode?[255,255,0]:[46*wl,108*wl,190*wl];
-  tri(wq[0],wq[1],wq[2], wc,wc,wc, wq[0][3],wq[1][3],wq[2][3], 165/255);
-  tri(wq[0],wq[2],wq[3], wc,wc,wc, wq[0][3],wq[2][3],wq[3][3], 165/255);
+  // Translucent to look at, opaque to the ID pass. Blending an id is meaningless
+  // -- it mixes the sentinel into whatever is behind the water and hands `tally`
+  // an id belonging to no unicorn at all.
+  const wa = idMode ? undefined : 165/255;
+  tri(wq[0],wq[1],wq[2], wc,wc,wc, wq[0][3],wq[1][3],wq[2][3], wa);
+  tri(wq[0],wq[2],wq[3], wc,wc,wc, wq[0][3],wq[2][3],wq[3][3], wa);
 
-  return { px, drawn, W, H };
+  return { px, parts, drawn, W, H };
 }
 
 export { world, herd, W, H, cfg };
-const shots = process.env.SHOTS ? JSON.parse(process.env.SHOTS) : [[0,-0.06,0],[200,-0.10,0.9],[400,-0.05,-1.2],[620,-0.14,2.4]];
-const cv = createCanvas(W*2, H*Math.ceil(shots.length/2));
-const ctx = cv.getContext('2d');
-if (process.argv[1].endsWith('scene.mjs'))
-shots.forEach(([d,pi,yo], i) => {
-  const t0=Date.now();
-  const { px, drawn } = shot(d, pi, yo);
-  const img = ctx.createImageData(W,H);
-  for(let k=0;k<W*H;k++){ img.data[k*4]=px[k*3]; img.data[k*4+1]=px[k*3+1]; img.data[k*4+2]=px[k*3+2]; img.data[k*4+3]=255; }
-  ctx.putImageData(img, (i%2)*W, ((i/2)|0)*H);
-  console.log('shot', i, Date.now()-t0+'ms', drawn, 'unicorns in range');
-});
-writeFileSync(process.argv[2], cv.toBuffer('image/png'));
+
+// Run directly to dump a contact sheet; imported, it must draw nothing and write
+// nothing. The guard used to cover only the loop, so importing this module still
+// tried to write a PNG to argv[2] and threw.
+if ((process.argv[1] || '').endsWith('scene.mjs')) {
+  const shots = process.env.SHOTS ? JSON.parse(process.env.SHOTS) : [[0,-0.06,0],[200,-0.10,0.9],[400,-0.05,-1.2],[620,-0.14,2.4]];
+  const cv = createCanvas(W*2, H*Math.ceil(shots.length/2));
+  const ctx = cv.getContext('2d');
+  shots.forEach(([d,pi,yo], i) => {
+    const t0=Date.now();
+    const { px, drawn } = shot(d, pi, yo);
+    const img = ctx.createImageData(W,H);
+    for(let k=0;k<W*H;k++){ img.data[k*4]=px[k*3]; img.data[k*4+1]=px[k*3+1]; img.data[k*4+2]=px[k*3+2]; img.data[k*4+3]=255; }
+    ctx.putImageData(img, (i%2)*W, ((i/2)|0)*H);
+    console.log('shot', i, Date.now()-t0+'ms', drawn, 'unicorns in range');
+  });
+  writeFileSync(process.argv[2], cv.toBuffer('image/png'));
+}

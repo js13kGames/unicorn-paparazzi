@@ -1,8 +1,11 @@
 import { buildWorld, pathAt } from '../.mirror/terrain.mjs';
 import { spawn } from '../.mirror/unicorn.mjs';
-const base = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
-               trackRadiusFrac:.25, unicornDensity:.003, adultChance:.75,
-               poseWeights:[.80,.10,.08,.02] };
+// The real CONFIG, read out of src/index.js rather than copied. Copies here had
+// already drifted away from the game they claim to measure.
+import { readFileSync } from 'fs';
+const CONFIG = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(
+  readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8'))[1] + ')');
+const base = CONFIG;
 const SEEDS = [12345,777,42,20260907,5,99,1,2,3,404];
 
 function evaluate(drift, radius) {

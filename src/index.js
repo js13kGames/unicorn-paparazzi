@@ -4,6 +4,7 @@ import { spawn, updateHerd, packInstances } from './unicorn.js';
 import { createPhotoRig, frame as viewFrame } from './photo.js';
 import { scorePhoto } from './score.js';
 import * as ui from './ui.js';
+import { TITLE, RIDE, RESULTS, DETAIL, SHOP, LOBBY } from './mode.js';
 import * as net from './net.js';
 
 export const CONFIG = {
@@ -11,11 +12,33 @@ export const CONFIG = {
   plainStickiness: 0.75,
   terrainSmooth: 2,       // [1,2,1] blur passes turning bands into slopes
   terrainDetail: 0.35,    // fine relief added back after blurring, in bands
+  // Chance a land tile holds a unicorn, on the first ride. It climbs 5% a ride
+  // from there, at boot, just below -- so a run that survives gets a fuller map
+  // to photograph rather than only a dearer roll of film.
   unicornDensity: 0.003,
-  driftChance: 0.08,      // chance a unicorn wears an off-biome color
+  // Chance a unicorn wears an off-biome color. At 0.08 the herd was so strictly
+  // banded that blue and violet were ~3% each and locked to their own altitudes,
+  // so the color bonus almost never fired: two colors in 10% of shots, four in
+  // 0.1%, six never once in testing. Drift is the only thing that puts unlike
+  // animals in one frame, and it is what makes the color bonus a reward for the
+  // long lens -- you need six in shot before you can need six colors.
+  driftChance: 0.35,
   poseWeights: [0.80, 0.10, 0.08, 0.02],
+  // What each pose pays, over and above a plain standing shot: walking nothing,
+  // then eating, sitting, neighing. Stated outright rather than derived from the
+  // weights above by a gamma curve, which coupled two things that want tuning
+  // separately -- how often a pose turns up, and what catching it is worth --
+  // and could only ever pay strictly by rarity. Rarity is most of the story but
+  // not all of it: a unicorn sitting down photographs better than the numbers
+  // alone would say. Read as +10%, +30%, +90% on the breakdown.
+  poseBonus: [1, 1.1, 1.3, 1.9],
   trackRadiusFrac: 0.25,
-  shutterTiers: [0.8, 0.55, 0.35, 0.2],  // seconds between frames, per motor drive
+  // Seconds between frames, per motor drive. A second on the cheapest body, a
+  // tenth on the best: what the ladder buys now is the burst -- the three frames
+  // of a unicorn rearing rather than the one you happened to catch. It is no
+  // longer the thing that makes film scarce, because film is priced to be scarce
+  // on its own and a shutter that made you wait was a ride spent watching a dot.
+  shutterTiers: [1, 0.5, 0.25, 0.1],
   // World units per second, per drive train. A faster cart covers more of the
   // loop between one frame and the next, so the same roll of film sees more of
   // the map -- and more of the combinations that are only worth photographing
@@ -27,7 +50,10 @@ export const CONFIG = {
   // wheel sees the frame tighten by a fifth and learns the lens is there. Without
   // it the control is dead until the first $400, and nothing on screen says the
   // camera has a zoom to buy. Everything above it is the ladder as it was.
-  zoomLevels: [1, 1.2, 2, 4, 8, 16],
+  // Five rungs, not six. Zoom trades cone width for reach, and past about 6x the
+  // cone wins: an 8x frame held fewer subjects than a 6x one and measured as a
+  // negative buy, which is a rung nobody should be sold.
+  zoomLevels: [1, 1.5, 2.5, 4],
   // What one frame-share of unicorn is worth on each sensor: 1 / 1.5 / 3 / 6 of
   // the base rate. Size is coverage x this, so a subject filling a tenth of the
   // frame scores 100 on the cheapest camera and 600 on the best.
@@ -48,18 +74,39 @@ export const CONFIG = {
 
 const canvas = document.getElementById('c');
 
+// Namespaced per the jam's shared-origin rule, and never localStorage.clear().
+const SAVE_KEY = 'unicorn-paparazzi';
+// The best photograph of the run lives under its own key rather than in the save
+// proper. It is a JPEG data URL and persist() runs on every shutter press, so
+// carrying it in there would rewrite a few hundred kilobytes mid-ride; this one
+// is written once a ride, and only when the ride beat it.
+// Built off the save's own key rather than spelled out: two twelve-character
+// strings that differ in one letter cost twice what one does.
+const PIC_KEY = SAVE_KEY + 'p';
+
+// Both keys are read the same way, so there is one reader rather than one
+// function per key. A key that was never written reads as an empty record.
+const read = (k) => {
+  try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; }
+};
+
+const saved = read(SAVE_KEY);
+
+// The herd has to be spawned before anything else can be drawn, so everything it
+// depends on is read here -- which is why the save is loaded above worldgen and
+// not, as it was, below it.
+//
+// A match is ridden on borrowed gear (see MP_GEAR) and on a borrowed WORLD as
+// well: every rider in the room must spawn an identical herd, and rivals have
+// not ridden the same number of times. So the map only thickens in solo. `c`
+// with `g` is a match starting -- the same test the boot block below makes.
+if (!(saved.c && saved.g)) CONFIG.unicornDensity *= 1.05 ** (saved.s | 0);
+
 const seed = +location.hash.slice(1) || (Math.random() * 0x7fffffff) | 0;
 const world = buildWorld(seed, CONFIG);
 const herd = spawn(world, CONFIG, seed);
 const renderer = createRenderer(canvas, world, herd);
 const photoRig = createPhotoRig(renderer.gl, canvas, renderer.draw);
-
-// Namespaced per the jam's shared-origin rule, and never localStorage.clear().
-const SAVE_KEY = 'u13k_uni_saf';
-
-function loadSave() {
-  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; }
-}
 
 const SAVE_VERSION = 4;
 
@@ -78,20 +125,27 @@ function persist() {
       // has no `s`, which reads 0, which prices film at $100 -- exactly what
       // that save already expected. A bump would cost bytes and change nothing.
       s: state.rides, d: state.cartTier,
+      // What the run has earned all told, as opposed to what is left in the
+      // bank. The shop spends the bank down, so it is no measure of how the run
+      // went -- and how the run went is the whole of the game-over card. Older
+      // saves have no `e`, which reads 0, which is the only honest answer for a
+      // run whose takings were never counted.
+      e: state.earned,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
 
-const saved = loadSave();
-
 const state = {
-  mode: 'title',
+  mode: TITLE,
   bank: saved.b || 0,
   // 1, not 0: the free rung is where everyone starts. An older save that stored
   // an index into the previous ladder reads one rung low, which is a lens you
   // already paid for -- the save is local and pre-release, so it is not worth
   // bytes to migrate.
-  maxZoom: saved.z || 1,
+  // Clamped like `res` above: the lens ladder lost its top rung in the balance
+  // pass, and a save made before that carries a tier this ladder no longer has --
+  // which reads as an undefined focal length and a NaN field of view.
+  maxZoom: Math.min(saved.z || 1, CONFIG.zoomLevels.length - 1),
   // Clamped: a save from a build with more tiers would index off the end of
   // resBonus, which is a NaN score rather than a visible failure.
   res: Math.min(saved.r || 0, 3),
@@ -111,6 +165,7 @@ const state = {
   // the only number in the save that only ever goes up, and the reason a solo
   // game ends -- see price() below.
   rides: saved.s || 0,
+  earned: saved.e || 0,       // gross takings of the whole run; see persist()
   code: '',              // the lobby we are in, '' when playing alone
   host: 0,
   name: saved.n || '',   // what other riders see us called
@@ -144,33 +199,55 @@ if (mpCode && saved.g) {
 // tier i+1, so p is always one shorter than v. The shop draws the whole ladder
 // -- the old list showed only the next rung, so nothing on screen ever said
 // what camera you were actually carrying.
+// Prices set so every ladder returns about the same points per dollar, measured
+// at a mid-run loadout by test/tools/economy.mjs. Before this they were guesses,
+// and dpi -- far and away the strongest buy once size stopped being a rounding
+// error -- was also the cheapest thing in the shop.
+//
+// The motor drive is the exception, priced low rather than by measurement. It
+// only pays once the drive train is passing scenery faster than the shutter can
+// take it, which the sim can confirm happens but cannot size: it samples the lap
+// every 18 units, so it cannot see what changes in less. Cheap enough not to be
+// a trap either way, pending a finer sample.
 const LADDERS = [
   // p[0] is the free rung nobody buys -- you start standing on it -- so the
   // prices are the same four they always were, shifted along by one.
-  ['zoom', CONFIG.zoomLevels, [0, 400, 900, 1800, 3200], 'maxZoom', '×'],
+  ['zoom', CONFIG.zoomLevels, [0, 900, 900], 'maxZoom', '×'],
   // Named for its unit rather than "resolution": the row already reads
   // `dpi 1500 [3000 $1200]`, so spelling the unit out on every value as well
   // said it three times over.
-  ['dpi', CONFIG.resBonus, [500, 1200, 2600], 'res', ''],
-  ['speed', CONFIG.shutterTiers, [250, 700, 1600], 'shutterTier', 's'],
-  // `speed` is already the shutter's, so this one is named for the thing that
-  // moves rather than the movement.
-  ['cart', CONFIG.cartTiers, [400, 1000, 2200], 'cartTier', ''],
+  ['dpi', CONFIG.resBonus, [1500, 4600, 9100], 'res', ''],
+  // Named for the part rather than the effect: `speed` said nothing about which
+  // of the two speeds in the shop it meant, and the cart is the other one.
+  // 'flash', not 'shutter': what the row sells is the wait between one frame and
+  // the next -- which is what stops the same valuable shot being taken five
+  // times over -- and a flash recycling is exactly that wait, in a word the
+  // payload already carries as an element id. 'shutter' was seven characters of
+  // prose the packer had never seen; this is free.
+  ['flash', CONFIG.shutterTiers, [150, 250, 350], 'shutterTier', 's'],
+  // ...and the cart is simply how fast you are going, which is what the rider
+  // experiences. The unit is what makes the number mean anything: `13` alone
+  // could have been a tier, a rank or a multiplier.
+  ['speed', CONFIG.cartTiers, [400, 550, 700], 'cartTier', 'm/s'],
 ];
 
 // How fast the cart is running, in world units per second.
 const pace = () => CONFIG.cartTiers[state.cartTier];
 
-// Dollars a frame. A photograph has to beat this to have been worth taking,
-// which is the whole reason the shutter is worth aiming.
-const FILM = 100;
+// Dollars a frame, on the first ride. A photograph has to beat this to have been
+// worth taking, which is the whole reason the shutter is worth aiming -- and at
+// $20 the first roll is something a beginner can actually restock.
+const FILM = 20;
 
-// ...and it is a hundred dollars MORE after every ride. A flat price meant a
-// camera that had outgrown it could ride forever; rising, it eventually outruns
-// any roll, so the game is "shoot the best frame you can, and stay in as long as
-// you can afford to". `|| 1` covers the first shop visit -- and every save
-// written before this existed -- which would otherwise be handing out free film.
-const price = () => FILM * (state.rides || 1);
+// ...and half as much again after every ride. A flat price meant a camera that
+// had outgrown it could ride forever; rising, it eventually outruns any roll, so
+// the game is "shoot the best frame you can, and stay in as long as you can
+// afford to". It has to rise GEOMETRICALLY to do that: a photographer whose
+// takings grow with their gear will outrun any straight line, and income
+// compounds here, because every extra frame you can afford earns more frames
+// still. 1.5x a ride catches it while still leaving the early rides cheap --
+// which the old quadratic, starting at $1400, emphatically did not.
+const price = () => FILM * 1.5 ** state.rides | 0;
 
 // Film is not a ladder -- there are no tiers to climb, only frames to stock up
 // on -- but it is shaped like one here so buy() stays a single function: an
@@ -199,9 +276,10 @@ const offers = () => {
 };
 
 const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+const RIDE_SECONDS = 100;
 let distance = 0;
 let shutterQueued = false;
-let clock = 0;          // seconds of ride time, always tickCount * STEP
+let clock = 0;
 
 // Start the ride looking along the track rather than at a random compass point.
 {
@@ -243,7 +321,7 @@ const LIM = Math.PI / 2 - 0.05;
 const clampPitch = () => (cam.pitch = Math.max(-LIM, Math.min(LIM, cam.pitch)));
 
 addEventListener('mousemove', (e) => {
-  if (state.mode !== 'ride' || document.pointerLockElement !== canvas) return;
+  if (state.mode !== RIDE || document.pointerLockElement !== canvas) return;
   cam.yaw -= e.movementX * 0.0022;
   cam.pitch -= e.movementY * 0.0022;
   clampPitch();
@@ -260,7 +338,7 @@ state.t = TOUCH;
 // on the floor -- view() cannot express it, and a photograph does not want it.
 let yawOff;
 if (TOUCH) addEventListener('deviceorientation', (e) => {
-  if (state.mode !== 'ride' || e.alpha == null) return;
+  if (state.mode !== RIDE || e.alpha == null) return;
   const D = Math.PI / 180;
   const a = e.alpha * D, b = e.beta * D, g = e.gamma * D;
   const cg = Math.cos(g), sg = Math.sin(g), sb = Math.sin(b);
@@ -291,7 +369,7 @@ if (TOUCH) {
   addEventListener('touchstart', (e) => { if (e.touches.length < 2) multi = pinch = 0; });
   addEventListener('touchmove', (e) => {
     const t = e.touches;
-    if (state.mode !== 'ride' || t.length < 2) return;
+    if (state.mode !== RIDE || t.length < 2) return;
     multi = 1;
     const d = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     if (!pinch) pinch = d;
@@ -309,8 +387,8 @@ if (TOUCH) {
 const zoomBy = (n) => (state.zoom = Math.max(0, Math.min(state.maxZoom, state.zoom + n)));
 
 addEventListener('wheel', (e) => {
-  if (e.ctrlKey || state.mode === 'ride') e.preventDefault();
-  if (state.mode !== 'ride' || !state.maxZoom) return;
+  if (e.ctrlKey || state.mode === RIDE) e.preventDefault();
+  if (state.mode !== RIDE || !state.maxZoom) return;
   zoomBy(e.deltaY > 0 ? -1 : 1);
 }, { passive: false });
 
@@ -325,14 +403,14 @@ addEventListener('gesturestart', (e) => e.preventDefault());
 const lock = () => Promise.resolve(canvas.requestPointerLock()).catch(() => {});
 
 function primary() {
-  if (state.mode === 'title') {
-    state.mode = 'ride';
+  if (state.mode === TITLE) {
+    state.mode = RIDE;
     ui.hidePanel();
     ui.setChrome(true);
     // The tap that starts the ride is the gesture iOS wants for the orientation
     // stream; a mouse wants the pointer instead.
     TOUCH ? askIMU() : lock();
-  } else if (state.mode === 'ride') {
+  } else if (state.mode === RIDE) {
     // Escape releases the pointer but leaves you riding, so a click has to hand
     // the mouse back. Without this it fell through to the shutter, and the only
     // way to look around again was to spend a frame of film. A tap has no lock
@@ -374,22 +452,44 @@ function takePhoto() {
   ui.addThumb(photo.url);
 }
 
+// The run's best photograph, kept across rides and across reloads so the
+// game-over card has something to show. Written only when it is beaten, which is
+// at most once a ride -- see PIC_KEY for why it is not simply in the save.
+function keepBest(shot, photo) {
+  if (!shot || shot.total <= read(PIC_KEY).n) return;
+  try {
+    localStorage.setItem(PIC_KEY, JSON.stringify({ p: photo.url, b: shot.b, n: shot.total }));
+  } catch (e) { /* a full quota costs the picture, not the run */ }
+}
+
 function endRun() {
-  state.mode = 'results';
-  // Borrowed gear earns no money: a multiplayer ride would otherwise be the
-  // cheapest way to farm the shop.
-  // The ride counter sits inside the same guard for the same reason: a
-  // borrowed-gear ride must not make film more expensive back home either.
-  if (!state.mp) { for (const s of state.scored) state.bank += s.total; state.rides++; }
-  persist();
-  // One result per rider per ride: the total, and the best single frame.
+  state.mode = RESULTS;
+  // One result per rider per ride: the total, and the best single frame. Both
+  // are wanted twice over now -- on the wire, and by the bank -- so they are
+  // worked out before anything spends them.
   let best = 0;
   for (let i = 1; i < state.scored.length; i++) {
     if (state.scored[i].total > state.scored[best].total) best = i;
   }
-  net.done(state.scored.reduce((a, s) => a + s.total, 0),
-           state.photos.length ? state.photos[best].small : '',
-           state.scored.length ? state.scored[best].b : []);
+  const shot = state.scored[best];
+  // Not `ride`: that name is the frame loop's ride PROGRESS, and two different
+  // numbers under one name in one file is how a lifted-source test ends up
+  // pinning the wrong line.
+  const paid = state.scored.reduce((a, s) => a + s.total, 0);
+  // Borrowed gear earns no money: a multiplayer ride would otherwise be the
+  // cheapest way to farm the shop.
+  // The ride counter sits inside the same guard for the same reason: a
+  // borrowed-gear ride must not make film more expensive back home either -- nor
+  // hang its photographs on a solo run's game-over card.
+  if (!state.mp) {
+    state.bank += paid;
+    state.earned += paid;
+    state.rides++;
+    keepBest(shot, state.photos[best]);
+  }
+  persist();
+  net.done(paid, state.photos.length ? state.photos[best].small : '',
+           shot ? shot.b : []);
   ui.setChrome(false);
   document.exitPointerLock();
   showResults();
@@ -400,7 +500,7 @@ function endRun() {
 let ownRoll = 0;
 
 function showResults() {
-  state.mode = 'results';
+  state.mode = RESULTS;
   const rivals = net.others();
   // Everyone on the roster except the riders who have reported, and except us.
   // A rider who closes the tab leaves the roster, so this reaches zero and the
@@ -414,7 +514,7 @@ function showResults() {
 function showDetail(i) {
   // -1 is the My photos / Result toggle rather than a shot.
   if (i < 0) { ownRoll = !ownRoll; return showResults(); }
-  state.mode = 'detail';
+  state.mode = DETAIL;
   ui.showPhoto(state.scored[i], showResults);
 }
 
@@ -426,7 +526,7 @@ function showDetail(i) {
 const broke = () => !state.film && !frames().ok;
 
 function showShop() {
-  state.mode = 'shop';
+  state.mode = SHOP;
   if (broke()) return title();
   ui.showShop(state, CONFIG, offers(), buy, ride, title);
 }
@@ -460,7 +560,12 @@ function ride() {
 const home = () => { location.hash = ''; location.reload(); };
 
 function restart() {
-  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* nothing to clear */ }
+  // Both keys: a wiped run that kept its best photograph would open the next
+  // game-over card on a picture from a game nobody remembers playing.
+  try {
+    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(PIC_KEY);
+  } catch (e) { /* nothing to clear */ }
   home();
 }
 
@@ -470,7 +575,7 @@ function restart() {
 // yourself, then make a room or walk into one -- and a code is that room, which
 // is also how "join another" hops rooms: net.connect lets go of the old one.
 function lobby(code, host) {
-  state.mode = 'lobby';
+  state.mode = LOBBY;
   state.code = code || '';
   // Taken rather than inferred: booting back into a lobby after a match has to
   // restore whoever was host, and "was a code passed in" cannot tell you that.
@@ -488,7 +593,7 @@ const create = () => lobby('' + (1000 + (Math.random() * 9000 | 0)), 1);
 // seed either way. The hash carries the seed across it and the save carries the
 // code, so everyone reconnects to the same room on the other side.
 function start(s) {
-  if (state.mode !== 'lobby') return;  // never yank a rider already on the track
+  if (state.mode !== LOBBY) return;  // never yank a rider already on the track
   state.go = 1;
   persist();
   // Same trap as home(): setting href to pathname + '#' + s only changes the
@@ -524,17 +629,20 @@ function back() {
 }
 
 function title() {
-  state.mode = 'title';
+  state.mode = TITLE;
   // Reset only when there is something to reset -- a wipe offered to a player
   // with nothing to wipe is a button that does nothing.
   //
-  // Read LIVE, through loadSave(), not from the `saved` snapshot taken at boot.
+  // Read LIVE, through read(SAVE_KEY), not from the `saved` snapshot at boot.
   // That is the whole trick: `saved` never refreshes, so gating on `saved.v` kept
   // the button hidden through a first session however far the player got -- and
   // a player who burned all ten frames on their first ride reached the dead end
   // with the one button that gets out of it missing. persist() has always run by
   // the time broke() can be true, so the dead end is still offered its way out.
-  ui.showTitle(solo, lobby, restart, broke(), loadSave().v);
+  // The picture is read live for the same reason `saved.v` is: the dead end is
+  // reached after a ride has already written one, and the boot snapshot predates
+  // it.
+  ui.showTitle(solo, lobby, restart, broke(), read(SAVE_KEY).v, read(PIC_KEY), state.earned);
 }
 
 // The menu is reachable from the shop without a reload, and by then the world
@@ -554,12 +662,12 @@ function solo() {
 // Whatever screen is up, redraw it: the roster and the results board both move
 // on their own as riders arrive, finish and leave.
 function refresh() {
-  if (state.mode === 'lobby') {
+  if (state.mode === LOBBY) {
     // One primary action, picked here rather than in the card: in a room it
     // starts the ride, out of one it mints the room.
     ui.showLobby(state.code, state.host, net.lobby(), state.name,
                  state.code ? host : create, lobby, back, rename);
-  } else if (state.mode === 'results') showResults();
+  } else if (state.mode === RESULTS) showResults();
 }
 
 // --- loop ----------------------------------------------------------------
@@ -602,10 +710,15 @@ function frame(now) {
   // ticks are simply lost, which a networked ride would have to resync.
   acc += Math.min(0.25, (now - last) / 1000);
   last = now;
-  while (state.mode === 'ride' && acc >= STEP) { tick(); acc -= STEP; }
+  while (state.mode === RIDE && acc >= STEP) { tick(); acc -= STEP; }
 
   packInstances(herd, world);
-  const ride = distance / world.path.length;
+  // A ride is a fixed span of time, not a lap. Measured in laps, a faster cart
+  // was a downgrade you paid for: the loop ended sooner, so the same roll of film
+  // got fewer chances at it and passed less scenery. Measured in seconds, the
+  // shutter sets how many chances you get and the drive train sets how much
+  // country they are spread over, which is what both of those ladders are for.
+  const ride = clock / RIDE_SECONDS;
   // The cart alone is smoothed across the leftover accumulator, so it does not
   // judder on a display faster than the tick rate. Presentation only -- this
   // never feeds back into the simulation.
@@ -628,7 +741,7 @@ function frame(now) {
 
   ui.updateHud(state, ride, clock, CONFIG.zoomLevels);
 
-  if (state.mode === 'ride') {
+  if (state.mode === RIDE) {
     if (ride >= 1) endRun();
     // Solo, an empty roll ends the ride. In a match it must not: everyone rides
     // the same track at the same speed off the same tick clock, so letting the

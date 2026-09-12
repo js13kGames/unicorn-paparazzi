@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 const CONFIG_SRC = fs.readFileSync(fileURLToPath(new URL('../../src/index.js', import.meta.url)), 'utf8');
 
 const ui = await import('../.mirror/ui.mjs');
+const { TITLE, RIDE } = await import('../.mirror/mode.mjs');
 const { frame } = await import('../.mirror/photo.mjs');
 
 const state = {
@@ -45,7 +46,7 @@ const check = (name, got, want) => {
 // index.js hands the ladder itself, not the whole config: `CONFIG.zoomLevels`
 // is already written twice over there, so a third mention is cheaper than a new
 // `cfg.zoomLevels` for the packer to learn.
-const CFG = [1, 1.2, 2, 4, 8, 16];
+const CFG = (0, eval)(/zoomLevels: (\[[^\]]*\])/.exec(CONFIG_SRC)[1]);
 ui.updateHud(state, 0.4, 0, CFG);
 
 const film = nodes.film.innerHTML;
@@ -54,17 +55,20 @@ console.log('');
 
 check('film box shows film remaining', film, (s) => /\b12\b/.test(s));
 check('the ladder starts on a free rung barely wider than none',
-      /zoomLevels: \[1, 1\.2, /.test(CONFIG_SRC), true);
+      /zoomLevels: \[1, 1\.5, /.test(CONFIG_SRC), true);
 // A new player owns that rung rather than buying it, or the wheel is dead until
 // their first $400 and nothing says the camera has a zoom at all.
+// (Clamped to the top of the ladder since the balance pass, so this looks for
+// the default rather than for the whole expression.)
 check('and a fresh camera already stands on it',
-      /maxZoom: saved\.z \|\| 1,/.test(CONFIG_SRC), true);
+      /maxZoom: .*saved\.z \|\| 1/.test(CONFIG_SRC), true);
 check('film box shows the zoom the lens is on', film, (s) => /×1\b/.test(s));
 state.zoom = 1; ui.updateHud(state, 0.4, 0, CFG);
-check('the free rung reads as the fifth it is, not as a power of two',
-      nodes.film.innerHTML, (s) => /×1\.2\b/.test(s));
-state.zoom = 4; ui.updateHud(state, 0.4, 0, CFG);
-check('and follows the lens up the ladder', nodes.film.innerHTML, (s) => /×8\b/.test(s));
+check('the free rung reads as the fraction it is, not as a power of two',
+      nodes.film.innerHTML, (s) => s.includes('×' + CFG[1]));
+state.zoom = CFG.length - 1; ui.updateHud(state, 0.4, 0, CFG);
+check('and follows the lens up the ladder', nodes.film.innerHTML,
+      (s) => s.includes('×' + CFG[CFG.length - 1]));
 state.zoom = 0; ui.updateHud(state, 0.4, 0, CFG);
 check('money stays off the ride hud', nodes.film.innerHTML, (s) => !s.includes('$'));
 check('ride bar tracks progress', nodes.bar.style.width, '40.0%');
@@ -155,18 +159,18 @@ check('back returns to the results list', backed, true);
 // exactly as long as riding without the lock is true, which is the whole moment
 // the player needs it.
 document.pointerLockElement = null;
-ui.updateHud({ ...state, mode: 'ride' }, 0.4, 0, CFG);
+ui.updateHud({ ...state, mode: RIDE }, 0.4, 0, CFG);
 check('riding without the lock says so', nodes.hud.textContent, (s) => /click to look/.test(s));
 document.pointerLockElement = nodes.c || {};
-ui.updateHud({ ...state, mode: 'ride' }, 0.4, 0, CFG);
+ui.updateHud({ ...state, mode: RIDE }, 0.4, 0, CFG);
 check('and shuts up once the pointer is held', nodes.hud.textContent, (s) => !/click to look/.test(s));
 document.pointerLockElement = null;
-ui.updateHud({ ...state, mode: 'title' }, 0.4, 0, CFG);
+ui.updateHud({ ...state, mode: TITLE }, 0.4, 0, CFG);
 check('a card on screen is not a lost pointer', nodes.hud.textContent, (s) => !/click to look/.test(s));
 // A phone has no pointer to lose, so the hint could only ever be wrong there --
 // it would sit on screen for the whole ride telling you to do the one thing the
 // device cannot do.
-ui.updateHud({ ...state, mode: 'ride', t: 1 }, 0.4, 0, CFG);
+ui.updateHud({ ...state, mode: RIDE, t: 1 }, 0.4, 0, CFG);
 check('and a touch device is never told to click', nodes.hud.textContent, (s) => !/click to look/.test(s));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');

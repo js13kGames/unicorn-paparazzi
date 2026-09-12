@@ -141,14 +141,20 @@ export function tally(px, W, H, herd, rect) {
         const i = id - 1;
         s = {
           n: 0, minx: r.w, maxx: -1, miny: r.h, maxy: -1, sx: 0, sy: 0,
+          nx: 0, ny: 0, nn: 0,
           outline: 0, edge: 0, env: 0, occ: 0,
           color: herd.color[i], pose: herd.pose[i], horns: herd.horns[i],
         };
         seen.set(id, s);
       }
       s.n++;
-      // Alpha carries the head flag out of the ID pass.
-      const hw = px[o + 3] > 127 ? HEAD_W : 1;
+      // Alpha carries the part out of the ID pass: 255 head or horn, 102 neck.
+      const a = px[o + 3];
+      const hw = a > 127 ? HEAD_W : 1;
+      // The neck is where framing is measured from, so it gets a centroid of its
+      // own. The whole-body one stays as the fallback for an animal whose neck is
+      // hidden or out of shot.
+      if (a > 50 && a < 180) { s.nx += cx; s.ny += cy; s.nn++; }
       s.sx += cx; s.sy += cy;
       if (cx < s.minx) s.minx = cx;
       if (cx > s.maxx) s.maxx = cx;

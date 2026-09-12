@@ -44,7 +44,8 @@ check('the accumulator line is still in index.js', !!accLine, true);
 check('the fixed-step while loop is still in index.js', !!whileLine, true);
 check('STEP is a 60Hz tick', +(1 / STEP).toFixed(6), 60);
 
-const drive = new Function('times', 'state', 'STEP', 'tick', `
+const { RIDE } = await import('../.mirror/mode.mjs');
+const drive = new Function('times', 'state', 'STEP', 'tick', 'RIDE', `
   let acc = 0, last = 0;
   for (const now of times) {
     ${accLine[1]}
@@ -58,7 +59,7 @@ const drive = new Function('times', 'state', 'STEP', 'tick', `
 const stamps = (durs) => { let t = 0; return durs.map((d) => (t += d)); };
 const ticksFor = (durs) => {
   let n = 0;
-  drive(stamps(durs), { mode: 'ride' }, STEP, () => n++);
+  drive(stamps(durs), { mode: RIDE }, STEP, () => n++, RIDE);
   return n;
 };
 
@@ -120,9 +121,9 @@ check('a different tick count does not', run(601) !== plain, true);
 function rideTo(durs, target) {
   const h = spawn(w, cfg, 4242);
   let n = 0;
-  drive(stamps(durs), { mode: 'ride' }, STEP, () => {
+  drive(stamps(durs), { mode: RIDE }, STEP, () => {
     if (n < target) { updateHerd(h, w, cfg, STEP); n++; }
-  });
+  }, RIDE);
   return { at: n, hash: hash(h) };
 }
 const slow = rideTo(pattern(TOTAL, [1000 / 60]), 500);

@@ -2,9 +2,12 @@
 // often a unicorn is close enough to clear minCoverage from the moving cart.
 import { buildWorld, pathAt } from '../.mirror/terrain.mjs';
 import { spawn, updateHerd, packInstances } from '../.mirror/unicorn.mjs';
-const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
-              trackRadiusFrac:.25, unicornDensity:.003, adultChance:.75, driftChance:.08,
-              poseWeights:[.80,.10,.08,.02] };
+// The real CONFIG, read out of src/index.js rather than copied. Copies here had
+// already drifted away from the game they claim to measure.
+import { readFileSync } from 'fs';
+const CONFIG = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(
+  readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8'))[1] + ')');
+const cfg = CONFIG;
 // A unicorn is ~2.2 units tall; on a 360px-high 60deg frame it spans 312*2.2/d px.
 // Coverage is roughly (0.45*h)^2 / (W*H) for the blocky silhouette.
 const W=640,H=360,f=(H/2)/Math.tan(Math.PI/6);

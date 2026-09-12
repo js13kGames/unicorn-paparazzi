@@ -252,11 +252,14 @@ function makeHerd(list, cfg, seed) {
   };
   for (let i = 0; i < n; i++) {
     h.aim[i] = h.yaw[i] = rnd() * TAU;
-    // Irwin-Hall n=3: a bell centred on 1 that tails off around 0.5x and 1.5x.
+    // Irwin-Hall n=3: a bell centred on 1.5 that tails off around 0.5x and 2.5x.
     // Three uniform draws are the cheapest normal-ish distribution there is, and
     // they sit in the loop that already draws five times per animal -- which is
     // what keeps the count unconditional, and the herd the same on both machines.
-    h.speed[i] = 0.5 + (rnd() + rnd() + rnd()) / 3;
+    // The floor stays at 0.5 and only the spread above it opened up: a herd that
+    // barely moved made every photograph a still life, and the slow animals are
+    // still there to be found -- there are just fewer of them.
+    h.speed[i] = 0.5 + (rnd() + rnd() + rnd()) * (2 / 3);
     h.phase[i] = rnd();
     h.step[i] = rnd();
     h.pose[i] = rollPose(rnd(), cfg.poseWeights);

@@ -22,15 +22,16 @@ const LIM = Math.PI / 2 - 0.05;
 // `yawOff` is module-level in index.js and deliberately survives between events:
 // it is the origin the first reading establishes. So the harness holds it too,
 // handing it back in and taking it out again, exactly as the module does.
+const { RIDE, SHOP } = await import('../.mirror/mode.mjs');
 const turn = (cam, state, yawOff, e) => {
-  const fn = new Function('cam', 'state', 'yawOff', 'LIM', 'clampPitch', 'e',
+  const fn = new Function('cam', 'state', 'yawOff', 'LIM', 'clampPitch', 'RIDE', 'e',
     body[1] + '\nreturn yawOff;');
   const out = fn(cam, state, yawOff, LIM,
-                 () => (cam.pitch = Math.max(-LIM, Math.min(LIM, cam.pitch))), e);
+                 () => (cam.pitch = Math.max(-LIM, Math.min(LIM, cam.pitch))), RIDE, e);
   return out;
 };
 // A fresh phone, already looking down the track at yaw 1 the way a ride starts.
-const fresh = () => ({ cam: { yaw: 1, pitch: 0 }, state: { mode: 'ride' }, off: undefined });
+const fresh = () => ({ cam: { yaw: 1, pitch: 0 }, state: { mode: RIDE }, off: undefined });
 const point = (a, b, g) => {
   const p = fresh();
   p.off = turn(p.cam, p.state, p.off, { alpha: a, beta: b, gamma: g });
@@ -86,7 +87,7 @@ check('portrait and landscape aim the same way',
 
 // --- when it must keep its hands off -------------------------------------
 const parked = fresh();
-parked.state.mode = 'shop';
+parked.state.mode = SHOP;
 turn(parked.cam, parked.state, parked.off, { alpha: 90, beta: 90, gamma: 0 });
 check('a card on screen is not steered by the handset', near(parked.cam.yaw, 1));
 

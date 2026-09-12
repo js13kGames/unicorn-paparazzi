@@ -1,3 +1,4 @@
+import { RIDE } from './mode.js';
 
 // Element ids are written into HTML strings, and terser cannot see into a string
 // -- it renames variables and leaves "id=\"shop\"" exactly as typed. So unlike
@@ -42,7 +43,7 @@ export function updateHud(state, ride, clock, zoom) {
   // as it is true. A phone never has a pointer to lose, so `state.t` keeps the
   // hint off a screen where it could only ever be wrong.
   el.hud.textContent = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
-    (state.mode === 'ride' && !state.t && !document.pointerLockElement ? '  ·  click to look' : '');
+    (state.mode === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '');
   // Under the frame count: the lens, or a winding dot while the shutter is
   // still recovering. The bank used to read here, but money is a between-rides
   // number -- what you actually want mid-ride is which zoom you are on, and the
@@ -98,21 +99,34 @@ function onCard(fn) {
 // copy is nearly free, while in the shell it was 32 characters of plain text.
 document.title = 'Unicorn Paparazzi';
 
-export function showTitle(onSolo, onMulti, onReset, lost, saved) {
-  // The class centres the title and the buttons in a full-height column.
-  //
+export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned) {
   // `lost` is the dead end -- no film and no money for any -- and it is this
-  // card rather than one of its own, because everything it needs to say is
-  // already here and only the two things you can no longer do come off.
+  // card rather than one of its own, because the one button that gets out of it
+  // is already here and the rest of the menu simply comes off.
+  //
+  // It is the only reading the run ever gets, so it is where the run is read
+  // out: the best photograph of the whole game with its breakdown intact, and
+  // what the whole game took. The bank would be the wrong number -- the shop has
+  // spent most of it, and what you spent is not what you earned.
   //
   // `saved` is whether there is a run on disk to wipe. index.js reads it live
   // rather than from its boot snapshot, so the dead end -- which can only be
   // reached after a run has been written -- still gets the button.
-  panel('<h1>Unicorn Paparazzi</h1>' +
-        (lost ? '<h2>Out of film</h2>'
-              : '<p><button id="go">Solo</button></p>' +
+  //
+  // The 't' class centres a title and two buttons in a full-height column, which
+  // is the menu and not this: the dead end carries a photograph and a table, and
+  // a 6em headline over them crowds both off the screen.
+  panel((lost ? '<h1>Game over</h1>' +
+                '<h2>out of film</h2>' +
+                photoCard(pic.p, pic.b || [], 'Best picture', pic.n || 0) +
+                // Bare, and in the shop's own markup: under the run's best
+                // photograph and over the only button left, a figure in dollars
+                // is the run's takings and can hardly be anything else.
+                '<h2>$' + earned + '</h2>'
+              : '<h1>Unicorn Paparazzi</h1>' +
+                '<p><button id="go">Solo</button></p>' +
                 '<p><button id="mp">Multiplayer</button></p>') +
-        (saved ? '<p><button id="x">Reset</button></p>' : ''), 't');
+        (saved ? '<p class="h"><button id="x">Reset</button></p>' : ''), lost ? '' : 't');
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
 }
 
@@ -200,13 +214,12 @@ export function photoCard(url, rows, heading, total) {
     // A leading space means "detail of the row above": dim it and indent it,
     // rather than ruling it off as a subject of its own.
     const sub = label[0] === ' ';
-    // A gain reads green and a loss red. A multiplier is judged against parity
-    // -- x2 is a gain, and framing rides below x100% as often as above it. Only
-    // a signed or multiplied value is colored, so plain totals stay neutral.
+    // A gain reads green and a loss red. Only a SIGNED value is colored, so plain
+    // totals -- and a framing of exactly parity, which prints an unsigned 0% --
+    // stay neutral. There is no multiplier case any more: every adjustment on
+    // the breakdown is a signed percentage now, poses and horns included.
     const k = value[0];
-    const c = k === '-' ? ' m'
-      : k !== '+' && k !== '×' ? ''
-      : parseFloat(value.slice(1)) < (value.slice(-1) === '%' ? 100 : 1) ? ' m' : ' p';
+    const c = k === '-' ? ' m' : k === '+' ? ' p' : '';
     body += '<tr class="' + (sub ? 'd' : 'r') + '"><td>' +
       (sub ? '&nbsp;' : '') + label + '</td><td class="n' + c + '">' + value + '</td></tr>';
   }
@@ -325,7 +338,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu) {
   });
   rows += row('film', state.film, film);
   panel(
-    '<h1>SHOP</h1>' +
+    '<h1>Shop</h1>' +
     // Only the bank: film now has its own row, and printing it twice on one
     // short screen just made the header longer.
     '<h2>$' + state.bank + '</h2>' +

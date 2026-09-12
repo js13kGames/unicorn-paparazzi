@@ -49,8 +49,13 @@ const click = (id) => {
 
 // --- the title -----------------------------------------------------------
 const hits = [];
-const showTitle = (reset, lost, saved = 1) =>
-  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost, saved);
+// The dead end reads the run out, so it takes the run's best photograph -- the
+// record index.js keeps under its own localStorage key -- and what the whole run
+// earned. Every other state of this card ignores both.
+const PIC = { p: 'best.jpg', b: [['violet', '820'], [' size', '+820']], n: 820 };
+const showTitle = (reset, lost, saved = 1, pic = {}, earned = 0) =>
+  ui.showTitle(() => hits.push('solo'), () => hits.push('mp'), reset, lost, saved,
+               pic, earned);
 
 showTitle(0, 0, 0);
 check('the title offers both ways in', /id="go"[\s\S]*id="mp"/.test(card()));
@@ -75,9 +80,27 @@ check('and it wipes rather than riding', hits.pop(), 'reset');
 // No film and no money for any. It is this card rather than one of its own, so
 // what has to hold is that the two things you cannot afford are gone and the
 // one thing that still works is not.
-showTitle(() => hits.push('reset'), 1);
+showTitle(() => hits.push('reset'), 1, 1, PIC, 4300);
 const lost = card();
 check('losing says why', lost, (h) => /film/.test(h));
+check('and says it is over as well as why',
+      lost, (h) => h.includes('Game over'));
+// The only reading the run ever gets: the best frame of the whole game, its
+// breakdown intact, and the gross takings -- not the bank, which the shop has
+// spent down and which says nothing about how the run went.
+check('the run\'s best photograph is the card', lost, (h) => h.includes('<img src="best.jpg">'));
+check('with its breakdown under it', lost, (h) => h.includes('violet') && h.includes('+820'));
+check('and its score as the total', lost, (h) => h.includes('<b>820</b>'));
+// Bare, in the shop's own markup: under the best photograph and over the only
+// button left, a figure in dollars can hardly be read as anything else.
+check('the takings are what is reported, not the bank',
+      lost, (h) => h.includes('<h2>$4300</h2>'));
+// A run whose best was never written -- an empty roll burned on nothing at all
+// -- still has to render. photoCard already draws no <img> for an empty url.
+showTitle(() => hits.push('reset'), 1);
+check('a run with no photograph to show still draws',
+      card(), (h) => !h.includes('<img') && h.includes('<h2>$0</h2>'));
+showTitle(() => hits.push('reset'), 1, 1, PIC, 4300);
 check('and takes away the ride you cannot pay for', lost, (h) => !h.includes('id="go"'));
 check('and multiplayer with it, since the match is over too',
       lost, (h) => !h.includes('id="mp"'));
@@ -287,9 +310,9 @@ check('and a shot in the roll still opens on its index', picked, 1);
 // first would paint "43" red, since its tail parses as 3.
 {
   const card = ui.photoCard('', [
-    ['red neighing', '366'], [' 8.5% × 1000dpi', '+85'], [' pose', '+98'],
-    [' obscured', '-20'], [' bicorn', '×2'], ['green', '43'],
-    ['framing', '×111%'], ['2 colors', '×2'],
+    ['red neighing', '366'], [' 8.5% × 1000dpi', '+85'], [' pose', '+90%'],
+    [' obscured', '-20'], [' bicorn', '+50%'], ['green', '43'],
+    ['framing', '+11%'], ['2 colors · 2 × 20%', '+40%'],
   ], 'a heading', 911);
   const cls = {};
   for (const m of card.matchAll(/<td>(?:&nbsp;)?([^<]*)<\/td><td class="([^"]*)">([^<]*)</g)) {
@@ -298,15 +321,22 @@ check('and a shot in the roll still opens on its index', picked, 1);
   console.log('        ' + Object.entries(cls).map(([v, c]) => v + '=' + c).join('  '));
   check('a gain is green', cls['+85'], 'n p');
   check('a loss is red', cls['-20'], 'n m');
-  check('a multiplier is a gain', cls['×2'], 'n p');
-  check('framing above parity is green', cls['×111%'], 'n p');
+  // Every adjustment is a signed percentage now -- pose, horns, framing and the
+  // colour bonus alike -- so the sign is the whole of the colouring contract and
+  // photoCard has no multiplier case left to get wrong.
+  check('a pose gain is green', cls['+90%'], 'n p');
+  check('and a horn gain with it', cls['+50%'], 'n p');
+  check('framing above parity is green', cls['+11%'], 'n p');
   check('a plain subtotal is left alone', cls['366'], 'n');
   check('and so is one whose tail looks like a small number', cls['43'], 'n');
 }
 {
-  const card = ui.photoCard('', [['framing', '×62%']], 'h', 1);
+  const card = ui.photoCard('', [['framing', '-38%']], 'h', 1);
   check('framing below parity is red',
-        /<td class="n m">×62%</.test(card), true);
+        /<td class="n m">-38%</.test(card), true);
+  // Exactly parity prints unsigned, so it earns neither color.
+  check('framing at parity is left alone',
+        /<td class="n">0%</.test(ui.photoCard('', [['framing', '0%']], 'h', 1)), true);
 }
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');

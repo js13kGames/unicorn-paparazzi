@@ -1,8 +1,11 @@
 import { buildWorld } from '../.mirror/terrain.mjs';
 import { spawn, updateHerd, packInstances, buildModel, buildPoseTable, PARTS, POSE_ROWS, COLOR_NAMES, POSE_NAMES } from '../.mirror/unicorn.mjs';
-const cfg = { mapSize:500, plainStickiness:.75, terrainSmooth:2, terrainDetail:.35,
-              trackRadiusFrac:.25, unicornDensity:.003, driftChance:.08,
-              poseWeights:[.80,.10,.08,.02], weakRadius:26, strongRadius:70, };
+// The real CONFIG, read out of src/index.js rather than copied. Copies here had
+// already drifted away from the game they claim to measure.
+import { readFileSync } from 'fs';
+const CONFIG = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(
+  readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8'))[1] + ')');
+const cfg = { ...CONFIG, weakRadius: 26, strongRadius: 70 };
 const w = buildWorld(12345, cfg);
 const h = spawn(w, cfg, 12345);
 console.log('herd size', h.n);

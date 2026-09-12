@@ -37,8 +37,8 @@ views.forEach((v, n) => {
   // readPixels is bottom-up; our rasteriser is top-down, so flip to match.
   const px = new Uint8Array(W*H*4);
   for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
-    const src=((H-1-y)*W+x)*3, dst=(y*W+x)*4;
-    px[dst]=ids.px[src]; px[dst+1]=ids.px[src+1];
+    const s0=(H-1-y)*W+x, dst=(y*W+x)*4;
+    px[dst]=ids.px[s0*3]; px[dst+1]=ids.px[s0*3+1]; px[dst+3]=ids.parts[s0];
   }
   const scored = scorePhoto({ url:'', w:W, h:H, subjects: tally(px, W, H, herd) }, cfg, st);
 
@@ -46,12 +46,13 @@ views.forEach((v, n) => {
   for(let k=0;k<W*H;k++){ img.data[k*4]=color.px[k*3]; img.data[k*4+1]=color.px[k*3+1]; img.data[k*4+2]=color.px[k*3+2]; img.data[k*4+3]=255; }
   ctx.putImageData(img, (n%2)*640, ((n/2)|0)*360);
 
+  const base = scored.subjects.reduce((a, x) => a + x.subtotal, 0);
   console.log('--- shot ' + n + ' -> ' + scored.total + ' points ' +
-    '(base ' + Math.round(scored.base) + ' x' + scored.multiplier + ')');
+    '(base ' + Math.round(base) + ' x' + scored.multiplier + ')');
   for (const s of scored.subjects) {
     console.log('    ' + s.color.padEnd(14) +
       s.poseName.padEnd(10) +
-      (s.coverage*100).toFixed(2).padStart(6) + '% ' +
+      (s.size / cfg.resBonus[st.res] * 100).toFixed(2).padStart(6) + '% ' +
       'size ' + s.size.toFixed(1).padStart(5) +
       '  pose ' + String(s.pose).padStart(3) +
       (s.cropLoss > 0.5 ? '  crop -' + s.cropLoss.toFixed(0) : '') +
@@ -59,7 +60,7 @@ views.forEach((v, n) => {
       (s.occLoss > 0.5 ? '  herd -' + s.occLoss.toFixed(0) : '') +
       '' );
   }
-  console.log('    composition ' + scored.composition +
+  console.log('    framing ×' + scored.framing.toFixed(2) +
     (scored.bonuses.length ? '   bonuses: ' + scored.bonuses.map(b=>b.label+' x'+b.factor).join(', ') : ''));
 });
 writeFileSync(process.argv[2], cv.toBuffer('image/png'));

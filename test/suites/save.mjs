@@ -57,15 +57,21 @@ check('the bootstrap built the DOM in every case', injected.has('c') && injected
 // What a save actually restores, evaluated from the real source text rather than
 // a copy, so it cannot drift away from what ships.
 const src = fs.readFileSync(ROOT + 'src/index.js', 'utf8');
+// The screen names are one-letter constants in ui.js now; lifted source that
+// tests against one needs it in scope. Imported, not restated -- a letter
+// spelled out here could drift from the one that ships.
+const { TITLE, SHOP, LOBBY } = await import('../.mirror/mode.mjs');
 const VERSION = +/const SAVE_VERSION = (\d+)/.exec(src)[1];
 
 // Each field of the state literal is one expression over `saved`; lift them out
 // and run them against a fake save.
+const CONFIG = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(src)[1] + ')');
 const restore = (saved) => {
   const grab = (key) => {
     const m = new RegExp('^  ' + key + ': (.+),$', 'm').exec(src);
     if (!m) throw new Error('no ' + key + ' in the state literal');
-    return new Function('saved', 'return ' + m[1])(saved);
+    // Some fields clamp themselves against CONFIG now, so it has to be in scope.
+    return new Function('saved', 'CONFIG', 'return ' + m[1])(saved, CONFIG);
   };
   return { bank: grab('bank'), maxZoom: grab('maxZoom'), res: grab('res'),
            film: grab('film'), shutterTier: grab('shutterTier'), rides: grab('rides'),
@@ -131,7 +137,10 @@ const brokeSrc = /^const broke = .+$/m.exec(src)[0];
 check('the dead-end test is still there to test', !!brokeSrc && FILM > 0);
 // broke() is phrased through frames(1) now, so it has to be lifted with it --
 // which is the point: there is one definition of what a frame costs, not two.
-const isBroke = (film, bank, rides = 1) =>
+// Ride 0, not 1: `rides` is rides FINISHED, so the untouched save that walks
+// into the first shop is on 0 and pays the base price. The old default of 1
+// happened to read the same only while the curve started its multiplier there.
+const isBroke = (film, bank, rides = 0) =>
   new Function('state', econ + framesSrc + ';' + brokeSrc + ';return broke()')(
     { film, bank, rides });
 check('no frames and no money is the dead end', isBroke(0, 0) === true);
@@ -142,13 +151,21 @@ check('and frames in hand are never the dead end, however broke',
       isBroke(1, 0) === false);
 // ...and the bar rises with every ride, which is the only reason the dead end is
 // reachable at all: a flat price that a good camera has outgrown is not an end.
+// The curve is geometric now, so these are phrased through the lifted price()
+// rather than through a multiple of FILM -- restating the shape here is what
+// made them fail the moment it changed.
+const priceAt = (rides) =>
+  new Function('state', econ + 'return price()')({ rides });
 check('the dead end moves up with the ride count',
-      isBroke(0, FILM * 2, 3) === true, String(FILM * 2));
+      isBroke(0, priceAt(3) - 1, 3) === true, String(priceAt(3)));
 check('and is cleared by the price of a frame at that ride',
-      isBroke(0, FILM * 3, 3) === false);
+      isBroke(0, priceAt(3), 3) === false);
+// ...and it rises faster than a straight line, or income outruns it forever.
+check('and it climbs faster than linearly',
+      priceAt(4) > priceAt(2) * 2, priceAt(2) + ' -> ' + priceAt(4));
 
 // --- what the shop sells -------------------------------------------------
-const mk = (held, rides = 1) => {
+const mk = (held, rides = 0) => {
   const state = { film: held, rides };
   const o = new Function('state', econ + framesSrc + ';return frames()')(state);
   o.buy();
@@ -156,14 +173,16 @@ const mk = (held, rides = 1) => {
 };
 check('a single frame costs the price of a frame', mk(0).price === FILM);
 check('buying puts exactly one frame in the roll', mk(2).film === 3);
-// The whole point of the change: the same frame costs a hundred dollars more
-// after every ride.
-check('a frame costs a hundred per ride taken', mk(0, 4).price === FILM * 4,
-      String(mk(0, 4).price));
-// Before the first ride there is no multiplier to apply, and 0 x anything is
-// free film forever.
+// The whole point of the change: the same frame costs more after every ride.
+check('a frame costs the risen price for the ride count',
+      mk(0, 4).price === priceAt(4), String(mk(0, 4).price));
+// Before the first ride the multiplier is 1.5^0, which is exactly the base price
+// -- so the first roll is the cheapest one and nothing is ever free.
 check('the first frame is never free', mk(0, 0).price === FILM,
       String(mk(0, 0).price));
+// ...and it really does climb from there rather than sitting flat for a ride.
+check('and the second ride already costs more', mk(0, 1).price > FILM,
+      String(mk(0, 1).price));
 // The roll of ten is gone: with the price climbing it was a four-figure button
 // that spent most of its life greyed out. Nothing should be able to quietly
 // reintroduce a bulk quantity without this suite saying so.
@@ -176,11 +195,11 @@ const shopSrc = /^function showShop\(\)[\s\S]*?^}$/m.exec(src)[0];
 const routed = (film, bank) => {
   let to = null;
   const state = { film, bank };
-  new Function('state', 'broke', 'ui', 'CONFIG', 'offers', 'buy', 'ride', 'title',
+  new Function('state', 'broke', 'ui', 'CONFIG', 'offers', 'buy', 'ride', 'title', 'SHOP',
                shopSrc + ';showShop()')(
     state, () => !state.film && state.bank < FILM,
     { showShop: () => { to = 'shop'; } }, {}, () => [], 0, 0,
-    () => { to = 'title'; });
+    () => { to = 'title'; }, SHOP);
   return to;
 };
 check('a player who cannot buy a frame is sent to the dead end',
@@ -195,10 +214,13 @@ const titleSrc = /^function title\(\)[\s\S]*?^}$/m.exec(src)[0];
 const titled = (film, bank) => {
   let lost;
   const state = { film, bank };
-  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'saved', 'loadSave', 'restart',
-               titleSrc + ';title()')(
+  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'saved', 'restart',
+               'read', 'SAVE_KEY', 'PIC_KEY', 'TITLE', titleSrc + ';title()')(
     state, () => !state.film && state.bank < FILM,
-    { showTitle: (a, b, c, d) => { lost = d; } }, 0, 0, { v: 4 }, () => ({ v: 4 }), 0);
+    { showTitle: (a, b, c, d) => { lost = d; } }, 0, 0, { v: 4 }, 0,
+    // Both the save and the best photograph are read live off their own keys,
+    // so title() needs the reader and both keys handed to it here.
+    (k) => (k === 'saf' ? { v: 4 } : {}), 'saf', 'pic', TITLE);
   return !!lost;
 };
 check('the title shows the dead end when there is no way to buy a frame',
@@ -209,17 +231,18 @@ check('and does not when there is', titled(0, FILM) === false);
 // `saved.v` hid the button through a whole first session however far the player
 // got, and the dead end, whose only way out is Reset, became a wall.
 const titleCode = titleSrc.replace(/\/\/.*$/gm, '');
-check('Reset is gated on a save', /loadSave\(\)/.test(titleCode), titleCode);
+check('Reset is gated on a save', /read\(SAVE_KEY\)/.test(titleCode), titleCode);
 check('and never on the stale boot snapshot',
       !/\bsaved\b/.test(titleCode), titleCode);
 
 // The live read must actually reach ui.showTitle, or the gate is decorative.
 {
   let saw;
-  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'loadSave', 'restart',
-               titleSrc + ';title()')(
+  new Function('state', 'broke', 'ui', 'solo', 'lobby', 'restart',
+               'read', 'SAVE_KEY', 'PIC_KEY', 'TITLE', titleSrc + ';title()')(
     { film: 1, bank: 0 }, () => false,
-    { showTitle: (a, b, c, d, e) => { saw = e; } }, 0, 0, () => ({}), 0);
+    { showTitle: (a, b, c, d, e) => { saw = e; } }, 0, 0, 0,
+    () => ({}), 'saf', 'pic', TITLE);
   check('so a player with nothing saved is offered no wipe', !saw);
 }
 
@@ -279,17 +302,21 @@ const spend = (bank, film, rides = 1) => {
     state, () => [framesOf(state)], () => {}, () => {});
   return state;
 };
+// Priced off the lifted price() rather than off a remembered $100, so these say
+// "the till charges what the shop quoted" in a way that survives a retune.
+const one = priceAt(1);
 check('buying a frame costs exactly the price of a frame',
-      spend(500, 0).bank === 400, String(spend(500, 0).bank));
-check('and puts exactly one frame in the roll', spend(500, 0).film === 1);
-check('the exact price is affordable', spend(100, 0).film === 1);
+      spend(one + 400, 0).bank === 400, String(spend(one + 400, 0).bank));
+check('and puts exactly one frame in the roll', spend(one + 400, 0).film === 1);
+check('the exact price is affordable', spend(one, 0).film === 1);
 // A pound short has to buy nothing at all -- not a frame on credit, and not a
 // negative bank, which would read as a fortune next time it is compared.
 // The till charges what the shop quoted, and the shop quotes the current ride.
 check('the till charges the risen price, not the base one',
-      spend(1000, 0, 5).bank === 500, String(spend(1000, 0, 5).bank));
-const short = spend(99, 0);
-check('a pound short buys nothing', short.film === 0 && short.bank === 99,
+      spend(priceAt(5) + 500, 0, 5).bank === 500,
+      String(spend(priceAt(5) + 500, 0, 5).bank));
+const short = spend(one - 1, 0);
+check('a pound short buys nothing', short.film === 0 && short.bank === one - 1,
       JSON.stringify(short));
 
 // buy() is the till, and it does not trust the card it was handed: the shop
@@ -395,9 +422,9 @@ const navBlock = (name) => {
 
 const navigate = (name, from, call) => {
   const location = fakeLocation(from);
-  const state = { mode: 'lobby' };
-  new Function('location', 'state', 'persist',
-               navBlock(name) + ';' + call)(location, state, () => {});
+  const state = { mode: LOBBY };
+  new Function('location', 'state', 'persist', 'LOBBY',
+               navBlock(name) + ';' + call)(location, state, () => {}, LOBBY);
   return location;
 };
 
@@ -425,14 +452,14 @@ check('and it still reloads when there was no seed to drop', plain.reloads > 0);
 // wired to a function that no longer exists still passes every other check.
 const roomBlock = (name) => navBlock(name);
 const room = (name, call, code = '') => {
-  const state = { code, mode: 'lobby' };
+  const state = { code, mode: LOBBY };
   const net = { connected: null, closed: 0,
                 connect: (c) => { net.connected = c; }, close: () => { net.closed++; } };
   let titled = 0;
-  new Function('state', 'net', 'refresh', 'persist', 'title', 'start',
+  new Function('state', 'net', 'refresh', 'persist', 'title', 'start', 'LOBBY',
                roomBlock('lobby') + ';' + roomBlock(name === 'lobby' ? 'back' : name) +
                ';' + call)(
-    state, net, () => {}, () => {}, () => { titled++; }, () => {});
+    state, net, () => {}, () => {}, () => { titled++; }, () => {}, LOBBY);
   return { state, net, titled };
 };
 
@@ -479,18 +506,65 @@ const ends = (ride, state, allSpent = false) => {
 // The ride counter rides inside endRun's solo-only payout guard, because a
 // borrowed-gear ride must not make film dearer back home either. Lifted from the
 // source so the two can never come apart.
-const payout = /^ {2}if \(!state\.mp\) \{.+$/m.exec(src);
+const payout = /^ {2}if \(!state\.mp\) \{[\s\S]*?^ {2}\}$/m.exec(src);
 check('the solo-only settle-up is still one guarded block', !!payout);
+// Four things hang off that one guard now: the bank, the lifetime takings, the
+// ride counter, and the best photograph the game-over card is built from. Every
+// one of them has to stay out of a borrowed-gear ride, so they are tested
+// together through the lifted block rather than one at a time.
 const settle = (state) => {
-  new Function('state', payout[0])(state);
+  state.earned = state.earned || 0;
+  state.photos = state.photos || [{ url: 'best.jpg' }];
+  const paid = state.scored.reduce((a, s) => a + s.total, 0);
+  new Function('state', 'paid', 'shot', 'best', 'keepBest', payout[0])(
+    state, paid, state.scored[0], 0, (s) => { state.kept = s; });
   return state;
 };
 check('a solo ride banks the roll and counts the ride',
       settle({ scored: [{ total: 30 }], bank: 5, rides: 2 }).rides === 3);
 check('and the money still lands', settle({ scored: [{ total: 30 }], bank: 5 }).bank === 35);
+// The bank is spent down by the shop, so it is no record of how the run went.
+// This is, and it only ever goes up.
+check('and the takings are counted apart from the bank',
+      settle({ scored: [{ total: 30 }], bank: 5, earned: 70 }).earned === 100);
+check('and the ride offers its best frame to be kept',
+      settle({ scored: [{ total: 30 }], bank: 5 }).kept.total === 30);
 check('a multiplayer ride counts for nothing',
       settle({ scored: [{ total: 30 }], bank: 5, rides: 2, mp: 1 }).rides === 2);
 check('and earns nothing', settle({ scored: [{ total: 30 }], bank: 5, mp: 1 }).bank === 5);
+check('and adds nothing to the takings',
+      settle({ scored: [{ total: 30 }], bank: 5, earned: 70, mp: 1 }).earned === 70);
+// A borrowed-gear ride must not hang its photographs on a solo run's card
+// either -- the gear that took them was not the run's.
+check('and leaves no photograph behind',
+      settle({ scored: [{ total: 30 }], bank: 5, mp: 1 }).kept === undefined);
+
+// keepBest is the only writer of that key, and it writes only on a new high --
+// otherwise every ride would overwrite the run's best with its own.
+const keepSrc = /^function keepBest\([\s\S]*?^}$/m.exec(src)[0];
+check('the keeper is still there to test', !!keepSrc);
+// `held` is what is already on disk; `n` is what this ride is offering it.
+const keeps = (held, n) => {
+  let wrote;
+  new Function('read', 'PIC_KEY', 'localStorage', 'shot', 'photo',
+               keepSrc + ';keepBest(shot, photo)')(
+    () => (held === undefined ? {} : { n: held }), 'k',
+    { setItem: (k, v) => { wrote = JSON.parse(v); } },
+    n === undefined ? null : { total: n, b: [['red', '' + n]] }, { url: 'best.jpg' });
+  return wrote;
+};
+check('a first photograph is kept, there being nothing to beat',
+      keeps(undefined, 300).n === 300);
+check('and it is the picture and its breakdown, not just a number',
+      keeps(undefined, 300).p === 'best.jpg' && keeps(undefined, 300).b[0][0] === 'red');
+check('a better one replaces it', keeps(300, 900).n === 900);
+check('a worse one does not', keeps(900, 300) === undefined);
+// Equal is not better: rewriting on a tie spends a few hundred kilobytes of
+// quota to change nothing.
+check('and neither does an equal one', keeps(900, 900) === undefined);
+// A ride that photographed nothing has no best frame at all, and `shot` is
+// undefined rather than a zero-scoring one.
+check('a roll with no subjects in it keeps nothing', keeps(300, undefined) === undefined);
 
 check('solo, finishing the track ends the ride', ends(1, { film: 9 }));
 check('and so does running out of film', ends(0.3, { film: 0 }));

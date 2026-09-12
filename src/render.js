@@ -69,8 +69,11 @@ uniform vec3 pal[6];
 out vec3 wp;
 out vec3 vc;
 flat out int vid;
-// Head and horn, for the ID pass: alpha there was a constant 1.0 doing nothing,
-// and the scoring wants to know which end of the animal got cut off.
+// Which end of the animal this pixel is, for the ID pass: alpha there was a
+// constant 1.0 doing nothing. 1.0 head or horn, so the scoring knows which end
+// got cut off; 0.4 neck, which is where framing is measured from -- the head
+// swings about as the animal grazes and the body centroid sits back in the
+// barrel, so the neck is the steady middle.
 flat out float vh;
 
 void main() {
@@ -96,7 +99,7 @@ void main() {
      : role == 3 ? pal[ci] * 0.42                 // hooves and muzzle
      : vec3(0.98, 0.94, 0.78);                    // horns, however many
   vid = gl_InstanceID;
-  vh = float(part == 2 || part == 3);
+  vh = part == 2 || part == 3 ? 1.0 : part == 1 ? 0.4 : 0.0;
   gl_Position = vp * vec4(wp, 1.0);
 }`;
 
