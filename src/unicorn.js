@@ -11,8 +11,11 @@ export const COLORS = [
   [0.35, 0.78, 0.35],  // G
   [0.31, 0.55, 0.94],  // B
   [0.67, 0.39, 0.90],  // V
+  // Not a rainbow colour and not on the band table -- the only way to wear this
+  // coat is the rare roll in spawn(), and any photograph it appears in is void.
+  [0.13, 0.12, 0.15],  // black
 ];
-export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet'];
+export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'black'];
 
 export const POSE_NAMES = ['walking', 'eating', 'sitting', 'neighing'];
 export const POSE_FRAMES = 16;
@@ -212,12 +215,14 @@ export function spawn(world, cfg, seed) {
         : colorForBand(q, world.volcanic[i]);
       list.x.push(x + 0.5);
       list.z.push(z + 0.5);
-      list.color.push(color);
       // Bicorn 6%, tricorn 3%, quadricorn 2% -- roughly 40, 20 and 13 per map,
       // so a ride turns one up and a quadricorn is a few rides' hunting. One draw
       // whatever the outcome, which is what keeps the herd deterministic.
       const r = rnd();
       list.horns.push(r < 0.02 ? 3 : r < 0.05 ? 2 : r < 0.11 ? 1 : 0);
+      // 2% wear the black coat. The horn roll reads the bottom of the same draw,
+      // so the top of it is free and the two stay uncorrelated.
+      list.color.push(r > 0.98 ? 6 : color);
     }
   }
   return makeHerd(list, cfg, seed);

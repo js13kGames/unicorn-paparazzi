@@ -7,7 +7,13 @@ import { tally } from '../.mirror/photo.mjs';
 import { scorePhoto } from '../.mirror/score.mjs';
 import { COLOR_NAMES } from '../.mirror/unicorn.mjs';
 
-const cfg = { poseWeights:[.80,.10,.08,.02], resBonus:[1000,1500,3000,6000], minCoverage:0.002, resNames:['low','med','high','ultra'], cropK:2.5, envK:2.0, occK:0.9 };
+// The real CONFIG, read out of src/index.js the way economy.mjs does. The copy
+// that used to live here had drifted until it was missing poseBonus outright,
+// which threw the moment a shot was scored -- a tool nobody can run protects
+// nothing.
+import { readFileSync } from 'fs';
+const cfg = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(
+  readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8'))[1] + ')');
 const st = { res: 0 };
 
 // Aim each shot at the nearest unicorn, the way a player would.

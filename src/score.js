@@ -202,8 +202,14 @@ function compose(subjects) {
 // earning `+60%` says what a fourth colour would be worth, where a bare `×1.6`
 // said only what this one happened to come to.
 function bonusList(subjects) {
+  const c = new Set(subjects.map((s) => s.colorIndex));
+  // One black unicorn large enough to score voids the photograph, and nothing
+  // else about the shot is worth saying once it has. Returning early is also the
+  // only way the colour rows stay honest: five rainbow coats plus a black one is
+  // six distinct colours, and would otherwise print RAINBOW on a zeroed card.
+  if (c.has(6)) return [{ label: 'black unicorn', factor: 0 }];
   const out = [];
-  const n = new Set(subjects.map((s) => s.colorIndex)).size;
+  const n = c.size;
   // Two names for the one bonus: `label` is what the roll summary lists beside a
   // shot, where a rate would be noise, and `row` is the breakdown's, which shows
   // the arithmetic the way the size row does -- `3 colors · 3 × 20%` earning

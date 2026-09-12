@@ -65,7 +65,7 @@ in vec4 ip;         // world x, y, z, yaw
 in vec4 iq;         // scale, color index, pose row, spare
 uniform mat4 vp;
 uniform sampler2D poses;
-uniform vec3 pal[6];
+uniform vec3 pal[7];
 out vec3 wp;
 out vec3 vc;
 flat out int vid;
