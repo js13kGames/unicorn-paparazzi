@@ -17,6 +17,14 @@ module.exports = {
         test: /render\.js$/,
         use: path.resolve(__dirname, "build/glsl-loader.cjs"),
       },
+      // Declared AFTER the GLSL rule on purpose: webpack collects loaders in
+      // rule order and runs them last-first, so this one runs before shaders
+      // are folded into string literals and never sees shader text.
+      {
+        test: /\.js$/,
+        include: path.resolve(__dirname, "src"),
+        use: path.resolve(__dirname, "build/gl-consts.cjs"),
+      },
     ],
   },
   plugins: [

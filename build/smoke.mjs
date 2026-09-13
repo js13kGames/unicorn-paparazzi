@@ -14,6 +14,9 @@ import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
 import { fileURLToPath } from 'url';
+import glConsts from './gl-consts.cjs';
+
+const { ENUMS } = glConsts;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const page = fs.readFileSync(path.join(__dirname, '..', 'docs', 'dist', 'index.html'), 'utf8');
@@ -26,20 +29,21 @@ const injected = new Set();
 const missing = new Set();
 const touched = new Set();
 // WebGL2, near enough to get through gl.js: SCREAMING_CASE is a constant, and
-// every constant gets its own number so the two getProgramParameter questions
-// can be told apart. Everything else is a method that does nothing, except the
-// handful gl.js reads an answer back from.
-const K = {};
-let nextK = 1;
-const constant = (k) => (K[k] || (K[k] = nextK++));
+// everything else is a method that does nothing, except the handful gl.js reads
+// an answer back from.
+//
+// The constants have to be the REAL spec numbers, from the same table the
+// build rewrites the source with: build/gl-consts.cjs turns `gl.ACTIVE_UNIFORMS`
+// into `35718` before it ever reaches this stub, so a stub that invented its own
+// numbering could no longer tell the two getProgramParameter questions apart.
 const glStub = new Proxy({}, {
   get(_, k) {
     if (typeof k !== 'string') return undefined;
-    if (/^[A-Z][A-Z0-9_]*$/.test(k)) return constant(k);
+    if (/^[A-Z][A-Z0-9_]*$/.test(k)) return ENUMS[k];
     return (...a) => {
       // A link that failed throws; a program with no active uniforms simply
       // leaves p.u empty, and every later uniform write lands on undefined.
-      if (k === 'getProgramParameter') return a[1] === constant('ACTIVE_UNIFORMS') ? 0 : 1;
+      if (k === 'getProgramParameter') return a[1] === ENUMS.ACTIVE_UNIFORMS ? 0 : 1;
       if (k === 'getShaderParameter') return 1;
       if (k === 'getAttribLocation' || k === 'getUniformLocation') return 0;
       if (k.startsWith('create')) return {};
