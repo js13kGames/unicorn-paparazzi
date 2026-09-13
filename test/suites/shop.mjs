@@ -45,7 +45,7 @@ const P = (name, tier) => '$' + L[name].p[tier];
 // reserve that used to sit here -- with an empty roll, an upgrade had to leave a
 // frame's worth behind -- went with the film economy.
 const offersFor = (st) => LADDERS.map(([label, v, p, key, sfx]) => ({
-  label, v, p, sfx, at: st[key], price: p[st[key]],
+  legend: label, v, p, sfx, at: st[key], price: p[st[key]],
   ok: st.bank >= p[st[key]],
 }));
 
@@ -61,14 +61,14 @@ const render = (st) => {
   // `rides` is the level, and so the quota the screen has to quote: without a
   // default the curve is handed undefined and the line reads "$NaN".
   const state = { bank: 2140, film: 8, rides: 0,
-                  maxZoom: 1, res: 0, shutterTier: 0, ...st };
+                  mz: 1, rs: 0, sh: 0, ...st };
   ui.showShop(state, cfg, offersFor(state), () => {}, () => {}, () => {},
               goal(state.rides));
   return nodes.card.innerHTML;
 };
 
 // --- a mid-run kit: the ladders must show where you are ---
-const mid = render({ maxZoom: 2, res: 1, shutterTier: 1 });
+const mid = render({ mz: 2, rs: 1, sh: 1 });
 const text = mid.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 console.log('        ' + text.slice(0, 220) + '\n');
 
@@ -114,7 +114,7 @@ check('the table is three columns all the way down', mid, (h) => {
 // places was saying it twice -- and moving the string rather than copying it is
 // what kept that card near free. See the briefing checks in lobby.mjs.
 check('the shop does not ask for the quota', mid,
-      (h) => !h.includes('Must get this ride'));
+      (h) => !h.includes('this ride'));
 const later = render({ rides: 4 });
 check('the level still reaches the curve', goal(4) > goal(0), true);
 check('and the shop itself is unchanged by it', later,
@@ -125,7 +125,7 @@ check('one button per ladder, and nothing else',
 check('the header is the bank', mid, (h) => /<h2>\$2140<\/h2>/.test(h));
 
 // --- affordability ---
-const broke = render({ bank: 0, maxZoom: 2, res: 1, shutterTier: 1 });
+const broke = render({ bank: 0, mz: 2, rs: 1, sh: 1 });
 check('every button is disabled when the bank is empty',
       (broke.match(/<button data-i="\d+" disabled>/g) || []).length,
       (broke.match(/<button data-i="\d+"/g) || []).length);
@@ -142,13 +142,13 @@ const skint = render({ bank: 0 });
 check('a ride is offered however empty the bank', skint, (h) => !/id="e" disabled/.test(h));
 check('and nothing tells the player they are stuck', skint, (h) => !/class="h m"/.test(h));
 // The reserve is gone with it: your money is your own, down to the last dollar.
-const exact = render({ bank: L.zoom.p[1], res: 0, shutterTier: 0 });
+const exact = render({ bank: L.zoom.p[1], rs: 0, sh: 0 });
 check('a lens priced at the whole bank is still on sale', exact,
       (h) => /data-i="0"(?! disabled)/.test(h));
 
 // --- a maxed ladder must not offer anything ---
 const top = L.zoom.p.length;   // the rung past the last price is the top one
-const maxed = render({ maxZoom: top, res: 3, shutterTier: 3, bank: 99999 });
+const maxed = render({ mz: top, rs: 3, sh: 3, bank: 99999 });
 check('a maxed ladder has no button at all', maxed, (h) => !/data-i="[012]"/.test(h));
 check('and reads as standing on its top rung', maxed,
       (h) => h.includes('<b>' + L.zoom.v[top] + '\u00d7</b>') &&
@@ -161,7 +161,7 @@ check('and with every ladder maxed nothing is on sale', maxed,
 // --- clicking ---
 let bought = null, rode = false, menued = false;
 const state = { bank: 2140, film: 8, rides: 0,
-                maxZoom: 2, res: 0, shutterTier: 0 };
+                mz: 2, rs: 0, sh: 0 };
 ui.showShop(state, cfg, offersFor(state), (i) => { bought = i; },
             () => { rode = true; }, () => { menued = true; }, goal(0));
 const click = (attrs) => nodes.card.onclick({

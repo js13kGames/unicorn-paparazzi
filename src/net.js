@@ -136,7 +136,7 @@ export function connect(code, name, onGo, onChange) {
       // The name is captured here rather than looked up later, because a result
       // outlives the connection that sent it and the roster does not.
       riders.set(i, {
-        name: nameOf(i),
+        who: nameOf(i),
         n: Math.max(0, m.n | 0),
         // A data: URL and nothing else, so a hostile payload cannot become markup
         // or point the browser at someone else's server.

@@ -45,7 +45,7 @@ export function updateHud(state, ride, clock, zoom, quota) {
   // innerHTML rather than textContent, because the quota below carries a colour.
   // Everything interpolated in is either a number or one of two fixed strings.
   el.hud.innerHTML = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
-    (state.mode === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '') +
+    (state.phase === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '') +
     // What the ride has taken against what it owes, on its own line under the
     // progress. Red until the target is met, green once it is -- at a glance,
     // "am I safe yet". Solo only; a match sets no quota.
@@ -59,13 +59,13 @@ export function updateHud(state, ride, clock, zoom, quota) {
              '">$' + quota[0] + ' / $' + quota[1] + '</b>' : '');
   // Under the frame count: the lens, or a winding dot while the shutter is
   // still recovering. The ladder is read rather than derived: it used to be
-  // `1 << state.zoom`, which was true only while every rung was a power of two,
+  // `1 << state.lens`, which was true only while every rung was a power of two,
   // and the free 1.2x rung is not one.
   // The bank used to read here too and was taken out because money is a
   // between-rides number. The quota is not that number, but it does not go here
   // either -- see the note on it above.
   el.film.innerHTML = 'film <b>' + state.film + '</b><br><small>' +
-    (clock < state.ready ? '·' : '×' + zoom[state.zoom]) + '</small>';
+    (clock < state.armed ? '·' : '×' + zoom[state.lens]) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
 
@@ -164,7 +164,7 @@ export function showBrief(quota) {
         // comes between that screen and the cart, so saying it twice was saying
         // it twice -- and moving the string rather than copying it is what keeps
         // this card near free.
-        '<p class="h">Must get this ride: $' + quota + '</p>' +
+        '<p>To continue you must get $' + quota + ' this ride</p>' +
         // No button, and this line instead of one. index.js binds a click
         // anywhere on the panel to primary(), which starts the ride while the
         // mode is still TITLE -- so the card is simply ridden away by the next
@@ -281,7 +281,7 @@ export function photoCard(url, rows, heading, total) {
 export function showPhoto(scored, onBack) {
   panel(
     '<h1>Photos</h1>' +
-    photoCard(scored.url, scored.b, scored.total + ' points', scored.total) +
+    photoCard(scored.pic, scored.b, scored.sum + ' points', scored.sum) +
     '<p class="h"><button id="k">Back</button></p>'
   );
   onCard(onBack);
@@ -299,15 +299,15 @@ export function showPhoto(scored, onBack) {
 export function showResults(state, scored, onPick, onNext, rivals, waiting, mine) {
   // Best first. It used to run worst-first so you ended on your best shot, but
   // this is a scoreboard now and the interesting one belongs at the top.
-  const order = scored.map((s, i) => i).sort((a, b) => scored[b].total - scored[a].total);
+  const order = scored.map((s, i) => i).sort((a, b) => scored[b].sum - scored[a].sum);
   let rows = '';
   for (const i of order) {
     const s = scored[i];
     const what = s.subjects.length
       ? s.subjects.length + ' unicorn' + (s.subjects.length > 1 ? 's' : '') +
-        (s.bonuses.length ? ' · ' + s.bonuses.map((b) => b.label).join(', ') : '')
+        (s.bonuses.length ? ' · ' + s.bonuses.map((b) => b.legend).join(', ') : '')
       : NONE;
-    rows += row3('class="o" data-i="' + i + '"', s.url, what, '$' + s.total);
+    rows += row3('class="o" data-i="' + i + '"', s.pic, what, '$' + s.sum);
   }
   if (!rows) rows = '<tr><td class="d">' + NONE + '</td></tr>';
   const roll = '<table>' + rows + '</table>';
@@ -316,7 +316,7 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
   // rides along with it -- the roll is priced in dollars now, so the two totals
   // belong on the same line. A borrowed-gear ride earns nothing and never gets
   // here: the match view draws cards instead.
-  const ride = scored.reduce((a, s) => a + s.total, 0);
+  const ride = scored.reduce((a, s) => a + s.sum, 0);
   const earned = '<h2>$' + state.bank + ' · $' + ride + ' this ride</h2>';
 
   // Solo: the roll, what it paid, and the way to the shop.
@@ -328,14 +328,15 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
     // else's, or winning would show a blank card. Rivals send their best shot;
     // this picks yours the same way endRun does, but at full thumbnail size
     // rather than the small copy that had to fit on the wire.
-    const best = scored.reduce((a, s) => (a && a.total > s.total ? a : s), null);
-    const all = [{ name: 'You!', n: ride,
-                   p: best ? best.url : '', b: best ? best.b : [] }, ...rivals];
+    const best = scored.reduce((a, s) => (a && a.sum > s.sum ? a : s), null);
+    const all = [{ who: 'You!', n: ride,
+                   p: best ? best.pic : '', b: best ? best.b : [] }, ...rivals];
     all.sort((a, b) => b.n - a.n);
     let cards = '';
-    all.forEach((r, i) => {
-      cards += photoCard(r.p, r.b, i + 1 + (ORD[i] || 'th') + ' place: ' + r.name, r.n);
-    });
+    for (let i = 0; i < all.length; i++) {
+      const r = all[i];
+      cards += photoCard(r.p, r.b, i + 1 + (ORD[i] || 'th') + ' place: ' + r.who, r.n);
+    }
     // Both buttons sit on every match screen, the waiting one included. A rider
     // who types the code mid-ride joins the roster and never reports, so `waiting`
     // can stall for good -- nobody may be trapped on a screen with no way out.
@@ -374,13 +375,14 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
   // against the dim .d label is enough to separate the two.
   const row = (label, now, buys) => '<tr class="r"><td class="d">' + label +
     '</td><td class="n"><b>' + now + '</b></td><td class="n">' + buys + '</td></tr>';
-  offers.forEach((o, i) => {
+  for (let i = 0; i < offers.length; i++) {
+    const o = offers[i];
     const btn = (label) => '<button data-i="' + i + '"' +
       (o.ok ? '' : ' disabled') + '>' + label + '</button>';
     const next = o.at + 1;
-    rows += row(o.label, o.v[o.at] + o.sfx,
+    rows += row(o.legend, o.v[o.at] + o.sfx,
       next < o.v.length ? btn(o.v[next] + o.sfx + ' $' + o.price) : '');
-  });
+  }
   panel(
     '<h1>Shop</h1>' +
     '<h2>$' + state.bank + '</h2>' +

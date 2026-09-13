@@ -1,4 +1,4 @@
-// Escape during a ride released the pointer but left state.mode === 'ride', so
+// Escape during a ride released the pointer but left state.phase === 'ride', so
 // the next click fell through to the shutter: the only way to get the mouse
 // back was to spend a frame of film. primary() now has to look at the lock as
 // well as the mode.
@@ -30,13 +30,13 @@ const primary = new Function('state', 'ui', 'document', 'canvas', 'lock', 'net',
 function run(mode, locked, touch, multi) {
   const canvas = {};
   const calls = { lock: 0, hidePanel: 0, chrome: null, announced: null, imu: 0 };
-  const state = { mode };
+  const state = { phase: mode };
   const ui = { hidePanel: () => calls.hidePanel++, setChrome: (v) => { calls.chrome = v; } };
   const doc = { pointerLockElement: locked ? canvas : null };
   const net = { go: (s) => { calls.announced = s; } };
   const shutter = primary(state, ui, doc, canvas, () => calls.lock++, net, 4242,
                           !!touch, () => calls.imu++, !!multi, TITLE, RIDE);
-  return { ...calls, shutter: shutter === true, mode: state.mode };
+  return { ...calls, shutter: shutter === true, mode: state.phase };
 }
 
 // The bug: riding without the pointer must re-lock, and must NOT shoot.

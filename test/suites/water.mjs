@@ -17,8 +17,8 @@ for (const seed of [12345, 777, 42, 20260907, 5]) {
   // "open sea" = the cell and all eight neighbours are sea band, so the
   // shoreline's own smoothing cannot explain a breach here.
   let bad = 0, worst = 0;
-  for (let d = 0; d < w.path.length; d += 2) {
-    const a = pathAt(w.path, d), b = pathAt(w.path, d + 4);
+  for (let d = 0; d < w.route.length; d += 2) {
+    const a = pathAt(w.route, d), b = pathAt(w.route, d + 4);
     const tx = b.x-a.x, tz = b.z-a.z, l = Math.hypot(tx,tz)||1;
     const rx = -tz/l, rz = tx/l;
     for (let u = -12; u <= 12; u += 1) {

@@ -78,6 +78,12 @@ module.exports = {
             //   the wire keys  (t i n p b e r s, net.js) -- renaming these would
             //                  make this build unable to play with any other, and
             //                  would silently void every existing save.
+            //   the ladder keys (mz rs sh) -- LADDERS carries these as strings and
+            //                  index.js spends them as `state[key]`, so the dotted
+            //                  reads have to keep matching the string. They used to
+            //                  be `maxZoom`/`res`/`shutterTier` on the reserved list
+            //                  below; two characters costs the same as a mangled
+            //                  name and needs no entry to defend it.
             properties: {
               regex: /^.{3,}$/,
               // Quoted stays quoted: render.js reads `prog.u['pal[0]'] || prog.u.pal`,
@@ -89,10 +95,6 @@ module.exports = {
                 // them -- but every read is dotted, and would be renamed to a name
                 // the GLSL never declares. Kept in step with build/check-shaders.mjs.
                 'eye', 'sky', 'fog', 'idPass', 'sentinel', 'pal', 'poses',
-                // The ladder keys. LADDERS carries these as strings and index.js
-                // spends them as `state[key]`, so the dotted reads elsewhere have to
-                // keep matching the string.
-                'maxZoom', 'res', 'shutterTier', 'cartTier',
               ],
             },
           },

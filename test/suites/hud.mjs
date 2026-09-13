@@ -12,7 +12,7 @@ globalThis.document = { getElementById: node, createElement: () => node('tmp') }
 globalThis.performance = { now: () => 1000 };
 
 // The hud reads the zoom off the ladder it is handed. It used to derive it as
-// `1 << state.zoom`, which was true only while every rung was a power of two --
+// `1 << state.lens`, which was true only while every rung was a power of two --
 // the free 1.2x rung at the bottom is not one, so the ladder comes in on cfg.
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -23,7 +23,7 @@ const { TITLE, RIDE } = await import('../.mirror/mode.mjs');
 const { frame } = await import('../.mirror/photo.mjs');
 
 const state = {
-  film: 12, bank: 740, res: 0, zoom: 0, maxZoom: 0, ready: 0,
+  film: 12, bank: 740, rs: 0, lens: 0, mz: 0, armed: 0,
   photos: [{}, {}, {}], fx: 1, fy: 1,
 };
 // index.js recomputes the frame every tick and hands it to the hud on `state`;
@@ -61,15 +61,15 @@ check('the ladder starts on a free rung barely wider than none',
 // (Clamped to the top of the ladder since the balance pass, so this looks for
 // the default rather than for the whole expression.)
 check('and a fresh camera already stands on it',
-      /maxZoom: .*saved\.z \|\| 1/.test(CONFIG_SRC), true);
+      /mz: .*saved\.z \|\| 1/.test(CONFIG_SRC), true);
 check('film box shows the zoom the lens is on', film, (s) => /×1\b/.test(s));
-state.zoom = 1; ui.updateHud(state, 0.4, 0, CFG);
+state.lens = 1; ui.updateHud(state, 0.4, 0, CFG);
 check('the free rung reads as the fraction it is, not as a power of two',
       nodes.film.innerHTML, (s) => s.includes('×' + CFG[1]));
-state.zoom = CFG.length - 1; ui.updateHud(state, 0.4, 0, CFG);
+state.lens = CFG.length - 1; ui.updateHud(state, 0.4, 0, CFG);
 check('and follows the lens up the ladder', nodes.film.innerHTML,
       (s) => s.includes('×' + CFG[CFG.length - 1]));
-state.zoom = 0; ui.updateHud(state, 0.4, 0, CFG);
+state.lens = 0; ui.updateHud(state, 0.4, 0, CFG);
 check('money stays off the film box', nodes.film.innerHTML, (s) => !s.includes('$'));
 check('ride bar tracks progress', nodes.bar.style.width, '40.0%');
 
@@ -121,8 +121,8 @@ check('flash fires on every later shot too', anims.flash, 4);
 // top, which put the outline on the screen edge and left nowhere to watch a
 // unicorn walk in from; buying a camera must not move the frame at all.
 const insets = [];
-for (let r = 0; r < 4; r++) { state.res = r; setFrame(16 / 9); ui.updateHud(state, 0.4, 0, CFG); insets.push(nodes.vf.style.inset); }
-state.res = 0; setFrame(16 / 9);
+for (let r = 0; r < 4; r++) { state.rs = r; setFrame(16 / 9); ui.updateHud(state, 0.4, 0, CFG); insets.push(nodes.vf.style.inset); }
+state.rs = 0; setFrame(16 / 9);
 console.log('        viewfinder inset per tier: ' + insets.join('  '));
 const nums = insets.map(parseFloat);   // '15.0%' > '7.5%' is false as a string
 check('viewfinder does not move when you buy a camera',
@@ -142,12 +142,12 @@ check('viewfinder carries a vertical and a horizontal inset',
       shapes.every((s) => /^\S+ -> [\d.]+% [\d.]+%$/.test(s)), true);
 
 // The shutter recharges, so a burst of identical frames is not the best play.
-state.ready = 5;
+state.armed = 5;
 ui.updateHud(state, 0.4, 4, CFG);
 check('film box shows the winding indicator', nodes.film.innerHTML, (t) => /·/.test(t));
 ui.updateHud(state, 0.4, 6, CFG);
 check('and returns to the zoom once wound', nodes.film.innerHTML, (t) => /×1\b/.test(t));
-state.ready = 0;
+state.armed = 0;
 
 // Film roll
 ui.addThumb('data:image/jpeg;base64,x');
@@ -157,9 +157,9 @@ check('thumbnails carry their data url', nodes.roll.children[1].src, 'data:image
 
 // Results list: worst first, every shot present, clicking yields the right index
 const scored = [
-  { total: 900, url: 'a', subjects: [{}], bonuses: [], b: [['azure', '900'], [' size', '+900']] },
-  { total: 60,  url: 'b', subjects: [],   bonuses: [], b: [] },
-  { total: 300, url: 'c', subjects: [{}, {}], bonuses: [{ label: '2 colors' }], b: [] },
+  { sum: 900, pic: 'a', subjects: [{}], bonuses: [], b: [['azure', '900'], [' size', '+900']] },
+  { sum: 60,  pic: 'b', subjects: [],   bonuses: [], b: [] },
+  { sum: 300, pic: 'c', subjects: [{}, {}], bonuses: [{ legend: '2 colors' }], b: [] },
 ];
 let picked = null, shopped = false;
 ui.showResults({ bank: 1260 }, scored,
@@ -189,18 +189,18 @@ check('back returns to the results list', backed, true);
 // exactly as long as riding without the lock is true, which is the whole moment
 // the player needs it.
 document.pointerLockElement = null;
-ui.updateHud({ ...state, mode: RIDE }, 0.4, 0, CFG);
+ui.updateHud({ ...state, phase: RIDE }, 0.4, 0, CFG);
 check('riding without the lock says so', nodes.hud.innerHTML, (s) => /click to look/.test(s));
 document.pointerLockElement = nodes.c || {};
-ui.updateHud({ ...state, mode: RIDE }, 0.4, 0, CFG);
+ui.updateHud({ ...state, phase: RIDE }, 0.4, 0, CFG);
 check('and shuts up once the pointer is held', nodes.hud.innerHTML, (s) => !/click to look/.test(s));
 document.pointerLockElement = null;
-ui.updateHud({ ...state, mode: TITLE }, 0.4, 0, CFG);
+ui.updateHud({ ...state, phase: TITLE }, 0.4, 0, CFG);
 check('a card on screen is not a lost pointer', nodes.hud.innerHTML, (s) => !/click to look/.test(s));
 // A phone has no pointer to lose, so the hint could only ever be wrong there --
 // it would sit on screen for the whole ride telling you to do the one thing the
 // device cannot do.
-ui.updateHud({ ...state, mode: RIDE, t: 1 }, 0.4, 0, CFG);
+ui.updateHud({ ...state, phase: RIDE, t: 1 }, 0.4, 0, CFG);
 check('and a touch device is never told to click', nodes.hud.innerHTML, (s) => !/click to look/.test(s));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');

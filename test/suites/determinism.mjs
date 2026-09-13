@@ -4,7 +4,7 @@
 //
 // It used to be a function of frame cadence. updateHerd draws from one RNG stream
 // shared by the whole herd, from inside dt-gated branches -- `h.hold[i] -= dt`
-// then two draws when it crosses zero, `h.step[i] += dt / STEP_TIME` then draws
+// then two draws when it crosses zero, `h.stride[i] += dt / STEP_TIME` then draws
 // per step -- so a different frame rate consumed a different NUMBER of draws in a
 // different ORDER, and every unicorn diverged, not just one.
 //
@@ -39,7 +39,7 @@ const w = buildWorld(4242, cfg);
 // this cannot drift from what runs in the browser.
 const STEP = eval(/const STEP = ([^;]+);/.exec(src)[1]);
 const accLine = /^\s*(acc \+= Math\.min\([^\n]+)$/m.exec(src);
-const whileLine = /^\s*(while \(state\.mode[^\n]+)$/m.exec(src);
+const whileLine = /^\s*(while \(state\.phase[^\n]+)$/m.exec(src);
 check('the accumulator line is still in index.js', !!accLine, true);
 check('the fixed-step while loop is still in index.js', !!whileLine, true);
 check('STEP is a 60Hz tick', +(1 / STEP).toFixed(6), 60);
@@ -59,7 +59,7 @@ const drive = new Function('times', 'state', 'STEP', 'tick', 'RIDE', `
 const stamps = (durs) => { let t = 0; return durs.map((d) => (t += d)); };
 const ticksFor = (durs) => {
   let n = 0;
-  drive(stamps(durs), { mode: RIDE }, STEP, () => n++, RIDE);
+  drive(stamps(durs), { phase: RIDE }, STEP, () => n++, RIDE);
   return n;
 };
 
@@ -99,8 +99,8 @@ const hash = (h) => {
   let a = 2166136261;
   const mix = (v) => { a = Math.imul(a ^ (Math.round(v * 4096) | 0), 16777619) >>> 0; };
   for (let i = 0; i < h.n; i++) {
-    mix(h.x[i]); mix(h.z[i]); mix(h.pose[i]); mix(h.phase[i]); mix(h.step[i]); mix(h.hold[i]);
-    mix(h.yaw[i]); mix(h.speed[i]);
+    mix(h.x[i]); mix(h.z[i]); mix(h.stance[i]); mix(h.phase[i]); mix(h.stride[i]); mix(h.hold[i]);
+    mix(h.yaw[i]); mix(h.gait[i]);
   }
   return a;
 };
@@ -121,7 +121,7 @@ check('a different tick count does not', run(601) !== plain, true);
 function rideTo(durs, target) {
   const h = spawn(w, cfg, 4242);
   let n = 0;
-  drive(stamps(durs), { mode: RIDE }, STEP, () => {
+  drive(stamps(durs), { phase: RIDE }, STEP, () => {
     if (n < target) { updateHerd(h, w, cfg, STEP); n++; }
   }, RIDE);
   return { at: n, hash: hash(h) };

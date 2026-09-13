@@ -84,7 +84,7 @@ export function createPhotoRig(gl, canvas, draw) {
     const cw = canvas.width * fx, ch = canvas.height * fy;
     tctx.drawImage(canvas, (canvas.width - cw) / 2, (canvas.height - ch) / 2, cw, ch,
                    0, 0, thumb.width, thumb.height);
-    const url = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
+    const pic = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
     // The 540p copy exists only to fit on the wire. Solo play never sends one,
     // and a second JPEG encode per shot is real work on a phone.
     let small = '';
@@ -99,7 +99,7 @@ export function createPhotoRig(gl, canvas, draw) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     const subjects = tally(pixels, ID_W, ID_H, herd);
-    return { url, small, w: ID_W, h: ID_H, subjects };
+    return { pic, small, w: ID_W, h: ID_H, subjects };
   }
 
   return { capture };
@@ -142,8 +142,8 @@ export function tally(px, W, H, herd, rect) {
         s = {
           n: 0, minx: r.w, maxx: -1, miny: r.h, maxy: -1, sx: 0, sy: 0,
           nx: 0, ny: 0, nn: 0,
-          outline: 0, edge: 0, env: 0, occ: 0,
-          color: herd.color[i], pose: herd.pose[i], horns: herd.horns[i],
+          rim: 0, edge: 0, env: 0, occ: 0,
+          coat: herd.coat[i], stance: herd.stance[i], horns: herd.horns[i],
         };
         seen.set(id, s);
       }
@@ -168,10 +168,10 @@ export function tally(px, W, H, herd, rect) {
       for (let k = 0; k < 4; k++) {
         const nx = x + (k === 0 ? -1 : k === 1 ? 1 : 0);
         const ny = y + (k === 2 ? -1 : k === 3 ? 1 : 0);
-        if (nx < r.x0 || nx >= x1 || ny < r.y0 || ny >= y1) { s.outline += hw; s.edge += hw; continue; }
+        if (nx < r.x0 || nx >= x1 || ny < r.y0 || ny >= y1) { s.rim += hw; s.edge += hw; continue; }
         const b = at(nx, ny);
         if (b === id) continue;
-        s.outline += hw;
+        s.rim += hw;
         if (!b || depth(nx, ny) > depth(x, y) - NEARER) continue;   // sky, or behind
         if (b === TERRAIN) s.env += hw;
         else s.occ += hw;

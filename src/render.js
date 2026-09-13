@@ -207,7 +207,7 @@ export function createRenderer(canvas, world, herd) {
 
     const vp = multiply(
       perspective(fovy, w / h, 0.1, 1200),
-      view([cam.x, cam.y, cam.z], cam.yaw, cam.pitch)
+      view([cam.x, cam.y, cam.z], cam.yaw, cam.tilt)
     );
 
     // Terrain still draws during the ID pass so it occludes unicorns correctly;
@@ -220,10 +220,10 @@ export function createRenderer(canvas, world, herd) {
     gl.uniform1f(tp.u.idPass, idPass ? 1 : 0);
     gl.uniform2f(tp.u.sentinel, 1, 1);          // 65535 = scenery
     gl.bindVertexArray(terrain);
-    gl.drawElements(gl.TRIANGLES, world.mesh.count, gl.UNSIGNED_INT, 0);
+    gl.drawElements(gl.TRIANGLES, world.mesh.tally, gl.UNSIGNED_INT, 0);
     gl.disable(gl.CULL_FACE);
     gl.bindVertexArray(trackVao);
-    gl.drawElements(gl.TRIANGLES, world.trackMesh.count, gl.UNSIGNED_INT, 0);
+    gl.drawElements(gl.TRIANGLES, world.trackMesh.tally, gl.UNSIGNED_INT, 0);
     gl.enable(gl.CULL_FACE);
 
     // The sea is one flat quad, drawn here while the terrain program and its
@@ -261,7 +261,7 @@ export function createRenderer(canvas, world, herd) {
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, herd.instances);
     gl.bindVertexArray(herdVao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, model.count, herd.n);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, model.tally, herd.n);
 
     gl.bindVertexArray(null);
   }

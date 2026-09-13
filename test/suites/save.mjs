@@ -73,14 +73,14 @@ const restore = (saved) => {
     // Some fields clamp themselves against CONFIG now, so it has to be in scope.
     return new Function('saved', 'CONFIG', 'return ' + m[1])(saved, CONFIG);
   };
-  return { bank: grab('bank'), maxZoom: grab('maxZoom'), res: grab('res'),
-           shutterTier: grab('shutterTier'), rides: grab('rides'),
+  return { bank: grab('bank'), mz: grab('mz'), rs: grab('rs'),
+           sh: grab('sh'), rides: grab('rides'),
            dead: grab('dead') };
 };
 
 const old = restore({ v: 2, b: 4200, z: 2, r: 1, f: 3, a: [0,0,0,0,0,0,0] });
 check('an old save keeps its bank', old.bank === 4200, String(old.bank));
-check('an old save keeps its upgrades', old.maxZoom === 2 && old.res === 1);
+check('an old save keeps its upgrades', old.mz === 2 && old.rs === 1);
 
 // Film is not in the save at all any more -- it refills to FRAMES every ride, so
 // there is no stock to carry and nothing to migrate. `f` is still written by old
@@ -99,7 +99,7 @@ const fresh = restore({});
 check('a fresh player starts at zero everywhere',
       // ...but the zoom starts on the free rung, not at nothing: index 1 is the
       // 1.2x step every camera owns so the wheel does something on day one.
-      !fresh.bank && fresh.maxZoom === 1 && !fresh.res && !fresh.shutterTier);
+      !fresh.bank && fresh.mz === 1 && !fresh.rs && !fresh.sh);
 check('a fresh player has taken no rides', fresh.rides === 0, String(fresh.rides));
 check('and is not already dead', !fresh.dead, String(fresh.dead));
 check('a save from before the counter existed reads as none taken',
@@ -110,10 +110,10 @@ check('and one that has been ridden keeps its count',
 // the shop that reports it, which is the only reason it is in the save.
 check('a run that missed its quota stays missed', restore({ v: 4, q: 1 }).dead === 1);
 
-// res indexes resBonus/resNames directly, so an out-of-range save used to give a
+// rs indexes resBonus/resNames directly, so an out-of-range save used to give a
 // NaN score rather than a visible failure.
-check('a camera tier beyond the ladder is clamped', restore({ r: 9 }).res, 3);
-check('and a legitimate top tier survives', restore({ r: 3 }).res, 3);
+check('a camera tier beyond the ladder is clamped', restore({ r: 9 }).rs, 3);
+check('and a legitimate top tier survives', restore({ r: 3 }).rs, 3);
 
 // --- the dead end --------------------------------------------------------
 // "The last ride came in under its quota" is the whole failure condition now.
@@ -206,13 +206,13 @@ check('and never on the stale boot snapshot',
 // serialise and a localStorage hit per shutter press for a field nothing reads.
 const shotSrc = /^function takePhoto\(\)[\s\S]*?^}$/m.exec(src)[0];
 const shot = (film) => {
-  const state = { film, ready: 0, shutterTier: 0, res: 0, fx: 1, fy: 1,
+  const state = { film, armed: 0, sh: 0, rs: 0, fx: 1, fy: 1,
                   photos: [], scored: [] };
   const saved = [];
   new Function('state', 'clock', 'CONFIG', 'net', 'ui', 'photoRig', 'scorePhoto',
                'fov', 'herd', 'cam', 'persist', shotSrc + ';takePhoto()')(
     state, 0, { shutterTiers: [0.8] }, { noFilm() {} },
-    { flash() {}, addThumb() {} }, { capture: () => ({ url: '' }) },
+    { flash() {}, addThumb() {} }, { capture: () => ({ pic: '' }) },
     () => ({}), () => 1, null, null, () => saved.push(state.film));
   return { left: state.film, saved };
 };
@@ -232,8 +232,8 @@ const persisted = (st) => {
     st, 'k', VERSION, { setItem: (_, v) => { out = JSON.parse(v); } });
   return out;
 };
-const kit = { shutterTier: 1, go: 0, code: '', host: 0, name: 'Ann',
-              bank: 900, maxZoom: 2, res: 1, rides: 6, dead: 0, film: 7 };
+const kit = { sh: 1, go: 0, room: '', owner: 0, who: 'Ann',
+              bank: 900, mz: 2, rs: 1, rides: 6, dead: 0, film: 7 };
 const w = persisted(kit);
 check('the save writes the bank under `b`', w.b === 900, JSON.stringify(w));
 check('and the level under `s`', w.s === 6);
@@ -279,7 +279,7 @@ check('the multiplayer boot block is still there to test', !!mpBlock);
 const mpBoot = (saved) => {
   // The roll starts at a value the fixed loadout does not use, so "it was
   // overwritten" is visible even when the loadout's own value is zero.
-  const state = { bank: 900, maxZoom: 0, res: 0, film: 99, shutterTier: 0, go: 1, code: '' };
+  const state = { bank: 900, mz: 0, rs: 0, film: 99, sh: 0, go: 1, code: '' };
   const writes = [];
   new Function('saved', 'state', 'persist', mpBlock[0])(
     saved, state, () => writes.push({ ...state }));
@@ -288,7 +288,7 @@ const mpBoot = (saved) => {
 
 const solo = mpBoot({ v: VERSION, g: 1 });
 check('a solo ride is left completely alone',
-      !solo.state.mp && !solo.state.res && solo.state.film === 99 &&
+      !solo.state.mp && !solo.state.rs && solo.state.film === 99 &&
       solo.writes.length === 0);
 
 // `c` with no `g` is a lobby to go back to, not a ride to start. If this block
@@ -296,20 +296,20 @@ check('a solo ride is left completely alone',
 // would mean walking out of the lobby could never clear the code.
 const lobbyOnly = mpBoot({ v: VERSION, c: '4821', h: 1 });
 check('a lobby code with no ride marker starts no ride',
-      !lobbyOnly.state.mp && !lobbyOnly.state.res && lobbyOnly.writes.length === 0);
+      !lobbyOnly.state.mp && !lobbyOnly.state.rs && lobbyOnly.writes.length === 0);
 
 const mp = mpBoot({ v: VERSION, g: 1, c: '4821', h: 1 });
 check('a multiplayer ride is flagged as one', mp.state.mp === 1);
 check('and restores which lobby it belongs to, and who hosted it',
-      mp.state.code === '4821' && mp.state.host === 1);
+      mp.state.room === '4821' && mp.state.owner === 1);
 // Film is not in the loadout any more -- every ride, solo or match, starts with
 // the same fixed roll -- so what MP_GEAR still has to override is the camera.
 check('and rides the fixed loadout, whatever the save held',
-      mp.state.res > 0 && mp.state.maxZoom > 0);
+      mp.state.rs > 0 && mp.state.mz > 0);
 check('the markers are cleared, so a stray refresh drops out of multiplayer',
       mp.state.go === 0 && mp.writes.length === 1);
 check('and that write went out BEFORE the gear was swapped, so it saved the real one',
-      !mp.writes[0].res && !mp.writes[0].maxZoom &&
+      !mp.writes[0].rs && !mp.writes[0].mz &&
       mp.writes[0].film === 99 && mp.writes[0].bank === 900);
 
 // The guard is the whole defence: every later persist() -- finishing the ride,
@@ -319,10 +319,10 @@ check('persist() refuses to run at all once the ride is a multiplayer one', guar
 
 // The code is what carries the lobby across the reload; without it on the wire
 // format, everyone would reconnect to nothing.
-check('the save carries the lobby code', /c: state\.code/.test(src));
+check('the save carries the lobby code', /c: state\.room/.test(src));
 // Without the host flag, everyone comes back from a rematch as a guest and
 // nobody can start the next ride.
-check('and who the host was', /h: state\.host/.test(src));
+check('and who the host was', /h: state\.owner/.test(src));
 
 // --- actually getting the page to reload ---------------------------------
 // Every ride transition is a reload, because the world has to be rebuilt. The
@@ -358,7 +358,7 @@ const navBlock = (name) => {
 
 const navigate = (name, from, call) => {
   const location = fakeLocation(from);
-  const state = { mode: LOBBY };
+  const state = { phase: LOBBY };
   new Function('location', 'state', 'persist', 'LOBBY',
                navBlock(name) + ';' + call)(location, state, () => {}, LOBBY);
   return location;
@@ -383,12 +383,12 @@ check('and it still reloads when there was no seed to drop', plain.reloads > 0);
 
 // --- the way into a room --------------------------------------------------
 // The multiplayer card is one screen with two states, and which state you are in
-// is `state.code`. These pin the wiring around that, because a mismatch here is
+// is `state.room`. These pin the wiring around that, because a mismatch here is
 // invisible: the suites that render the card never run index.js, so a handler
 // wired to a function that no longer exists still passes every other check.
 const roomBlock = (name) => navBlock(name);
 const room = (name, call, code = '') => {
-  const state = { code, mode: LOBBY };
+  const state = { code, phase: LOBBY };
   const net = { connected: null, closed: 0,
                 connect: (c) => { net.connected = c; }, close: () => { net.closed++; } };
   let titled = 0;
@@ -402,27 +402,27 @@ const room = (name, call, code = '') => {
 // Out of a room, the card is the way in: nothing is minted and nothing connects,
 // or "Multiplayer" would put you on the air before you had a name.
 const wayIn = room('back', 'lobby()');
-check('the way in mints no room', wayIn.state.code === '');
+check('the way in mints no room', wayIn.state.room === '');
 check('and opens no socket', wayIn.net.connected === null);
 
 // Create is the only place a room is minted, and it hosts the room it mints.
 const made = room('create', 'create()');
-check('Create mints a four-digit room', /^\d{4}$/.test(made.state.code), made.state.code);
-check('and connects to exactly that room', made.net.connected === made.state.code);
-check('and you host what you made', made.state.host === 1);
+check('Create mints a four-digit room', /^\d{4}$/.test(made.state.room), made.state.room);
+check('and connects to exactly that room', made.net.connected === made.state.room);
+check('and you host what you made', made.state.owner === 1);
 
 // Joining takes the code as given and does not host it.
 const joined = room('back', "lobby('4821')");
-check('joining uses the code you were given', joined.state.code === '4821');
+check('joining uses the code you were given', joined.state.room === '4821');
 check('and connects to it', joined.net.connected === '4821');
-check('and a guest does not host', !joined.state.host);
+check('and a guest does not host', !joined.state.owner);
 
 // Back is the way off multiplayer from either state: the socket goes, or the
 // host keeps counting a ghost, and the code goes, or the next boot walks
 // straight back into the room you just left.
 const left = room('back', 'back()', '4821');
 check('Back closes the socket', left.net.closed === 1);
-check('and forgets the room', left.state.code === '');
+check('and forgets the room', left.state.room === '');
 check('and lands on the main menu', left.titled === 1);
 
 // --- what ends a ride -----------------------------------------------------
@@ -451,44 +451,44 @@ check('the solo-only settle-up is still one guarded block', !!payout);
 // `goal` is handed in so these can set the bar where each check wants it.
 const settle = (state, bar = 0) => {
   state.earned = state.earned || 0;
-  state.photos = state.photos || [{ url: 'best.jpg' }];
-  const paid = state.scored.reduce((a, s) => a + s.total, 0);
+  state.photos = state.photos || [{ pic: 'best.jpg' }];
+  const paid = state.scored.reduce((a, s) => a + s.sum, 0);
   new Function('state', 'paid', 'shot', 'best', 'keepBest', 'goal', payout[0])(
     state, paid, state.scored[0], 0, (s) => { state.kept = s; }, () => bar);
   return state;
 };
 check('a solo ride banks the roll and counts the ride',
-      settle({ scored: [{ total: 30 }], bank: 5, rides: 2 }).rides === 3);
-check('and the money still lands', settle({ scored: [{ total: 30 }], bank: 5 }).bank === 35);
+      settle({ scored: [{ sum: 30 }], bank: 5, rides: 2 }).rides === 3);
+check('and the money still lands', settle({ scored: [{ sum: 30 }], bank: 5 }).bank === 35);
 // The bank is spent down by the shop, so it is no record of how the run went.
 // This is, and it only ever goes up.
 check('and the takings are counted apart from the bank',
-      settle({ scored: [{ total: 30 }], bank: 5, earned: 70 }).earned === 100);
+      settle({ scored: [{ sum: 30 }], bank: 5, earned: 70 }).earned === 100);
 check('and the ride offers its best frame to be kept',
-      settle({ scored: [{ total: 30 }], bank: 5 }).kept.total === 30);
+      settle({ scored: [{ sum: 30 }], bank: 5 }).kept.sum === 30);
 check('a multiplayer ride counts for nothing',
-      settle({ scored: [{ total: 30 }], bank: 5, rides: 2, mp: 1 }).rides === 2);
-check('and earns nothing', settle({ scored: [{ total: 30 }], bank: 5, mp: 1 }).bank === 5);
+      settle({ scored: [{ sum: 30 }], bank: 5, rides: 2, mp: 1 }).rides === 2);
+check('and earns nothing', settle({ scored: [{ sum: 30 }], bank: 5, mp: 1 }).bank === 5);
 check('and adds nothing to the takings',
-      settle({ scored: [{ total: 30 }], bank: 5, earned: 70, mp: 1 }).earned === 70);
+      settle({ scored: [{ sum: 30 }], bank: 5, earned: 70, mp: 1 }).earned === 70);
 // A borrowed-gear ride must not hang its photographs on a solo run's card
 // either -- the gear that took them was not the run's.
 check('and leaves no photograph behind',
-      settle({ scored: [{ total: 30 }], bank: 5, mp: 1 }).kept === undefined);
+      settle({ scored: [{ sum: 30 }], bank: 5, mp: 1 }).kept === undefined);
 
 // --- the quota, settled ---------------------------------------------------
 // The only way a run ends. It is checked against the level just ridden, before
 // the counter moves on -- an off-by-one here would bill you for the next level's
 // bar while you were still on this one.
 check('a ride that clears its quota leaves the run alive',
-      !settle({ scored: [{ total: 300 }], bank: 0, rides: 2 }, 300).dead);
+      !settle({ scored: [{ sum: 300 }], bank: 0, rides: 2 }, 300).dead);
 check('and one that falls a pound short ends it',
-      settle({ scored: [{ total: 299 }], bank: 0, rides: 2 }, 300).dead === 1);
+      settle({ scored: [{ sum: 299 }], bank: 0, rides: 2 }, 300).dead === 1);
 check('exactly the quota is a pass, not a miss',
-      !settle({ scored: [{ total: 300 }], bank: 0, rides: 2 }, 300).dead);
+      !settle({ scored: [{ sum: 300 }], bank: 0, rides: 2 }, 300).dead);
 // A match sets no quota at all, and must never end a solo run by missing one.
 check('a borrowed-gear ride cannot kill a run',
-      !settle({ scored: [{ total: 0 }], bank: 0, rides: 2, mp: 1 }, 300).dead);
+      !settle({ scored: [{ sum: 0 }], bank: 0, rides: 2, mp: 1 }, 300).dead);
 
 // keepBest is the only writer of that key, and it writes only on a new high --
 // otherwise every ride would overwrite the run's best with its own.
@@ -501,7 +501,7 @@ const keeps = (held, n) => {
                keepSrc + ';keepBest(shot, photo)')(
     () => (held === undefined ? {} : { n: held }), 'k',
     { setItem: (k, v) => { wrote = JSON.parse(v); } },
-    n === undefined ? null : { total: n, b: [['red', '' + n]] }, { url: 'best.jpg' });
+    n === undefined ? null : { sum: n, b: [['red', '' + n]] }, { pic: 'best.jpg' });
   return wrote;
 };
 check('a first photograph is kept, there being nothing to beat',

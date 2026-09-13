@@ -246,9 +246,9 @@ check('and that still works', seen.pop(), 'back');
 // Three shapes, one function: solo, a match still waiting, and a match with
 // everyone in. The last is the one that shows a photograph rather than a row.
 const state = { bank: 700 };
-const shot = (n, url) => ({ total: n, url, subjects: [], bonuses: [],
+const shot = (n, url) => ({ sum: n, pic: url, subjects: [], bonuses: [],
                             b: [['azure', '' + n], [' size', '+' + n]] });
-const rival = (n, p, b = []) => ({ name: 'Bo', n, p, b });
+const rival = (n, p, b = []) => ({ who: 'Bo', n, p, b });
 let picked = null;
 const results = (rivals, waiting, mine) => {
   picked = null;

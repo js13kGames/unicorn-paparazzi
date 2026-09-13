@@ -10,13 +10,13 @@ const cfg = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(SRC)[
 // Lifted, not restated: what a pose pays is a plain table in CONFIG now rather
 // than a curve over the spawn weights, and these checks read it straight.
 const poseF = (k) => cfg.poseBonus[k];
-const st = { res: 0 };
+const st = { rs: 0 };
 const W = 320, H = 180;
 
 // Fixture: id N maps to herd index N-1. Color cycles 0..5; everyone is an adult
 // standing, so each check can turn on exactly one variable at a time.
-const herd = { color:[], pose:[], horns:[] };
-for (let i=0;i<12;i++){ herd.color[i]=i%6; herd.pose[i]=0; herd.horns[i]=0; }
+const herd = { coat: [], stance: [], horns:[] };
+for (let i=0;i<12;i++){ herd.coat[i]=i%6; herd.stance[i]=0; herd.horns[i]=0; }
 
 // [id, x, y, w, h, depth, part]. Blue is distance/256, so a smaller depth is
 // nearer; the tally only treats a neighbour as occluding when it is genuinely in
@@ -37,7 +37,7 @@ function buffer(rects) {
 const shot = (rects, crop=1) => {
   const rw = Math.round(W*crop), rh = Math.round(H*crop);
   const rect = { x0: Math.round((W-rw)/2), y0: Math.round((H-rh)/2), w: rw, h: rh };
-  return { url:'', w: rw, h: rh, subjects: tally(buffer(rects), W, H, herd, rect) };
+  return { pic:'', w: rw, h: rh, subjects: tally(buffer(rects), W, H, herd, rect) };
 };
 const score = (rects, crop=1) => scorePhoto(shot(rects, crop), cfg, st);
 
@@ -93,17 +93,17 @@ const s = score([[1,cx,cy,40,40]]).subjects[0];
 // horizon a third of what a unicorn filling the frame was worth, which left
 // little reason to work for the close shot.
 check('size is coverage x the tier bonus on the cheap camera',
-      +s.size.toFixed(3), +(1600 / (W * H) * 1000).toFixed(3), 0.001);
+      +s.extent.toFixed(3), +(1600 / (W * H) * 1000).toFixed(3), 0.001);
 // standing scores nothing, which is what lets the breakdown suppress the row
-check('standing is the baseline and multiplies by 1', s.pose, 1);
+check('standing is the baseline and multiplies by 1', s.stance, 1);
 check('uncropped subject takes no penalty', s.cropLoss, 0);
 
 
-herd.pose[0] = 1;
-check('eating pays its own rate', +score([[1,cx,cy,40,40]]).subjects[0].pose.toFixed(4),
+herd.stance[0] = 1;
+check('eating pays its own rate', +score([[1,cx,cy,40,40]]).subjects[0].stance.toFixed(4),
       +poseF(1).toFixed(4));
-herd.pose[0] = 3;
-check('neighing pays its own rate', +score([[1,cx,cy,40,40]]).subjects[0].pose.toFixed(4),
+herd.stance[0] = 3;
+check('neighing pays its own rate', +score([[1,cx,cy,40,40]]).subjects[0].stance.toFixed(4),
       +poseF(3).toFixed(4));
 // The table is free to be anything, but the rarer moment must never pay less --
 // that is the one thing the curve it replaced guaranteed for nothing.
@@ -111,28 +111,28 @@ check('and the rarer moment is paid more', poseF(0) < poseF(1) && poseF(1) < pos
 // Modest on purpose: at the old 6.3x the roll was a lottery on what the herd
 // happened to be doing, whatever the photographer did.
 check('but never enough to outweigh the photograph', poseF(3) < 2, true);
-herd.pose[0] = 0;
+herd.stance[0] = 0;
 
 
 // --- resolution multiplier ---
-const atLow = score([[1,cx,cy,40,40]]).subjects[0].size;
-st.res = 3;
-const atTop = score([[1,cx,cy,40,40]]).subjects[0].size;
+const atLow = score([[1,cx,cy,40,40]]).subjects[0].extent;
+st.rs = 3;
+const atTop = score([[1,cx,cy,40,40]]).subjects[0].extent;
 check('the top tier scores 6x the bottom', +(atTop/atLow).toFixed(3), 6, 0.001);
 check('a unicorn filling the top-tier frame scores the whole bonus',
-      score([[1,0,0,W,H]]).subjects[0].size, 6000);
+      score([[1,0,0,W,H]]).subjects[0].extent, 6000);
 // The other end of the range: the smallest subject that counts at all. On area
 // it is worth about two points on the cheap camera against the 1000 a unicorn
 // filling the frame earns -- a 480x spread, and the reason getting close is now
 // the strongest thing a photographer does.
-st.res = 0;
+st.rs = 0;
 const floorSub = score([[1,cx,cy,11,11]]).subjects[0];
 check('a subject just over the 0.2% floor is worth next to nothing',
-      +floorSub.size.toFixed(1), 0.0021 * 1000, 0.3);
-st.res = 3;
+      +floorSub.extent.toFixed(1), 0.0021 * 1000, 0.3);
+st.rs = 3;
 check('the same subject scores 6x that at the top',
-      +score([[1,cx,cy,11,11]]).subjects[0].size.toFixed(1), +(floorSub.size*6).toFixed(1), 0.1);
-st.res = 0;
+      +score([[1,cx,cy,11,11]]).subjects[0].extent.toFixed(1), +(floorSub.extent*6).toFixed(1), 0.1);
+st.rs = 0;
 
 // --- speck floor ---
 // floor is 0.2% of frame = 115px here
@@ -154,15 +154,15 @@ check('6 colors -> x2.2 then x2 rainbow = x4.4', score(row(6)).multiplier, 4.4);
 // worth rather than only what this one came to.
 // Two names: the roll summary lists the short one beside a shot, the breakdown
 // shows the arithmetic. A rate in the summary would be noise.
-check('the roll summary gets the short name', score(row(3)).bonuses[0].label, '3 colors');
+check('the roll summary gets the short name', score(row(3)).bonuses[0].legend, '3 colors');
 check('and the breakdown row names the rate it was paid at',
       score(row(3)).bonuses[0].row, '3 colors \u00b7 3 \u00d7 20%');
-check('6 colors still earns the rainbow bonus', score(row(6)).bonuses.some(b=>b.label==='RAINBOW'), true);
+check('6 colors still earns the rainbow bonus', score(row(6)).bonuses.some(b=>b.legend==='RAINBOW'), true);
 check('same color twice is still x1',
       score([[1,40,cy,40,40],[7,200,cy,40,40]]).multiplier, 1);
 
 
-check('empty frame scores 0', score([]).total, 0);
+check('empty frame scores 0', score([]).sum, 0);
 
 // --- small unicorns: a point each, and a vote on what colors are in frame ---
 // The herd on the horizon used to be dropped on the floor, for a good reason --
@@ -177,18 +177,18 @@ const smalls = (n, from = 0) => Array.from({ length: n }, (_, i) => speck(from +
 const withSmalls = (n) => score([[1, cx, cy, 40, 40], ...smalls(n, 1)]);
 check('a speck is not a subject', withSmalls(3).subjects.length, 1);
 // Flat, and outside framing: one point is one point wherever it stands.
-check('but it is worth a point', withSmalls(3).total - withSmalls(0).total >= 3, true);
+check('but it is worth a point', withSmalls(3).sum - withSmalls(0).sum >= 3, true);
 // The whole reason they are counted: ids 2..7 cycle colors 1..5,0, so six specks
 // beside a red subject is six colors in frame.
 check('and it votes on the color count',
-      withSmalls(5).bonuses[0].label, '6 colors');
+      withSmalls(5).bonuses[0].legend, '6 colors');
 // ...but not on the rainbow. Six colors in frame earns the 20% steps; the
 // doubling still demands six animals photographed properly, or the shot of the
 // whole valley from as far back as possible is the best one in the game again.
 check('specks cannot buy the rainbow',
-      withSmalls(5).bonuses.some((b) => b.label === 'RAINBOW'), false);
+      withSmalls(5).bonuses.some((b) => b.legend === 'RAINBOW'), false);
 check('six real subjects still can',
-      score(row(6)).bonuses.some((b) => b.label === 'RAINBOW'), true);
+      score(row(6)).bonuses.some((b) => b.legend === 'RAINBOW'), true);
 // Framing is the composition of what you photographed. A speck in the corner of
 // the frame must not drag the arrangement of the animals you meant to shoot.
 check('and they stay out of framing entirely',
@@ -212,18 +212,18 @@ check('and they stay out of framing entirely',
 
 // The dreaded one reaches all the way out to the horizon. Unfair in a random
 // world; fair in a fixed one, which is exactly why the seeds were pinned.
-herd.color[7] = 6;
+herd.coat[7] = 6;
 {
   const voided = score([[1, cx, cy, 40, 40], [8, 6, 6, 10, 10]]);
-  check('a black speck voids the photograph', voided.total, 0);
+  check('a dark speck voids the photograph', voided.sum, 0);
   check('and says so on the card',
-        voided.b.some((r) => r[0] === 'black unicorn' && r[1] === '-100%'), true);
+        voided.b.some((r) => r[0] === 'dark unicorn' && r[1] === '-100%'), true);
   // It is still listed among the smalls -- the card has to show what it was that
   // cost you the shot, or a zero arrives with no explanation.
   check('while still being named among the smalls',
-        voided.b.some((r) => r[0] === ' black \u00b7 1'), true);
+        voided.b.some((r) => r[0] === ' dark \u00b7 1'), true);
 }
-herd.color[7] = 7 % 6;
+herd.coat[7] = 7 % 6;
 
 // --- extra horns: paid per animal, not per photograph ---
 // A bicorn used to double the whole shot, so one in the corner doubled what six
@@ -310,10 +310,10 @@ note('the framing row reads ' +
 }
 // The whole reason for the change: framing must bite the same at every tier.
 {
-  const ratio = (r) => { st.res = r;
-    const good = score([[1,cx,cy,40,40]]).total, bad = score([[1,4,4,40,40]]).total;
+  const ratio = (r) => { st.rs = r;
+    const good = score([[1,cx,cy,40,40]]).sum, bad = score([[1,4,4,40,40]]).sum;
     return +(bad/good).toFixed(3); };
-  const at = [0,1,2,3].map(ratio); st.res = 0;
+  const at = [0,1,2,3].map(ratio); st.rs = 0;
   console.log('        corner/centre score ratio per tier: ' + at.join(' / '));
   check('a bad frame costs the same share on every camera',
         +(Math.max(...at) - Math.min(...at)).toFixed(3) < 0.01, true);
@@ -327,11 +327,11 @@ note('the framing row reads ' +
   const centred = score([[1,cx,cy,40,40]]);
   const corner = score([[1,4,4,40,40]]);
   check('the total is the subtotals times framing times bonuses',
-        centred.total, expect(centred));
+        centred.sum, expect(centred));
   check('and the same at the other end of the framing range',
-        corner.total, expect(corner));
+        corner.sum, expect(corner));
   check('so a corner shot really does score less than a centred one',
-        corner.total < centred.total, true);
+        corner.sum < centred.sum, true);
 }
 
 // --- the size row explains its own arithmetic ---
@@ -348,11 +348,11 @@ note('the framing row reads ' +
 }
 
 // --- standing is the baseline and earns nothing ---
-check('standing multiplies by 1', score([[1,cx,cy,40,40]]).subjects[0].pose, 1);
-herd.pose[0] = 3;
+check('standing multiplies by 1', score([[1,cx,cy,40,40]]).subjects[0].stance, 1);
+herd.stance[0] = 3;
 check('neighing is still the top rate',
-      +score([[1,cx,cy,40,40]]).subjects[0].pose.toFixed(4), +poseF(3).toFixed(4));
-herd.pose[0] = 0;
+      +score([[1,cx,cy,40,40]]).subjects[0].stance.toFixed(4), +poseF(3).toFixed(4));
+herd.stance[0] = 0;
 
 // --- framing for a crowd ---
 // six piled into one corner must not score like six spread across the frame
@@ -369,13 +369,13 @@ check('overlapping ids do not double-count',
 check('the occluder keeps its full area', occl.subjects.get(2).n, 1800);
 
 // --- absolute pixels, not frame fraction ---
-st.res = 3;
+st.rs = 3;
 check('a unicorn filling a top-tier frame scores exactly the bonus',
-      score([[1,0,0,W,H]]).subjects[0].size, 6000);
+      score([[1,0,0,W,H]]).subjects[0].extent, 6000);
 // same subject, same screen size, every tier: score must track sensor height
 const abs = [];
-for (let r = 0; r < 4; r++) { st.res = r; abs.push(score([[1,cx,cy,40,40]]).subjects[0].size); }
-st.res = 0;
+for (let r = 0; r < 4; r++) { st.rs = r; abs.push(score([[1,cx,cy,40,40]]).subjects[0].extent); }
+st.rs = 0;
 console.log('        size at low/med/high/ultra: ' + abs.map(v=>v.toFixed(2)).join(' / '));
 check('size is proportional to sensor height',
       abs.map(v => +(v/abs[0]).toFixed(2)).join(','), '1,1.5,3,6');
@@ -391,8 +391,8 @@ check('a subject on the crop rect edge loses points', edge.cropLoss > 0, true);
 check('crop is measured against the rect, not the buffer',
       score([[1,cx,cy,40,40]], 0.5).subjects[0].cropLoss, 0);
 // a tighter crop makes the same subject a larger share of the photograph
-const wide = score([[1,cx,cy,40,40]], 1).subjects[0].size;
-const tight = score([[1,cx,cy,40,40]], 0.5).subjects[0].size;
+const wide = score([[1,cx,cy,40,40]], 1).subjects[0].extent;
+const tight = score([[1,cx,cy,40,40]], 0.5).subjects[0].extent;
 check('a tighter crop raises the subject share', tight > wide, true);
 check('  (wide / tight)', wide.toFixed(2) + ' / ' + tight.toFixed(2),
       wide.toFixed(2) + ' / ' + tight.toFixed(2));
@@ -471,7 +471,7 @@ const boxed = score([
   [3,cx-40,cy,40,40,100],[4,cx+40,cy,40,40,100],[5,cx,cy-40,40,40,100],[6,cx,cy+40,40,40,100],
 ]).subjects.find(s=>s.id===1);
 check('a fully hemmed-in unicorn keeps the 0.25 floor',
-      +(boxed.subtotal / (boxed.size * boxed.pose)).toFixed(2), 0.25, 0.01);
+      +(boxed.subtotal / (boxed.extent * boxed.stance)).toFixed(2), 0.25, 0.01);
 
 // The distinguishing test: identical geometry, but the terrain and the other
 // unicorn are FARTHER away. A unicorn always borders the ground it stands on and
@@ -482,14 +482,14 @@ console.log('        same shape in front -> -' + infront.envLoss.toFixed(1) +
             ' pts;  behind -> -' + beyond.envLoss.toFixed(1) + ' pts');
 check('scenery in front of the subject costs points', infront.envLoss > 0, true);
 check('scenery behind it costs nothing', beyond.envLoss, 0);
-check('ground contact still counts toward the outline', beyond.outline === undefined || true, true);
+check('ground contact still counts toward the outline', beyond.rim === undefined || true, true);
 const uBeyond = score([[3,cx-40,cy,40,40,200],[1,cx,cy,40,40,128]]).subjects.find(s=>s.id===1);
 check('a unicorn standing behind costs nothing', uBeyond.occLoss, 0);
 
 // the three factors must compose exactly to the reported subtotal
 const mix = score([[TERRAIN,cx-40,cy,40,40,100],[3,cx+40,cy,40,40,100],[1,cx,cy,40,40,128]]).subjects.find(s=>s.id===1);
 check('deductions sum to the subtotal',
-      +(mix.size * mix.pose - mix.cropLoss - mix.envLoss - mix.occLoss).toFixed(6),
+      +(mix.extent * mix.stance - mix.cropLoss - mix.envLoss - mix.occLoss).toFixed(6),
       +mix.subtotal.toFixed(6), 0.000001);
 
 // --- the compact breakdown ---------------------------------------------------
@@ -499,7 +499,7 @@ check('deductions sum to the subtotal',
 const rowsOf = (sc) => sc.b.map((r) => r[0]);
 const valueOf = (sc, label) => (sc.b.find((r) => r[0] === label) || [])[1];
 
-herd.pose[0] = 0;
+herd.stance[0] = 0;
 const standing = score([[1,cx,cy,40,40]]);
 check('a subject heads its own group', standing.b[0][0], 'red', 0);
 check('and the group header is not marked as a detail',
@@ -512,7 +512,7 @@ check('and it is marked as a detail of the subject above',
 // Standing is the baseline and scores nothing, so a row saying "+0" would be noise.
 check('standing shows no pose row', rowsOf(standing).some((l) => /^ pose/.test(l)), false);
 
-herd.pose[0] = 3;
+herd.stance[0] = 3;
 const neighing = score([[1,cx,cy,40,40]]);
 check('a pose worth points gets its own row, and it names the pose',
       rowsOf(neighing).includes(' pose · neighing'), true);
@@ -522,7 +522,7 @@ check('and it carries the gain as a signed percentage',
       valueOf(neighing, ' pose · neighing'), '+80%');
 // The pose row below says "neighing" already, so the header is the color alone.
 check('the subject header is the color alone', neighing.b[0][0], 'red', 0);
-herd.pose[0] = 0;
+herd.stance[0] = 0;
 
 // The three ways a subject can be spoiled are one number to the player.
 const clean1 = score([[1,cx,cy,40,40]]);

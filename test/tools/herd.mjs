@@ -10,10 +10,10 @@ const w = buildWorld(12345, cfg);
 const h = spawn(w, cfg, 12345);
 console.log('herd size', h.n);
 const cc = {};
-for (let i=0;i<h.n;i++) cc[COLOR_NAMES[h.color[i]]]=(cc[COLOR_NAMES[h.color[i]]]||0)+1;
+for (let i=0;i<h.n;i++) cc[COLOR_NAMES[h.coat[i]]]=(cc[COLOR_NAMES[h.coat[i]]]||0)+1;
 console.log('colors', cc);
 const m = buildModel();
-console.log('model verts', m.count, 'boxes', m.count/36);
+console.log('model verts', m.tally, 'boxes', m.tally/36);
 const pt = buildPoseTable();
 console.log('pose table floats', pt.length, 'expected', POSE_ROWS*PARTS*16, 'finite', pt.every(Number.isFinite));
 // simulate 60s
@@ -21,7 +21,7 @@ let t0=Date.now();
 for (let f=0; f<3600; f++) updateHerd(h, w, cfg, 1/60);
 packInstances(h, w);
 console.log('60s sim ms', Date.now()-t0);
-const pc = {}; for (let i=0;i<h.n;i++) pc[POSE_NAMES[h.pose[i]]]=(pc[POSE_NAMES[h.pose[i]]]||0)+1;
+const pc = {}; for (let i=0;i<h.n;i++) pc[POSE_NAMES[h.stance[i]]]=(pc[POSE_NAMES[h.stance[i]]]||0)+1;
 console.log('pose mix after sim', Object.entries(pc).map(([k,v])=>k+' '+(100*v/h.n).toFixed(1)+'%').join(' '));
 // invariants
 let bad=0, inWater=0, oob=0;

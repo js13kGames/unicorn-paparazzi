@@ -15,15 +15,15 @@ function evaluate(drift, radius) {
     const w = buildWorld(seed, cfg);
     const h = spawn(w, cfg, seed);
     let ok = 0;
-    for (let d = 0; d < w.path.length; d += 6) {
-      const p = pathAt(w.path, d), q = pathAt(w.path, d + 4);
+    for (let d = 0; d < w.route.length; d += 6) {
+      const p = pathAt(w.route, d), q = pathAt(w.route, d + 4);
       const yaw = Math.atan2(-(q.x-p.x), -(q.z-p.z));
       for (let a = 0; a < 6; a++) {
         const th = yaw + (a * Math.PI) / 3;
         const lx = p.x - Math.sin(th) * 16, lz = p.z - Math.cos(th) * 16;
         const set = new Set(); let n = 0;
         for (let u = 0; u < h.n; u++)
-          if (Math.hypot(h.x[u]-lx, h.z[u]-lz) < radius) { set.add(h.color[u]); n++; }
+          if (Math.hypot(h.x[u]-lx, h.z[u]-lz) < radius) { set.add(h.coat[u]); n++; }
         spots++; meanCount += n;
         if (set.size >= 6) { viableSpots++; ok++; }
       }

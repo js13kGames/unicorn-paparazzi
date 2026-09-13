@@ -100,7 +100,7 @@ const saved = read(SAVE_KEY);
 if (!(saved.c && saved.g)) CONFIG.unicornDensity *= 1.05 ** (saved.s | 0);
 
 // Solo levels are fixed: level n is always the same world, the same herd and the
-// same black unicorns, on every run anyone ever plays. That is what makes a
+// same dark unicorns, on every run anyone ever plays. That is what makes a
 // speck on the horizon worth learning and a quota worth retrying -- against a
 // fresh random map neither would be a skill.
 //
@@ -133,10 +133,10 @@ function persist() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: SAVE_VERSION,
-      t: state.shutterTier,
+      t: state.sh,
      
-      g: state.go, c: state.code, h: state.host, n: state.name,
-      b: state.bank, z: state.maxZoom, r: state.res,
+      g: state.go, c: state.room, h: state.owner, n: state.who,
+      b: state.bank, z: state.mz, r: state.rs,
       // The level reached. No SAVE_VERSION bump: an older save simply has no
       // `s`, which reads 0, which is level one -- where that save would have
       // started anyway. `f` (film) and `d` (cart tier) used to live here and
@@ -158,28 +158,28 @@ function persist() {
 }
 
 const state = {
-  mode: TITLE,
+  phase: TITLE,
   bank: saved.b || 0,
   // 1, not 0: the free rung is where everyone starts. An older save that stored
   // an index into the previous ladder reads one rung low, which is a lens you
   // already paid for -- the save is local and pre-release, so it is not worth
   // bytes to migrate.
-  // Clamped like `res` above: the lens ladder lost its top rung in the balance
+  // Clamped like `rs` above: the lens ladder lost its top rung in the balance
   // pass, and a save made before that carries a tier this ladder no longer has --
   // which reads as an undefined focal length and a NaN field of view.
-  maxZoom: Math.min(saved.z || 1, CONFIG.zoomLevels.length - 1),
+  mz: Math.min(saved.z || 1, CONFIG.zoomLevels.length - 1),
   // Clamped: a save from a build with more tiers would index off the end of
   // resBonus, which is a NaN score rather than a visible failure.
-  res: Math.min(saved.r || 0, 3),
+  rs: Math.min(saved.r || 0, 3),
   // A capacity now, not a stock: every ride is a page load, so the initialiser
   // IS the refill. Film stopped being the economy when the quota took over as the
   // way to lose -- there is nothing to buy, nothing to hoard, and no reason to
   // carry a count across a ride.
   film: FRAMES,
-  zoom: 0,
-  ready: 0,
+  lens: 0,
+  armed: 0,
   fx: 1, fy: 1,          // photo frame's share of the canvas, set every frame
-  shutterTier: saved.t || 0,
+  sh: saved.t || 0,
   // Rides finished, which is the level number: it picks the seed, sets the
   // quota, and thickens the herd. The only number in the save that only ever
   // goes up.
@@ -187,9 +187,9 @@ const state = {
   // Set when a ride comes in under its quota, read by broke(). A run ends here.
   dead: saved.q || 0,
   earned: saved.e || 0,       // gross takings of the whole run; see persist()
-  code: '',              // the lobby we are in, '' when playing alone
-  host: 0,
-  name: saved.n || '',   // what other riders see us called
+  room: '',              // the lobby we are in, '' when playing alone
+  owner: 0,
+  who: saved.n || '',   // what other riders see us called
   photos: [],
   scored: [],
 };
@@ -199,7 +199,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { maxZoom: 3, res: 3, shutterTier: 1 };
+const MP_GEAR = { mz: 3, rs: 3, sh: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -207,8 +207,8 @@ const MP_GEAR = { maxZoom: 3, res: 3, shutterTier: 1 };
 // of the match entirely is something you have to actually ask for.
 const mpCode = saved.c || '';
 if (mpCode && saved.g) {
-  state.code = mpCode;
-  state.host = saved.h || 0;
+  state.room = mpCode;
+  state.owner = saved.h || 0;
   state.go = 0;
   persist();                       // still the REAL gear: state.mp is not set yet
   Object.assign(state, MP_GEAR);
@@ -233,11 +233,11 @@ if (mpCode && saved.g) {
 const LADDERS = [
   // p[0] is the free rung nobody buys -- you start standing on it -- so the
   // prices are the same four they always were, shifted along by one.
-  ['zoom', CONFIG.zoomLevels, [0, 900, 900], 'maxZoom', '×'],
+  ['zoom', CONFIG.zoomLevels, [0, 900, 900], 'mz', '×'],
   // Named for its unit rather than "resolution": the row already reads
   // `dpi 1500 [3000 $1200]`, so spelling the unit out on every value as well
   // said it three times over.
-  ['dpi', CONFIG.resBonus, [1500, 4600, 9100], 'res', ''],
+  ['dpi', CONFIG.resBonus, [1500, 4600, 9100], 'rs', ''],
   // Named for the part rather than the effect: `speed` said nothing about which
   // of the two speeds in the shop it meant, and the cart is the other one.
   // 'flash', not 'shutter': what the row sells is the wait between one frame and
@@ -245,7 +245,7 @@ const LADDERS = [
   // times over -- and a flash recycling is exactly that wait, in a word the
   // payload already carries as an element id. 'shutter' was seven characters of
   // prose the packer had never seen; this is free.
-  ['flash', CONFIG.shutterTiers, [150, 250, 350], 'shutterTier', 's'],
+  ['flash', CONFIG.shutterTiers, [150, 250, 350], 'sh', 's'],
 ];
 
 // How fast the cart is running, in world units per second. It was a ladder once,
@@ -261,7 +261,7 @@ const pace = 10;
 // into a dead end it could not get you out of. Film is free, so there is no dead
 // end to be sold into and nothing to hold back for.
 const offers = () => LADDERS.map(([label, v, p, key, sfx]) => ({
-  label, v, p, sfx, at: state[key], price: p[state[key]],
+  legend: label, v, p, sfx, at: state[key], price: p[state[key]],
   ok: state.bank >= p[state[key]],
   buy: () => state[key]++,
 }));
@@ -280,7 +280,7 @@ const offers = () => LADDERS.map(([label, v, p, key, sfx]) => ({
 const GOAL = 250, GROWTH = 1.45;
 const goal = (n) => GOAL * GROWTH ** n | 0;
 
-const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+const cam = { x: 0, y: 0, z: 0, yaw: 0, tilt: 0 };
 const RIDE_SECONDS = 100;
 let distance = 0;
 let shutterQueued = false;
@@ -288,7 +288,7 @@ let clock = 0;
 
 // Start the ride looking along the track rather than at a random compass point.
 {
-  const a = pathAt(world.path, 0), b = pathAt(world.path, 4);
+  const a = pathAt(world.route, 0), b = pathAt(world.route, 4);
   cam.yaw = Math.atan2(-(b.x - a.x), -(b.z - a.z));
 }
 
@@ -304,7 +304,7 @@ resize();
 // per frame, so the window's shape changes how much you can see AROUND the
 // frame and nothing about the frame itself.
 // The rung the wheel is on stays an integer -- the HUD, the shop ladder and the
-// save all read state.zoom -- and this is the lens actually in front of the film,
+// save all read state.lens -- and this is the lens actually in front of the film,
 // easing towards that rung instead of cutting to it.
 //
 // Eased on the ANGLE, not the zoom factor. Every rung roughly halves the angle,
@@ -312,10 +312,10 @@ resize();
 // and 8x->16x would lurch. Both readers take the eased value -- the frustum that
 // gets drawn and the one the photograph is taken with -- so what you shot is
 // always exactly what you were looking at, mid-zoom or not.
-const aimFov = () => CONFIG.baseFov / CONFIG.zoomLevels[state.zoom];
+const aimFov = () => CONFIG.baseFov / CONFIG.zoomLevels[state.lens];
 let fovNow = CONFIG.baseFov;
 const fov = () => fovNow;
-state.zoom = Math.min(state.zoom, state.maxZoom);
+state.lens = Math.min(state.lens, state.mz);
 
 // --- input ---------------------------------------------------------------
 
@@ -323,12 +323,12 @@ state.zoom = Math.min(state.zoom, state.maxZoom);
 // basis from yaw and pitch alone -- so neither look path is allowed to reach
 // them.
 const LIM = Math.PI / 2 - 0.05;
-const clampPitch = () => (cam.pitch = Math.max(-LIM, Math.min(LIM, cam.pitch)));
+const clampPitch = () => (cam.tilt = Math.max(-LIM, Math.min(LIM, cam.tilt)));
 
 addEventListener('mousemove', (e) => {
-  if (state.mode !== RIDE || document.pointerLockElement !== canvas) return;
+  if (state.phase !== RIDE || document.pointerLockElement !== canvas) return;
   cam.yaw -= e.movementX * 0.0022;
-  cam.pitch -= e.movementY * 0.0022;
+  cam.tilt -= e.movementY * 0.0022;
   clampPitch();
 });
 
@@ -343,7 +343,7 @@ state.t = TOUCH;
 // on the floor -- view() cannot express it, and a photograph does not want it.
 let yawOff;
 if (TOUCH) addEventListener('deviceorientation', (e) => {
-  if (state.mode !== RIDE || e.alpha == null) return;
+  if (state.phase !== RIDE || e.alpha == null) return;
   const D = Math.PI / 180;
   const a = e.alpha * D, b = e.beta * D, g = e.gamma * D;
   const cg = Math.cos(g), sg = Math.sin(g), sb = Math.sin(b);
@@ -356,7 +356,7 @@ if (TOUCH) addEventListener('deviceorientation', (e) => {
   // because only the change from that first reading is ever used.
   if (yawOff === undefined) yawOff = cam.yaw - yaw;
   cam.yaw = yaw + yawOff;
-  cam.pitch = Math.asin(-cg * Math.cos(b));
+  cam.tilt = Math.asin(-cg * Math.cos(b));
   clampPitch();
 });
 
@@ -374,7 +374,7 @@ if (TOUCH) {
   addEventListener('touchstart', (e) => { if (e.touches.length < 2) multi = pinch = 0; });
   addEventListener('touchmove', (e) => {
     const t = e.touches;
-    if (state.mode !== RIDE || t.length < 2) return;
+    if (state.phase !== RIDE || t.length < 2) return;
     multi = 1;
     const d = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     if (!pinch) pinch = d;
@@ -389,11 +389,11 @@ if (TOUCH) {
 // swallowed while riding, so the shop panel can still scroll.
 // Three things work the lens -- the wheel, the +/- keys and a pinch -- and all
 // three want the same clamp, so they share one.
-const zoomBy = (n) => (state.zoom = Math.max(0, Math.min(state.maxZoom, state.zoom + n)));
+const zoomBy = (n) => (state.lens = Math.max(0, Math.min(state.mz, state.lens + n)));
 
 addEventListener('wheel', (e) => {
-  if (e.ctrlKey || state.mode === RIDE) e.preventDefault();
-  if (state.mode !== RIDE || !state.maxZoom) return;
+  if (e.ctrlKey || state.phase === RIDE) e.preventDefault();
+  if (state.phase !== RIDE || !state.mz) return;
   zoomBy(e.deltaY > 0 ? -1 : 1);
 }, { passive: false });
 
@@ -408,14 +408,14 @@ addEventListener('gesturestart', (e) => e.preventDefault());
 const lock = () => Promise.resolve(canvas.requestPointerLock()).catch(() => {});
 
 function primary() {
-  if (state.mode === TITLE) {
-    state.mode = RIDE;
+  if (state.phase === TITLE) {
+    state.phase = RIDE;
     ui.hidePanel();
     ui.setChrome(true);
     // The tap that starts the ride is the gesture iOS wants for the orientation
     // stream; a mouse wants the pointer instead.
     TOUCH ? askIMU() : lock();
-  } else if (state.mode === RIDE) {
+  } else if (state.phase === RIDE) {
     // Escape releases the pointer but leaves you riding, so a click has to hand
     // the mouse back. Without this it fell through to the shutter, and the only
     // way to look around again was to spend a frame of film. A tap has no lock
@@ -442,8 +442,8 @@ addEventListener('keydown', (e) => {
 // --- photographs ---------------------------------------------------------
 
 function takePhoto() {
-  if (state.film <= 0 || clock < state.ready) return;
-  state.ready = clock + CONFIG.shutterTiers[state.shutterTier];
+  if (state.film <= 0 || clock < state.armed) return;
+  state.armed = clock + CONFIG.shutterTiers[state.sh];
   state.film--;
   // No persist() here any more. A frame used to be money, so it had to leave the
   // save the instant it was spent or a reload mid-ride handed the roll back
@@ -454,37 +454,37 @@ function takePhoto() {
   // every roll in it is empty.
   if (state.mp && !state.film) net.noFilm();
   ui.flash();
-  const photo = photoRig.capture(cam, fov(), herd, state.fx, state.fy, state.res, state.mp);
+  const photo = photoRig.capture(cam, fov(), herd, state.fx, state.fy, state.rs, state.mp);
   const scored = scorePhoto(photo, CONFIG, state);
   state.photos.push(photo);
   state.scored.push(scored);
-  ui.addThumb(photo.url);
+  ui.addThumb(photo.pic);
 }
 
 // The run's best photograph, kept across rides and across reloads so the
 // game-over card has something to show. Written only when it is beaten, which is
 // at most once a ride -- see PIC_KEY for why it is not simply in the save.
 function keepBest(shot, photo) {
-  if (!shot || shot.total <= read(PIC_KEY).n) return;
+  if (!shot || shot.sum <= read(PIC_KEY).n) return;
   try {
-    localStorage.setItem(PIC_KEY, JSON.stringify({ p: photo.url, b: shot.b, n: shot.total }));
+    localStorage.setItem(PIC_KEY, JSON.stringify({ p: photo.pic, b: shot.b, n: shot.sum }));
   } catch (e) { /* a full quota costs the picture, not the run */ }
 }
 
 function endRun() {
-  state.mode = RESULTS;
+  state.phase = RESULTS;
   // One result per rider per ride: the total, and the best single frame. Both
   // are wanted twice over now -- on the wire, and by the bank -- so they are
   // worked out before anything spends them.
   let best = 0;
   for (let i = 1; i < state.scored.length; i++) {
-    if (state.scored[i].total > state.scored[best].total) best = i;
+    if (state.scored[i].sum > state.scored[best].sum) best = i;
   }
   const shot = state.scored[best];
   // Not `ride`: that name is the frame loop's ride PROGRESS, and two different
   // numbers under one name in one file is how a lifted-source test ends up
   // pinning the wrong line.
-  const paid = state.scored.reduce((a, s) => a + s.total, 0);
+  const paid = state.scored.reduce((a, s) => a + s.sum, 0);
   // Borrowed gear earns no money: a multiplayer ride would otherwise be the
   // cheapest way to farm the shop.
   // The level counter sits inside the same guard for the same reason: a
@@ -512,7 +512,7 @@ function endRun() {
 let ownRoll = 0;
 
 function showResults() {
-  state.mode = RESULTS;
+  state.phase = RESULTS;
   const rivals = net.others();
   // Everyone on the roster except the riders who have reported, and except us.
   // A rider who closes the tab leaves the roster, so this reaches zero and the
@@ -526,7 +526,7 @@ function showResults() {
 function showDetail(i) {
   // -1 is the My photos / Result toggle rather than a shot.
   if (i < 0) { ownRoll = !ownRoll; return showResults(); }
-  state.mode = DETAIL;
+  state.phase = DETAIL;
   ui.showPhoto(state.scored[i], showResults);
 }
 
@@ -537,7 +537,7 @@ function showDetail(i) {
 const broke = () => state.dead;
 
 function showShop() {
-  state.mode = SHOP;
+  state.phase = SHOP;
   if (broke()) return title();
   ui.showShop(state, CONFIG, offers(), buy, ride, title, goal(state.rides));
 }
@@ -586,12 +586,12 @@ function restart() {
 // yourself, then make a room or walk into one -- and a code is that room, which
 // is also how "join another" hops rooms: net.connect lets go of the old one.
 function lobby(code, host) {
-  state.mode = LOBBY;
-  state.code = code || '';
+  state.phase = LOBBY;
+  state.room = code || '';
   // Taken rather than inferred: booting back into a lobby after a match has to
   // restore whoever was host, and "was a code passed in" cannot tell you that.
-  state.host = code && host || 0;
-  if (code) net.connect(code, state.name, start, refresh);
+  state.owner = code && host || 0;
+  if (code) net.connect(code, state.who, start, refresh);
   refresh();
 }
 
@@ -604,7 +604,7 @@ const create = () => lobby('' + (1000 + (Math.random() * 9000 | 0)), 1);
 // seed either way. The hash carries the seed across it and the save carries the
 // code, so everyone reconnects to the same room on the other side.
 function start(s) {
-  if (state.mode !== LOBBY) return;  // never yank a rider already on the track
+  if (state.phase !== LOBBY) return;  // never yank a rider already on the track
   state.go = 1;
   persist();
   // Same trap as home(): setting href to pathname + '#' + s only changes the
@@ -624,7 +624,7 @@ function host() {
 // The name outlives the lobby: it is yours, not the room's, so it goes in the
 // save and rides the reload into the ride with everything else.
 function rename(v) {
-  state.name = net.setName(v);
+  state.who = net.setName(v);
   persist();
 }
 
@@ -634,13 +634,13 @@ function rename(v) {
 // back onto the same page.
 function back() {
   net.close();
-  state.code = '';
+  state.room = '';
   persist();               // and stop booting into a lobby that was walked out of
   title();
 }
 
 function title() {
-  state.mode = TITLE;
+  state.phase = TITLE;
   // Reset only when there is something to reset -- a wipe offered to a player
   // with nothing to wipe is a button that does nothing.
   //
@@ -671,12 +671,12 @@ const solo = () => (distance ? ride() : brief());
 // Whatever screen is up, redraw it: the roster and the results board both move
 // on their own as riders arrive, finish and leave.
 function refresh() {
-  if (state.mode === LOBBY) {
+  if (state.phase === LOBBY) {
     // One primary action, picked here rather than in the card: in a room it
     // starts the ride, out of one it mints the room.
-    ui.showLobby(state.code, state.host, net.lobby(), state.name,
-                 state.code ? host : create, lobby, back, rename);
-  } else if (state.mode === RESULTS) showResults();
+    ui.showLobby(state.room, state.owner, net.lobby(), state.who,
+                 state.room ? host : create, lobby, back, rename);
+  } else if (state.phase === RESULTS) showResults();
 }
 
 // --- loop ----------------------------------------------------------------
@@ -684,7 +684,7 @@ function refresh() {
 ui.setChrome(false);
 // A multiplayer ride rejoins the room its code names, so rivals' results land on
 // the board as they finish -- while you are still riding, or after.
-if (mpCode) net.connect(mpCode, state.name, start, refresh);
+if (mpCode) net.connect(mpCode, state.who, start, refresh);
 // Three ways in. A first run, or one after "Start over" wipes the save, stops on
 // the title. "Ride again" leaves a one-shot marker and reloads to rebuild the
 // world, so it lands straight on the cart -- consuming the marker here means an
@@ -721,7 +721,7 @@ function frame(now) {
   // ticks are simply lost, which a networked ride would have to resync.
   acc += Math.min(0.25, (now - last) / 1000);
   last = now;
-  while (state.mode === RIDE && acc >= STEP) { tick(); acc -= STEP; }
+  while (state.phase === RIDE && acc >= STEP) { tick(); acc -= STEP; }
 
   packInstances(herd, world);
   // A ride is a fixed span of time, not a lap. Measured in laps, a faster cart
@@ -733,7 +733,7 @@ function frame(now) {
   // The cart alone is smoothed across the leftover accumulator, so it does not
   // judder on a display faster than the tick rate. Presentation only -- this
   // never feeds back into the simulation.
-  const p = pathAt(world.path, distance + pace * acc);
+  const p = pathAt(world.route, distance + pace * acc);
   cam.x = p.x;
   // Ride the rails: the ground where there is ground, the span where there is not.
   cam.y = Math.max(elevAt(world, p.x, p.z), p.y) + CONFIG.eyeHeight;
@@ -751,9 +751,9 @@ function frame(now) {
   }
 
   ui.updateHud(state, ride, clock, CONFIG.zoomLevels, state.mp ? 0 :
-               [state.scored.reduce((a, s) => a + s.total, 0), goal(state.rides)]);
+               [state.scored.reduce((a, s) => a + s.sum, 0), goal(state.rides)]);
 
-  if (state.mode === RIDE) {
+  if (state.phase === RIDE) {
     if (ride >= 1) endRun();
     // Solo, an empty roll ends the ride. In a match it must not: everyone rides
     // the same track at the same speed off the same tick clock, so letting the

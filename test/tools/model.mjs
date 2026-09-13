@@ -14,7 +14,7 @@ function render(ctx, ox, oy, row, ci, scale, yaw) {
   const img = ctx.createImageData(W, H);
   for (let i=0;i<W*H;i++){ img.data[i*4]=236; img.data[i*4+1]=240; img.data[i*4+2]=246; img.data[i*4+3]=255; }
   const tri = [];
-  for (let v = 0; v < model.count; v++) {
+  for (let v = 0; v < model.tally; v++) {
     const part = model.attr[v*2], role = model.attr[v*2+1];
     const m = poses.subarray((row*PARTS+part)*16, (row*PARTS+part)*16+16);
     let [x,y,z] = mulv(m, model.pos[v*3], model.pos[v*3+1], model.pos[v*3+2]);

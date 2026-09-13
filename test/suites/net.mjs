@@ -86,14 +86,14 @@ check('and the screen is told to redraw', changes.length > seenChanges);
 // A rival cannot smuggle markup or a foreign URL in through the image field.
 deliver('{"t":"d","i":"eve","n":1,"p":"<img onerror=alert(1)>"}');
 deliver('{"t":"d","i":"mal","n":1,"p":"https://example.com/x.jpg"}');
-const bad = net.others().filter((o) => o.name === 'rider eve' || o.name === 'rider mal');
+const bad = net.others().filter((o) => o.who === 'rider eve' || o.who === 'rider mal');
 check('a shot that is not a jpeg data url is stripped', bad, (b) => b.length === 2 && b.every((o) => o.p === ''));
 
 // --- the breakdown is markup, and a rival writes it ----------------------
 // It goes onto the winner's card as HTML, so it is the most dangerous thing on
 // this wire. Every one of these has to come back inert.
 deliver('{"t":"d","i":"eve2","n":1,"b":[["<img onerror=alert(1)>","<b>9</b>"]]}');
-const evil = net.others().find((o) => o.name === 'rider eve2').b;
+const evil = net.others().find((o) => o.who === 'rider eve2').b;
 check('markup in a breakdown label is stripped to text',
       evil[0], (r) => !r[0].includes('<') && !r[0].includes('>') && !r[1].includes('<'));
 check('and what survives is only whitelisted characters',
@@ -101,20 +101,20 @@ check('and what survives is only whitelisted characters',
 
 deliver('{"t":"d","i":"quot","n":1,"b":[["a\\" onload=\\"x","1"]]}');
 check('a quote cannot break out of the attribute it lands next to',
-      net.others().find((o) => o.name === 'rider quot').b[0][0].includes('"'), false);
+      net.others().find((o) => o.who === 'rider quot').b[0][0].includes('"'), false);
 
 const many = JSON.stringify(Array.from({ length: 9000 }, () => ['x', '1']));
 deliver('{"t":"d","i":"flood","n":1,"b":' + many + '}');
-check('a flood of rows is capped', net.others().find((o) => o.name === 'rider floo').b.length, 16);
+check('a flood of rows is capped', net.others().find((o) => o.who === 'rider floo').b.length, 16);
 
 deliver('{"t":"d","i":"longy","n":1,"b":[["' + 'a'.repeat(5000) + '","1"]]}');
 check('an enormous label is truncated',
-      net.others().find((o) => o.name === 'rider long').b[0][0].length, 24);
+      net.others().find((o) => o.who === 'rider long').b[0][0].length, 24);
 
 // Wrong types must not throw inside a frame -- this runs on the message path.
 for (const junk of ['"nope"', '5', 'null', '[1,2,3]', '[[]]', '[null]', '[{"a":1}]']) {
   deliver('{"t":"d","i":"junk","n":1,"b":' + junk + '}');
-  const b = net.others().find((o) => o.name === 'rider junk').b;
+  const b = net.others().find((o) => o.who === 'rider junk').b;
   check('a breakdown of ' + junk + ' becomes a safe list',
         Array.isArray(b) && b.every((r) => r.length === 2 && r.every((c) => typeof c === 'string')));
 }
@@ -126,24 +126,24 @@ for (const junk of ['"nope"', '5', 'null', '[1,2,3]', '[[]]', '[null]', '[{"a":1
 deliver('{"t":"d","i":"good","n":1,"b":[["azure rearing","380"],' +
         '[" 8.5% × 1000dpi","+300"],[" bicorn","×2"],["framing","×111%"]]}');
 check('an honest breakdown survives intact',
-      JSON.stringify(net.others().find((o) => o.name === 'rider good').b),
+      JSON.stringify(net.others().find((o) => o.who === 'rider good').b),
       '[["azure rearing","380"],[" 8.5% × 1000dpi","+300"],' +
       '[" bicorn","×2"],["framing","×111%"]]');
 
 deliver('{"t":"d","i":"cheat","n":-50}');
 check('a result with no breakdown at all still lands',
-      net.others().find((o) => o.name === 'rider chea').b, (b) => Array.isArray(b) && b.length === 0);
+      net.others().find((o) => o.who === 'rider chea').b, (b) => Array.isArray(b) && b.length === 0);
 check('a negative score cannot drag the board below zero',
-      net.others().find((o) => o.name === 'rider chea').n, 0);
+      net.others().find((o) => o.who === 'rider chea').n, 0);
 deliver('{"t":"d","i":"aaaaaaaaaaaaaaaaaaaaaaaa","n":5}');
 check('an absurdly long id is truncated into a name',
-      net.others().some((o) => o.name === 'rider aaaa'));
+      net.others().some((o) => o.who === 'rider aaaa'));
 
 // One entry per rider per ride, however many times they shout.
 const before = net.others().length;
 deliver('{"t":"d","i":"bob","n":9999}');
 check('a rider repeating themselves does not appear twice', net.others().length, before);
-check('but their score does update', net.others().find((o) => o.name === 'rider bob').n, 9999);
+check('but their score does update', net.others().find((o) => o.who === 'rider bob').n, 9999);
 
 // --- leaving -------------------------------------------------------------
 // The one control frame we cannot do without: nothing else tells us a rider is
@@ -157,7 +157,7 @@ check('leaving clears their roster row', net.lobby(), (l) => !l.includes('rider 
 // stand whether or not they are still connected. Dropping it meant the first
 // player to hit Rematch wiped their own card off everyone else's screen.
 check('while their finished result stands',
-      net.others(), (o) => o.some((r) => r.n === 9999 && r.name === 'rider bob'));
+      net.others(), (o) => o.some((r) => r.n === 9999 && r.who === 'rider bob'));
 check('and redraws whatever screen is up', changes.length > n);
 n = changes.length;
 deliver('-nobody-we-ever-heard-of');

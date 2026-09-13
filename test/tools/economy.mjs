@@ -53,7 +53,7 @@ const ladders = ((C) =>
   eval(lift(/const LADDERS = (\[[\s\S]*?\n\]);/, 'LADDERS').replace(/CONFIG\./g, 'C.'))
     .map(([label, v, p, key]) => ({ label, v, p, key })))(CONFIG);
 
-const START = { bank: 0, film: FRAMES, rides: 0, maxZoom: 1, res: 0, shutterTier: 0 };
+const START = { bank: 0, film: FRAMES, rides: 0, mz: 1, rs: 0, sh: 0 };
 const TUNE = { res: 1 };
 
 // ---------------------------------------------------------------------------
@@ -70,13 +70,13 @@ async function sampleSeed(seed) {
   const { pathAt } = await import('../.mirror/terrain.mjs');
   const { world, herd, W, H } = scene;
 
-  const out = { seed, lapLength: world.path.length, zooms: {} };
+  const out = { seed, lapLength: world.route.length, zooms: {} };
   for (const zoom of CONFIG.zoomLevels) {
     const pool = [];
     for (let vi = 0; vi < VANTAGES; vi++) {
-      const d = (vi / VANTAGES) * world.path.length;
-      const p = pathAt(world.path, d);
-      const a = pathAt(world.path, d), b = pathAt(world.path, d + 4);
+      const d = (vi / VANTAGES) * world.route.length;
+      const p = pathAt(world.route, d);
+      const a = pathAt(world.route, d), b = pathAt(world.route, d + 4);
       const heading = Math.atan2(-(b.x - a.x), -(b.z - a.z));
 
       // Aim candidates: the nearest animal, then a spread around the lap. A
@@ -106,13 +106,13 @@ async function sampleSeed(seed) {
         for (const [id, s] of tally(px, W, H, herd)) {
           // Everything scorePhoto reads, and nothing derived -- so the sensor
           // tier can still be varied later.
-          if (s.pose === undefined || s.horns === undefined || s.color === undefined) {
+          if (s.stance === undefined || s.horns === undefined || s.coat === undefined) {
             process.stderr.write('  !! id ' + id + ' is not in the herd; dropped\n');
             continue;
           }
           subs.push([id, { n: s.n, sx: s.sx, sy: s.sy, nx: s.nx, ny: s.ny, nn: s.nn,
-                           outline: s.outline, edge: s.edge, env: s.env, occ: s.occ,
-                           color: s.color, pose: s.pose, horns: s.horns }]);
+                           rim: s.rim, edge: s.edge, env: s.env, occ: s.occ,
+                           coat: s.coat, stance: s.stance, horns: s.horns }]);
         }
         pool.push(subs);
       }
@@ -147,7 +147,7 @@ const { scorePhoto } = await import('../.mirror/score.mjs');
 function scoreShot(sample, subs, res) {
   const cfg = { ...CONFIG, resBonus: CONFIG.resBonus.map((v) => v * TUNE.res) };
   return scorePhoto({ url: '', w: sample.w, h: sample.h, subjects: new Map(subs) },
-                    cfg, { res }).total;
+                    cfg, { rs: res }).sum;
 }
 
 // Every shot in the pool, scored at every sensor tier, once -- kept grouped by
@@ -185,7 +185,7 @@ const mulberry = (a) => () => {
 // afford to wait for a good one, and that selectivity is worth real points.
 // A ride is a fixed span of seconds, so the shutter alone sets how many frames
 // you get a chance at -- the cart no longer takes chances away by ending sooner.
-const opportunities = (st) => RIDE_SECONDS / CONFIG.shutterTiers[st.shutterTier];
+const opportunities = (st) => RIDE_SECONDS / CONFIG.shutterTiers[st.sh];
 
 // Every photograph is banked, so there is never a reason to hold fire when film
 // is plentiful -- selectivity only buys anything while film is the scarce side.
@@ -256,14 +256,14 @@ function moments(table, zoom, res, band) {
 // the best `film / opportunities` of them; grip interpolates towards that on a
 // log scale, so a half-skilled player is genuinely half as choosy.
 function share(st, band) {
-  const chances = Math.min(opportunities(st), distinct(st, CONFIG.zoomLevels[st.maxZoom]));
+  const chances = Math.min(opportunities(st), distinct(st, CONFIG.zoomLevels[st.mz]));
   const frames = Math.min(Math.max(st.film, 1), Math.floor(opportunities(st)));
   const perfect = Math.min(1, frames / Math.max(1, chances));
   return Math.exp(Math.log(perfect) * BANDS[band].grip);
 }
 
 function ride(st, table, rnd, band) {
-  const m = moments(table, CONFIG.zoomLevels[st.maxZoom], st.res, band);
+  const m = moments(table, CONFIG.zoomLevels[st.mz], st.rs, band);
   const shots = Math.min(st.film, Math.max(1, Math.floor(opportunities(st))));
   const s = share(st, band);
   let take = 0;
@@ -278,7 +278,7 @@ function ride(st, table, rnd, band) {
 // Mean take of a ride under this loadout: the mean of the top `s` of moments,
 // times the frames shot. Used to rank shop rungs and to report marginal value.
 function expected(st, table, band) {
-  const m = moments(table, CONFIG.zoomLevels[st.maxZoom], st.res, band);
+  const m = moments(table, CONFIG.zoomLevels[st.mz], st.rs, band);
   const shots = Math.min(Math.max(st.film, 1), Math.max(1, Math.floor(opportunities(st))));
   const s = share(st, band);
   const from = Math.min(m.length - 1, Math.floor((1 - s) * m.length));
@@ -387,7 +387,7 @@ async function main() {
   // "no dead buys".
   {
     // Mid-run gear.
-    const mid = { ...START, maxZoom: 2, res: 1, shutterTier: 1 };
+    const mid = { ...START, mz: 2, rs: 1, sh: 1 };
     const rows = [];
     for (const l of ladders) {
       for (let tier = 0; tier < l.p.length; tier++) {

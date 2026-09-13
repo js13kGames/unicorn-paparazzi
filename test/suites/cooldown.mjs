@@ -7,7 +7,7 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const src = fs.readFileSync(ROOT + 'src/index.js', 'utf8');
 
 const tiersSrc = /shutterTiers: (\[[^\]]*\])/.exec(src);
-const guardSrc = /function takePhoto\(\) \{\n(\s*if \([^\n]*\)\s*return;\n\s*state\.ready = [^\n]*\n\s*state\.film--;)/.exec(src);
+const guardSrc = /function takePhoto\(\) \{\n(\s*if \([^\n]*\)\s*return;\n\s*state\.armed = [^\n]*\n\s*state\.film--;)/.exec(src);
 
 let fails = 0;
 const check = (n, ok, d) => { if(!ok) fails++; console.log((ok?'  ok  ':'FAIL  ')+n.padEnd(58)+(d||'')); };
@@ -26,7 +26,7 @@ const CONFIG = { shutterTiers: TIERS };
 
 for (let tier = 0; tier < TIERS.length; tier++) {
   const cd = TIERS[tier];
-  const state = { film: 10, ready: 0, shutterTier: tier };
+  const state = { film: 10, armed: 0, sh: tier };
   const fired = (t) => { try { return shoot(state, t, CONFIG) === true; } catch { return false; } };
 
   const a = fired(0);
@@ -40,7 +40,7 @@ for (let tier = 0; tier < TIERS.length; tier++) {
 }
 
 // out of film still blocks regardless of readiness
-const dry = { film: 0, ready: 0, shutterTier: 0 };
+const dry = { film: 0, armed: 0, sh: 0 };
 check('an empty roll is refused even when ready', shoot(dry, 999, CONFIG) !== true);
 
 // --- a ride is a span of time, not a lap --------------------------------

@@ -30,8 +30,8 @@ let f = (H/2) / Math.tan(FOVY/2);
 
 export function shot(dist, pitch, yawOff, idMode, zoom) {
   f = (H/2) / Math.tan(FOVY/(2*(zoom||1)));
-  const p = pathAt(world.path, dist);
-  const a = pathAt(world.path, dist), b = pathAt(world.path, dist+4);
+  const p = pathAt(world.route, dist);
+  const a = pathAt(world.route, dist), b = pathAt(world.route, dist+4);
   const yaw = Math.atan2(-(b.x-a.x), -(b.z-a.z)) + yawOff;
   const eye = [p.x, elevAt(world, p.x, p.z) + 2.4, p.z];
   const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
@@ -150,7 +150,7 @@ export function shot(dist, pitch, yawOff, idMode, zoom) {
     const pal=COLORS[ci];
     const mane=pal.map(v=>v+(1-v)*0.45);
     const vs=[];
-    for(let v=0;v<model.count;v++){
+    for(let v=0;v<model.tally;v++){
       const part=model.attr[v*2];
       const mm=poseTab.subarray((row*PARTS+part)*16,(row*PARTS+part)*16+16);
       let [x,y,z]=mulv(mm, model.pos[v*3],model.pos[v*3+1],model.pos[v*3+2]);

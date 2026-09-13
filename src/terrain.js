@@ -282,7 +282,7 @@ function buildTrackMesh(path, mesh, N) {
       idx[o++] = a; idx[o++] = d + 1; idx[o++] = d;
     }
   }
-  return { pos, col, nrm, idx, count: idx.length };
+  return { pos, col, nrm, idx, tally: idx.length };
 }
 
 // --- color --------------------------------------------------------------
@@ -384,7 +384,7 @@ function buildMesh(N, band, height, volcanic) {
     }
   }
 
-  return { pos, col, nrm, idx, count: idx.length, cornerH, S };
+  return { pos, col, nrm, idx, tally: idx.length, cornerH, S };
 }
 
 // --- entry point ---------------------------------------------------------
@@ -398,7 +398,7 @@ export function buildWorld(seed, cfg) {
   const track = carve(N, height, path);
   const mesh = buildMesh(N, band, height, volcanic);
   const trackMesh = buildTrackMesh(path, mesh, N);
-  return { N, elev: band, volcanic, track, path, mesh, trackMesh };
+  return { N, elev: band, volcanic, track, route: path, mesh, trackMesh };
 }
 
 // Ground height in world units, bilinear over the corner grid so unicorns, the

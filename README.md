@@ -17,7 +17,7 @@ Every ride is a level with a takings target, and the target climbs faster than
 your camera does. Miss it and the run is over.
 
 Get all six unicorn colors into one frame for the rainbow bonus — and keep the
-black unicorns out of shot, because one anywhere in frame is worth zero.
+dark unicorns out of shot, because one anywhere in frame is worth zero.
 
 ### How it is put together
 

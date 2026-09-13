@@ -25,8 +25,8 @@ for (const seed of [12345, 777, 42]) {
   for (let i=0;i<600;i++) updateHerd(h, w, cfg, 1/60);
   packInstances(h, w);
   let none=0, samples=0; const counts=[];
-  for (let d=0; d<w.path.length; d+=4) {
-    const p = pathAt(w.path, d);
+  for (let d=0; d<w.route.length; d+=4) {
+    const p = pathAt(w.route, d);
     let n=0;
     for (let u=0;u<h.n;u++) if (Math.hypot(h.x[u]-p.x, h.z[u]-p.z) < R) n++;
     counts.push(n); samples++; if(!n) none++;

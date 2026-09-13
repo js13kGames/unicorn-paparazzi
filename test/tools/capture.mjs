@@ -14,14 +14,14 @@ import { COLOR_NAMES } from '../.mirror/unicorn.mjs';
 import { readFileSync } from 'fs';
 const cfg = (0, eval)('(' + /export const CONFIG = (\{[\s\S]*?\n\});/.exec(
   readFileSync(new URL('../../src/index.js', import.meta.url), 'utf8'))[1] + ')');
-const st = { res: 0 };
+const st = { rs: 0 };
 
 // Aim each shot at the nearest unicorn, the way a player would.
 import { pathAt } from '../.mirror/terrain.mjs';
 const views = [];
-for (let d = 40; d < world.path.length && views.length < 6; d += 37) {
-  const p = pathAt(world.path, d);
-  const a = pathAt(world.path, d), b = pathAt(world.path, d+4);
+for (let d = 40; d < world.route.length && views.length < 6; d += 37) {
+  const p = pathAt(world.route, d);
+  const a = pathAt(world.route, d), b = pathAt(world.route, d+4);
   const heading = Math.atan2(-(b.x-a.x), -(b.z-a.z));
   let best = null, bd = 1e9;
   for (let u=0;u<herd.n;u++) {
@@ -53,20 +53,20 @@ views.forEach((v, n) => {
   ctx.putImageData(img, (n%2)*640, ((n/2)|0)*360);
 
   const base = scored.subjects.reduce((a, x) => a + x.subtotal, 0);
-  console.log('--- shot ' + n + ' -> ' + scored.total + ' points ' +
+  console.log('--- shot ' + n + ' -> ' + scored.sum + ' points ' +
     '(base ' + Math.round(base) + ' x' + scored.multiplier + ')');
   for (const s of scored.subjects) {
-    console.log('    ' + s.color.padEnd(14) +
+    console.log('    ' + s.coat.padEnd(14) +
       (s.poseName || 'walking').padEnd(10) +
-      (s.size / cfg.resBonus[st.res] * 100).toFixed(2).padStart(6) + '% ' +
-      'size ' + s.size.toFixed(1).padStart(5) +
-      '  pose ' + String(s.pose).padStart(3) +
+      (s.extent / cfg.resBonus[st.rs] * 100).toFixed(2).padStart(6) + '% ' +
+      'size ' + s.extent.toFixed(1).padStart(5) +
+      '  pose ' + String(s.stance).padStart(3) +
       (s.cropLoss > 0.5 ? '  crop -' + s.cropLoss.toFixed(0) : '') +
       (s.envLoss > 0.5 ? '  scenery -' + s.envLoss.toFixed(0) : '') +
       (s.occLoss > 0.5 ? '  herd -' + s.occLoss.toFixed(0) : '') +
       '' );
   }
   console.log('    framing ×' + scored.framing.toFixed(2) +
-    (scored.bonuses.length ? '   bonuses: ' + scored.bonuses.map(b=>b.label+' x'+b.factor).join(', ') : ''));
+    (scored.bonuses.length ? '   bonuses: ' + scored.bonuses.map(b=>b.legend+' x'+b.factor).join(', ') : ''));
 });
 writeFileSync(process.argv[2], cv.toBuffer('image/png'));

@@ -27,11 +27,11 @@ const turn = (cam, state, yawOff, e) => {
   const fn = new Function('cam', 'state', 'yawOff', 'LIM', 'clampPitch', 'RIDE', 'e',
     body[1] + '\nreturn yawOff;');
   const out = fn(cam, state, yawOff, LIM,
-                 () => (cam.pitch = Math.max(-LIM, Math.min(LIM, cam.pitch))), RIDE, e);
+                 () => (cam.tilt = Math.max(-LIM, Math.min(LIM, cam.tilt))), RIDE, e);
   return out;
 };
 // A fresh phone, already looking down the track at yaw 1 the way a ride starts.
-const fresh = () => ({ cam: { yaw: 1, pitch: 0 }, state: { mode: RIDE }, off: undefined });
+const fresh = () => ({ cam: { yaw: 1, tilt: 0 }, state: { phase: RIDE }, off: undefined });
 const point = (a, b, g) => {
   const p = fresh();
   p.off = turn(p.cam, p.state, p.off, { alpha: a, beta: b, gamma: g });
@@ -52,13 +52,13 @@ check('the first reading does not move the view', near(start.cam.yaw, 1),
 // --- pitch ---------------------------------------------------------------
 // Screen up on a table: the lens is pointing at the table.
 const flat = point(0, 0, 0);
-check('flat on its back looks straight down', near(flat.cam.pitch, -LIM),
-      flat.cam.pitch.toFixed(4));
+check('flat on its back looks straight down', near(flat.cam.tilt, -LIM),
+      flat.cam.tilt.toFixed(4));
 // Held up like a viewfinder: the lens is on the horizon.
-check('held upright looks at the horizon', near(point(0, 90, 0).cam.pitch, 0));
+check('held upright looks at the horizon', near(point(0, 90, 0).cam.tilt, 0));
 // Tilted back past vertical: the lens climbs.
-check('tilted back looks up', point(0, 135, 0).cam.pitch > 0.7);
-check('and the clamp holds at the zenith', near(point(0, 180, 0).cam.pitch, LIM));
+check('tilted back looks up', point(0, 135, 0).cam.tilt > 0.7);
+check('and the clamp holds at the zenith', near(point(0, 180, 0).cam.tilt, LIM));
 
 // --- yaw -----------------------------------------------------------------
 // The offset makes a single reading meaningless in isolation, so yaw is tested
@@ -82,19 +82,19 @@ const portrait = point(0, 90, 0);
 const landscape = point(90, 0, -90);
 check('portrait and landscape aim the same way',
       near(portrait.cam.yaw, landscape.cam.yaw, 1e-9) &&
-      near(portrait.cam.pitch, landscape.cam.pitch, 1e-9),
+      near(portrait.cam.tilt, landscape.cam.tilt, 1e-9),
       portrait.cam.yaw.toFixed(4) + ' vs ' + landscape.cam.yaw.toFixed(4));
 
 // --- when it must keep its hands off -------------------------------------
 const parked = fresh();
-parked.state.mode = SHOP;
+parked.state.phase = SHOP;
 turn(parked.cam, parked.state, parked.off, { alpha: 90, beta: 90, gamma: 0 });
 check('a card on screen is not steered by the handset', near(parked.cam.yaw, 1));
 
 const blind = fresh();
 turn(blind.cam, blind.state, blind.off, { alpha: null, beta: null, gamma: null });
 check('a device with no sensor is ignored rather than NaN',
-      near(blind.cam.yaw, 1) && near(blind.cam.pitch, 0));
+      near(blind.cam.yaw, 1) && near(blind.cam.tilt, 0));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

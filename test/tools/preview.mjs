@@ -26,7 +26,7 @@ seeds.forEach((seed, si) => {
   }
   ctx.putImageData(img, ox, oy);
   const hl = ((hist[5]||0)+(hist[6]||0)+(hist[7]||0)+(hist[8]||0)+(hist[9]||0)+(hist[10]||0))/(N*N);
-  console.log('seed', seed, 'verts', (w.mesh.count/1e6).toFixed(2)+'M', 'highland', (hl*100).toFixed(1)+'%', 'lap', w.path.length.toFixed(0));
+  console.log('seed', seed, 'verts', (w.mesh.tally/1e6).toFixed(2)+'M', 'highland', (hl*100).toFixed(1)+'%', 'lap', w.route.length.toFixed(0));
 });
 import { writeFileSync } from 'fs';
 writeFileSync(process.argv[2], cv.toBuffer('image/png'));

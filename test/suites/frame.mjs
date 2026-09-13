@@ -101,9 +101,9 @@ for (const a of ASPECTS) {
   const canvas = { width: 0, height: 0 };
   const draw = (cam, fovy, idPass, w, h) => calls.push([fovy, idPass, w, h]);
   const rig = createPhotoRig(gl, canvas, draw);
-  const herd = { color: [], pose: [], horns: [] };
+  const herd = { coat: [], stance: [], horns: [] };
 
-  const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+  const cam = { x: 0, y: 0, z: 0, yaw: 0, tilt: 0 };
   const shapes = [[3840, 2160], [800, 1600], [2560, 1080], [1024, 768]];
   for (const [w, h] of shapes) {
     canvas.width = w; canvas.height = h;

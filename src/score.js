@@ -4,20 +4,20 @@ const HORNS = ['', 'bicorn', 'tricorn', 'quadricorn'];
 
 export function scorePhoto(photo, cfg, state) {
   const total = photo.w * photo.h;
-  const bonus = cfg.resBonus[state.res];
+  const bonus = cfg.resBonus[state.rs];
   const subjects = [];
   // Everything too small to photograph properly, kept as a bare list of colors.
   // These used to be dropped on the floor, for a good reason -- a dozen distant
   // specks handing out a huge color-variety multiplier. They are back because
   // the color bonus is worth far less than it was, and because a herd on the
   // horizon is genuinely part of the picture: a point each, and a vote in what
-  // colors are in frame. A black one still voids the shot from out there, which
+  // colors are in frame. A dark one still voids the shot from out there, which
   // is only fair because the world is a fixed seed now and you can learn it.
   const smalls = [];
 
   for (const [id, s] of photo.subjects) {
     const coverage = s.n / total;
-    if (coverage < cfg.minCoverage) { smalls.push(s.color); continue; }
+    if (coverage < cfg.minCoverage) { smalls.push(s.coat); continue; }
 
     // How big the animal comes out, paid at this sensor's rate -- which is what
     // makes a bigger camera worth buying. Measured as the share of the frame it
@@ -36,12 +36,12 @@ export function scorePhoto(photo, cfg, state) {
     // unicorn, which made the roll a lottery on what the herd happened to be
     // doing; at 1.9x the rare pose is a bonus on a well-taken photograph rather
     // than a substitute for taking one well.
-    const pose = cfg.poseBonus[s.pose];
+    const pose = cfg.poseBonus[s.stance];
 
     // How much of the outline is cut, and by what. A flat penalty for touching
     // an edge was a cliff: a clipped hoof cost the same as half a missing
     // unicorn. These grade instead.
-    const out = s.outline || 1;
+    const out = s.rim || 1;
     const cEdge = s.edge / out, cEnv = s.env / out, cOcc = s.occ / out;
     const cropF = Math.exp(-cfg.cropK * cEdge);
     const envF = Math.exp(-cfg.envK * cEnv);
@@ -57,9 +57,9 @@ export function scorePhoto(photo, cfg, state) {
 
     subjects.push({
       id,
-      color: COLOR_NAMES[s.color],
-      colorIndex: s.color,
-      poseName: POSE_NAMES[s.pose],
+      coat: COLOR_NAMES[s.coat],
+      colorIndex: s.coat,
+      poseName: POSE_NAMES[s.stance],
       horns: s.horns,
       // Normalised centre of the neck, y flipped into image space (readPixels is
       // bottom-up). An animal facing away, or with its neck behind a rock, has no
@@ -67,7 +67,7 @@ export function scorePhoto(photo, cfg, state) {
       // has to be framed somehow.
       cx: (s.nn ? s.nx / s.nn : s.sx / s.n) / photo.w - 0.5,
       cy: 0.5 - (s.nn ? s.ny / s.nn : s.sy / s.n) / photo.h,
-      size, pose,
+      extent: size, stance: pose,
       cEdge, cEnv, cOcc,
       cropLoss, envLoss, occLoss,
       // The extra horns pay on the animal that grew them, and only its own
@@ -94,7 +94,7 @@ export function scorePhoto(photo, cfg, state) {
   const multiplier = bonuses.reduce((a, b) => a * b.factor, 1);
 
   return {
-    url: photo.url,
+    pic: photo.pic,
     subjects,
     framing,
     bonuses,
@@ -102,9 +102,9 @@ export function scorePhoto(photo, cfg, state) {
     // Framing is the composition of what you actually photographed, so it is
     // paid on the subjects alone -- a speck at the edge of the frame must not
     // drag the arrangement of the animals you meant to shoot. The multiplier is
-    // paid on everything, which is what keeps a black speck's factor of 0
+    // paid on everything, which is what keeps a dark speck's factor of 0
     // zeroing the whole photograph rather than leaving the small points standing.
-    total: Math.round((base * framing + smalls.length) * multiplier),
+    sum: Math.round((base * framing + smalls.length) * multiplier),
     b: breakdown(subjects, framing, bonuses, bonus, smalls),
   };
 }
@@ -122,13 +122,13 @@ function breakdown(subjects, framing, bonuses, dpi, smalls) {
   for (const s of subjects) {
     // Just the color: a scored pose already names itself on its own detail row
     // below, and heading the subject with it too read as a stutter.
-    out.push([s.color, '' + Math.round(s.subtotal)]);
+    out.push([s.coat, '' + Math.round(s.subtotal)]);
     // The size row shows its own arithmetic: the share of the frame this animal
     // fills, times what the sensor pays for a share. They multiply out to
     // exactly the points beside them, which is the only thing on screen that
     // says why the resolution upgrade is worth buying.
-    out.push([' size · ' + (s.size / dpi * 100).toFixed(1) + '% × ' + dpi + 'dpi', sign(s.size)]);
-    if (s.pose > 1) out.push([' pose · ' + s.poseName, pct(s.pose)]);
+    out.push([' size · ' + (s.extent / dpi * 100).toFixed(1) + '% × ' + dpi + 'dpi', sign(s.extent)]);
+    if (s.stance > 1) out.push([' pose · ' + s.poseName, pct(s.stance)]);
     // Cut by the frame, hidden behind scenery, blocked by another unicorn: three
     // penalties that compound in order, but one number as far as the player is
     // concerned. Sub-point losses read as "-0", which looks like a bug.
@@ -138,7 +138,7 @@ function breakdown(subjects, framing, bonuses, dpi, smalls) {
   }
   // The herd on the horizon, as one block rather than a row each: a point apiece
   // is not worth a line apiece, but which colors are out there decides the color
-  // bonus and so is worth naming. Counted in palette order, black last, which is
+  // bonus and so is worth naming. Counted in palette order, dark last, which is
   // the order every other list of colors in the game is in.
   if (smalls.length) {
     out.push(['small unicorns', sign(smalls.length)]);
@@ -153,7 +153,7 @@ function breakdown(subjects, framing, bonuses, dpi, smalls) {
   // Shown as the adjustment it is, not as a total: a shot scoring a twentieth of
   // its subtotals reads -95%, and a perfect frame +100%.
   if (subjects.length) out.push(['framing', pct(framing)]);
-  for (const b of bonuses) out.push([b.row || b.label, pct(b.factor)]);
+  for (const b of bonuses) out.push([b.row || b.legend, pct(b.factor)]);
   return out;
 }
 
@@ -231,11 +231,11 @@ function bonusList(subjects, smalls) {
   // What colors are in the frame at all, however small. A speck counts here and
   // nowhere else.
   const c = new Set([...big, ...smalls]);
-  // One black unicorn anywhere in shot voids the photograph, and nothing else
+  // One dark unicorn anywhere in shot voids the photograph, and nothing else
   // about it is worth saying once it has. Returning early is also the only way
-  // the colour rows stay honest: five rainbow coats plus a black one is six
+  // the colour rows stay honest: five rainbow coats plus a dark one is six
   // distinct colours, and would otherwise print RAINBOW on a zeroed card.
-  if (c.has(6)) return [{ label: 'black unicorn', factor: 0 }];
+  if (c.has(6)) return [{ legend: 'dark unicorn', factor: 0 }];
   const out = [];
   const n = c.size;
   // Two names for the one bonus: `label` is what the roll summary lists beside a
@@ -244,13 +244,13 @@ function bonusList(subjects, smalls) {
   // `+60%` says what a fourth colour would be worth, where a bare `+60%` said
   // only what this one came to.
   if (n >= 2) {
-    out.push({ label: n + ' colors', row: n + ' colors · ' + n + ' × 20%',
+    out.push({ legend: n + ' colors', row: n + ' colors · ' + n + ' × 20%',
                factor: 1 + n / 5 });
   }
   // The rainbow is the one thing specks cannot buy. Six colors in frame earns
   // the 20% steps above, but the doubling still demands six animals photographed
   // properly -- otherwise the shot of the whole valley, taken from as far back as
   // possible, would be the best photograph in the game again.
-  if (big.size === 6) out.push({ label: 'RAINBOW', factor: 2 });
+  if (big.size === 6) out.push({ legend: 'RAINBOW', factor: 2 });
   return out;
 }

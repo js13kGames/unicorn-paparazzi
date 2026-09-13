@@ -13,9 +13,9 @@ export const COLORS = [
   [0.67, 0.39, 0.90],  // V
   // Not a rainbow colour and not on the band table -- the only way to wear this
   // coat is the rare roll in spawn(), and any photograph it appears in is void.
-  [0.13, 0.12, 0.15],  // black
+  [0.13, 0.12, 0.15],  // dark
 ];
-export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'black'];
+export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'dark'];
 
 // The first one is deliberately blank. A pose only earns a row on the card when
 // it pays something, and walking pays nothing -- so `walking` was seven
@@ -99,7 +99,7 @@ export function buildModel() {
   return {
     pos: new Float32Array(out.pos),
     attr: new Uint8Array(out.attr),
-    count: out.pos.length / 3,
+    tally: out.pos.length / 3,
   };
 }
 
@@ -205,7 +205,7 @@ function colorForBand(q, volcanic) {
 export function spawn(world, cfg, seed) {
   const rnd = mulberry32(seed ^ 0x13c9);
   const N = world.N;
-  const list = { x: [], z: [], color: [], horns: [] };
+  const list = { x: [], z: [], coat: [], horns: [] };
   for (let z = 0; z < N; z++) {
     for (let x = 0; x < N; x++) {
       const i = z * N + x;
@@ -225,11 +225,11 @@ export function spawn(world, cfg, seed) {
       // whatever the outcome, which is what keeps the herd deterministic.
       const r = rnd();
       list.horns.push(r < 0.02 ? 3 : r < 0.05 ? 2 : r < 0.11 ? 1 : 0);
-      // 3% wear the black coat. The horn roll reads the bottom of the same draw,
+      // 3% wear the dark coat. The horn roll reads the bottom of the same draw,
       // so the top of it is free and the two stay uncorrelated. At 2% there were
       // about thirteen to a map, which was too few to be worth watching for --
       // the hazard has to be common enough that you look before you shoot.
-      list.color.push(r > 0.97 ? 6 : color);
+      list.coat.push(r > 0.97 ? 6 : color);
     }
   }
   return makeHerd(list, cfg, seed);
@@ -251,13 +251,13 @@ function makeHerd(list, cfg, seed) {
     fromZ: Float32Array.from(list.z),
     toX: Float32Array.from(list.x),
     toZ: Float32Array.from(list.z),
-    step: new Float32Array(n),          // progress through the current step
-    speed: new Float32Array(n),         // how fast this one walks, around 1
+    stride: new Float32Array(n),          // progress through the current step
+    gait: new Float32Array(n),         // how fast this one walks, around 1
     yaw: new Float32Array(n),
     aim: new Float32Array(n),           // the heading yaw is turning towards
-    color: Uint8Array.from(list.color),
+    coat: Uint8Array.from(list.coat),
     horns: Uint8Array.from(list.horns),
-    pose: new Uint8Array(n),
+    stance: new Uint8Array(n),
     phase: new Float32Array(n),
     hold: new Float32Array(n),
     instances: new Float32Array(n * 8),
@@ -271,10 +271,10 @@ function makeHerd(list, cfg, seed) {
     // The floor stays at 0.5 and only the spread above it opened up: a herd that
     // barely moved made every photograph a still life, and the slow animals are
     // still there to be found -- there are just fewer of them.
-    h.speed[i] = 0.5 + (rnd() + rnd() + rnd()) * (2 / 3);
+    h.gait[i] = 0.5 + (rnd() + rnd() + rnd()) * (2 / 3);
     h.phase[i] = rnd();
-    h.step[i] = rnd();
-    h.pose[i] = rollPose(rnd(), cfg.poseWeights);
+    h.stride[i] = rnd();
+    h.stance[i] = rollPose(rnd(), cfg.poseWeights);
     h.hold[i] = 2 + rnd() * 4;
   }
   return h;
@@ -297,16 +297,16 @@ export function updateHerd(h, world, cfg, dt) {
     // Pose schedule.
     h.hold[i] -= dt;
     if (h.hold[i] <= 0) {
-      h.pose[i] = rollPose(rnd(), cfg.poseWeights);
+      h.stance[i] = rollPose(rnd(), cfg.poseWeights);
       h.hold[i] = 2 + rnd() * 4;
     }
-    h.phase[i] = (h.phase[i] + dt / POSE_CYCLE[h.pose[i]]) % 1;
+    h.phase[i] = (h.phase[i] + dt / POSE_CYCLE[h.stance[i]]) % 1;
 
     // Only a walking unicorn wanders; the other poses are stationary.
-    if (h.pose[i] === 0) {
-      h.step[i] += dt * h.speed[i] / STEP_TIME;
-      while (h.step[i] >= 1) {
-        h.step[i] -= 1;
+    if (h.stance[i] === 0) {
+      h.stride[i] += dt * h.gait[i] / STEP_TIME;
+      while (h.stride[i] >= 1) {
+        h.stride[i] -= 1;
         h.fromX[i] = h.toX[i];
         h.fromZ[i] = h.toZ[i];
         // One tile up, down or sideways -- the same +1/0/-1 walk the terrain uses.
@@ -330,9 +330,9 @@ export function updateHerd(h, world, cfg, dt) {
       // free-running POSE_CYCLE timer the legs would swing at their own rate
       // and the animal would still be gliding, just with its legs moving --
       // and a fast walker would stride no quicker than a slow one. This one
-      // assignment is what couples the two, and what makes h.speed visible.
-      h.phase[i] = h.step[i];
-      const t = h.step[i];
+      // assignment is what couples the two, and what makes h.gait visible.
+      h.phase[i] = h.stride[i];
+      const t = h.stride[i];
       const e = t * t * (3 - 2 * t);        // ease so steps don't look robotic
       h.x[i] = h.fromX[i] + (h.toX[i] - h.fromX[i]) * e;
       h.z[i] = h.fromZ[i] + (h.toZ[i] - h.fromZ[i]) * e;
@@ -360,8 +360,8 @@ export function packInstances(h, world) {
     a[o + 2] = h.z[i];
     a[o + 3] = h.yaw[i];
     a[o + 4] = 1;
-    a[o + 5] = h.color[i];
-    a[o + 6] = h.pose[i] * POSE_FRAMES + ((h.phase[i] * POSE_FRAMES) | 0);
+    a[o + 5] = h.coat[i];
+    a[o + 6] = h.stance[i] * POSE_FRAMES + ((h.phase[i] * POSE_FRAMES) | 0);
     a[o + 7] = h.horns[i];
   }
   return a;
