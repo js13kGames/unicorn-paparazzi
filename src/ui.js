@@ -133,10 +133,11 @@ export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, mi
   panel((lost ? '<h1>Game over</h1>' +
                 '<h2>missed $' + missed + '</h2>' +
                 photoCard(pic.p, pic.b || [], 'Best picture', pic.n || 0) +
-                // Bare, and in the shop's own markup: under the run's best
-                // photograph and over the only button left, a figure in dollars
-                // is the run's takings and can hardly be anything else.
-                '<h2>$' + earned + '</h2>'
+                // Named, not bare. It read as a figure with no question
+                // attached -- under a photograph and over a Reset button, a
+                // lone dollar amount could as easily have been the bank or
+                // what the last ride made.
+                '<h2>total earnings $' + earned + '</h2>'
               : '<h1>Unicorn Paparazzi</h1>' +
                 '<p><button id="go">Solo</button></p>' +
                 '<p><button id="mp">Multiplayer</button></p>') +
@@ -165,6 +166,11 @@ export function showBrief(quota) {
         // it twice -- and moving the string rather than copying it is what keeps
         // this card near free.
         '<p>To continue you must get $' + quota + ' this ride</p>' +
+        // `h m` is the case the stylesheet's own comment describes: a hint that
+        // is also a problem. It is the one rule the game will not teach you by
+        // playing -- a dark unicorn in frame zeroes the whole photograph, so the
+        // shot that taught you costs a frame and looks like a scoring bug.
+        '<p class="h m">Warning · Pictures containing dark unicorns earn $0</p>' +
         // No button, and this line instead of one. index.js binds a click
         // anywhere on the panel to primary(), which starts the ride while the
         // mode is still TITLE -- so the card is simply ridden away by the next
@@ -278,13 +284,21 @@ export function photoCard(url, rows, heading, total) {
 }
 
 // The breakdown for one of your own shots, reached by clicking a row in the roll.
-export function showPhoto(scored, onBack) {
+export function showPhoto(scored, onBack, onStep, i, n) {
+  // `<` has to be an entity: innerHTML reads a bare one as the start of a tag
+  // and eats the button with it. `>` is only special after a `<`, so it stays
+  // the one character it is.
+  const step = (id, glyph, at) => '<button id="' + id + '"' +
+    (at ? ' disabled' : '') + '>' + glyph + '</button> ';
   panel(
     '<h1>Photos</h1>' +
     photoCard(scored.pic, scored.b, scored.sum + ' points', scored.sum) +
-    '<p class="h"><button id="k">Back</button></p>'
+    // Ends of the roll disable rather than wrap: the roll is short enough that
+    // wrapping reads as the card refusing to close.
+    '<p class="h">' + step('v', '&lt;', !i) +
+    '<button id="k">Back</button> ' + step('n', '>', i >= n - 1) + '</p>'
   );
-  onCard(onBack);
+  onCard((b) => (b.id === 'v' ? onStep(i - 1) : b.id === 'n' ? onStep(i + 1) : onBack()));
 }
 
 // The results screen, in three shapes:
@@ -296,7 +310,7 @@ export function showPhoto(scored, onBack) {
 // The two match views are named after the buttons that swap them, so "Results"
 // and "Photos" each earn their keep twice. `mine` is that swap: a sub-view,
 // not a mode of its own.
-export function showResults(state, scored, onPick, onNext, rivals, waiting, mine) {
+export function showResults(state, scored, onPick, onNext, rivals, waiting, mine, quota) {
   // Best first. It used to run worst-first so you ended on your best shot, but
   // this is a scoreboard now and the interesting one belongs at the top.
   const order = scored.map((s, i) => i).sort((a, b) => scored[b].sum - scored[a].sum);
@@ -317,7 +331,14 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
   // belong on the same line. A borrowed-gear ride earns nothing and never gets
   // here: the match view draws cards instead.
   const ride = scored.reduce((a, s) => a + s.sum, 0);
-  const earned = '<h2>$' + state.bank + ' · $' + ride + ' this ride</h2>';
+  // The bank stays neutral and only the ride figure takes a colour: you can be
+  // flush and still have missed, so the bank is no answer to "did that ride pass".
+  // The same green/red the hud picks between while you are still riding, which is
+  // the point -- the line under the roll settles the question the hud was asking.
+  // A match sets no quota, and neither win nor loss is a fact about it, so the
+  // figure stays plain there.
+  const earned = '<h2>$' + state.bank + ' · <b class="' +
+    (quota ? ride >= quota ? 'p' : 'm' : '') + '">$' + ride + ' this ride</b></h2>';
 
   // Solo: the roll, what it paid, and the way to the shop.
   if (waiting === undefined) {
@@ -364,7 +385,7 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 // has already seen from the other ui.show* calls, and each shorter one is new to
 // it. Left in deliberately; see the note on `* 0.2` in score.js for the same
 // trade. Delete them the day the budget stops being the binding constraint.
-export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
+export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota, onPhotos) {
   // Three columns: what the line is, where you stand on it, and what you can
   // buy with the price inside the button. The whole ladder used to be drawn,
   // which was a table of markup for something read once -- and a maxed ladder
@@ -392,6 +413,10 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
     // and what it costs. Restore it here if the budget ever allows.
     '<table>' + rows + '</table>' +
     '<p class="h"><button id="e">Ride again</button> ' +
+    // Only when there is a roll to go back to. A shop opened at boot, or after
+    // the Ride again reload, has an empty one -- index.js passes no handler
+    // there, and a button that led to an empty table would be worse than none.
+    (onPhotos ? '<button id="s">Photos</button> ' : '') +
     // Everything else you might want -- multiplayer, wiping the save -- lives on
     // the menu now, so the shop only has to be able to get you back there.
     '<button id="mp">Menu</button></p>'
@@ -401,6 +426,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
     if (!b) return;
     e.stopPropagation();
     if (b.id === 'e') onRide();
+    else if (b.id === 's') onPhotos();
     else if (b.id === 'mp') onMenu();
     else if (b.dataset.i !== undefined) onBuy(+b.dataset.i);
   };

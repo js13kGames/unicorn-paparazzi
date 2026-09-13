@@ -92,15 +92,15 @@ check('and says it is over as well as why',
 check('the run\'s best photograph is the card', lost, (h) => h.includes('<img src="best.jpg">'));
 check('with its breakdown under it', lost, (h) => h.includes('violet') && h.includes('+820'));
 check('and its score as the total', lost, (h) => h.includes('<b>820</b>'));
-// Bare, in the shop's own markup: under the best photograph and over the only
-// button left, a figure in dollars can hardly be read as anything else.
+// Named: a lone dollar figure under a photograph could as easily have been the
+// bank or the last ride's takings, and it was read as both in playtesting.
 check('the takings are what is reported, not the bank',
-      lost, (h) => h.includes('<h2>$4300</h2>'));
+      lost, (h) => h.includes('<h2>total earnings $4300</h2>'));
 // A run whose best was never written -- an empty roll burned on nothing at all
 // -- still has to render. photoCard already draws no <img> for an empty url.
 showTitle(() => hits.push('reset'), 1);
 check('a run with no photograph to show still draws',
-      card(), (h) => !h.includes('<img') && h.includes('<h2>$0</h2>'));
+      card(), (h) => !h.includes('<img') && h.includes('<h2>total earnings $0</h2>'));
 showTitle(() => hits.push('reset'), 1, 1, PIC, 4300);
 check('and takes away the ride you cannot pay for', lost, (h) => !h.includes('id="go"'));
 check('and multiplayer with it, since the match is over too',
@@ -120,6 +120,11 @@ const brief = card();
 check('the briefing says what to do', brief, (h) => /pictures of unicorns/i.test(h));
 check('and that better ones pay more', brief, (h) => /earn more/i.test(h));
 check('and what this ride has to make', brief, (h) => h.includes('$3000'));
+// The one rule the game will not teach you by playing: a dark unicorn anywhere
+// in frame zeroes the photograph, so the shot that teaches it costs a frame and
+// reads as a scoring bug. It is marked as a problem, not just a hint -- `h m`.
+check('and it warns that dark unicorns void a photograph',
+      brief, (h) => /dark unicorns earn \$0/.test(h) && /class="h m"/.test(h));
 // THE load-bearing property: index.js binds a click anywhere on the panel to
 // primary(), which starts the ride while the mode is still TITLE. A button here
 // would call onCard(), which stopPropagation()s -- and the card would swallow

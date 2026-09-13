@@ -15,7 +15,7 @@ export const CONFIG = {
   // Chance a land tile holds a unicorn, on the first ride. It climbs 5% a ride
   // from there, at boot, just below -- so a run that survives gets a fuller map
   // to photograph rather than only a dearer roll of film.
-  unicornDensity: 0.003,
+  unicornDensity: 0.0027,
   // Chance a unicorn wears an off-biome color. At 0.08 the herd was so strictly
   // banded that blue and violet were ~3% each and locked to their own altitudes,
   // so the color bonus almost never fired: two colors in 10% of shots, four in
@@ -47,10 +47,14 @@ export const CONFIG = {
   // wheel sees the frame tighten by a fifth and learns the lens is there. Without
   // it the control is dead until the first $400, and nothing on screen says the
   // camera has a zoom to buy. Everything above it is the ladder as it was.
-  // Five rungs, not six. Zoom trades cone width for reach, and past about 6x the
-  // cone wins: an 8x frame held fewer subjects than a 6x one and measured as a
-  // negative buy, which is a rung nobody should be sold.
-  zoomLevels: [1, 1.5, 2.5, 4],
+  // The top rung is 8x again. It was cut once because zoom trades cone width for
+  // reach and an 8x frame held fewer subjects than a 4x one, which measured as a
+  // negative buy -- but that arithmetic was about the color bonus, and the herd
+  // is thinner now: what the long lens is for is picking ONE animal out of a
+  // horizon that no longer crowds the frame at 4x. Priced above the rungs below
+  // it so it stays the last thing a run buys. Re-fit with
+  // `node test/tools/economy.mjs --sweep` if the density moves again.
+  zoomLevels: [1, 1.5, 2.5, 4, 8],
   // What one frame-share of unicorn is worth on each sensor: 1 / 1.5 / 3 / 6 of
   // the base rate. Size is coverage x this, so a subject filling a tenth of the
   // frame scores 100 on the cheapest camera and 600 on the best.
@@ -199,7 +203,7 @@ const state = {
 // The top camera, because a match is settled by looking at the photographs and
 // tier 1 encodes them at JPEG quality 0.3. Everyone is equal either way, so this
 // only makes the pictures sharp and the numbers bigger.
-const MP_GEAR = { mz: 3, rs: 3, sh: 1 };
+const MP_GEAR = { mz: 4, rs: 3, sh: 1 };
 
 // The save carries two separate facts. `c` alone means "you belong to this
 // lobby", which is what Rematch and a stray refresh come back to. `c` with `g`
@@ -233,7 +237,7 @@ if (mpCode && saved.g) {
 const LADDERS = [
   // p[0] is the free rung nobody buys -- you start standing on it -- so the
   // prices are the same four they always were, shifted along by one.
-  ['zoom', CONFIG.zoomLevels, [0, 900, 900], 'mz', '×'],
+  ['zoom', CONFIG.zoomLevels, [0, 900, 900, 1400], 'mz', '×'],
   // Named for its unit rather than "resolution": the row already reads
   // `dpi 1500 [3000 $1200]`, so spelling the unit out on every value as well
   // said it three times over.
@@ -520,14 +524,22 @@ function showResults() {
   const waiting = Math.max(0, net.lobby().length - rivals.length - 1);
   ui.showResults(state, state.scored, showDetail,
                  state.mp ? home : showShop, rivals,
-                 state.mp ? waiting : undefined, ownRoll);
+                 state.mp ? waiting : undefined, ownRoll,
+                 // The quota of the ride just ridden, which is a level behind the
+                 // counter: endRun tests it and THEN increments. Not state.dead --
+                 // that is set and never cleared, so it answers "did this run end",
+                 // and a match, which sets no quota, must get neither answer.
+                 state.mp ? 0 : goal(state.rides - 1));
 }
 
 function showDetail(i) {
   // -1 is the My photos / Result toggle rather than a shot.
   if (i < 0) { ownRoll = !ownRoll; return showResults(); }
   state.phase = DETAIL;
-  ui.showPhoto(state.scored[i], showResults);
+  // The roll is read in the order it was shot, which is the order the thumbnails
+  // are in -- not the best-first order the results table ranks them in. Stepping
+  // is the same call again, so there is no second screen to keep in step.
+  ui.showPhoto(state.scored[i], showResults, showDetail, i, state.scored.length);
 }
 
 // The dead end: the last ride came in under its quota. Nothing you can do from
@@ -539,7 +551,10 @@ const broke = () => state.dead;
 function showShop() {
   state.phase = SHOP;
   if (broke()) return title();
-  ui.showShop(state, CONFIG, offers(), buy, ride, title, goal(state.rides));
+  ui.showShop(state, CONFIG, offers(), buy, ride, title, goal(state.rides),
+              // "If available": the roll only exists on the page load that shot
+              // it, so a shop reached at boot or after a reload offers no way back.
+              state.scored.length ? showResults : 0);
 }
 
 function buy(i) {
@@ -692,7 +707,13 @@ if (mpCode) net.connect(mpCode, state.who, start, refresh);
 // a stray reload mid-ride costs the ride but not the bank.
 // A match drops straight onto the cart: riders start together, and a card
 // waiting on a click would hold one of them behind the others.
-if (saved.g) { state.go = 0; persist(); state.mp ? primary() : brief(); }
+// The dead end is asked FIRST, because every branch under it is a way back into
+// a run that is already over: `g` puts you straight on the cart, `c` in a lobby,
+// and only the third reaches showShop -- which is where a missed quota used to be
+// discovered, and so was the only entry point that could discover it. A save
+// carrying a lobby code, or a Ride again marker, walked past the game-over card.
+if (broke()) title();
+else if (saved.g) { state.go = 0; persist(); state.mp ? primary() : brief(); }
 else if (saved.c) lobby(saved.c, saved.h);
 else if (saved.v) showShop();
 else title();

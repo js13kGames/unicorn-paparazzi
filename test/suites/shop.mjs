@@ -57,13 +57,13 @@ const check = (name, got, want) => {
               ok ? '' : '-> ' + JSON.stringify(got));
 };
 
-const render = (st) => {
+const render = (st, onPhotos) => {
   // `rides` is the level, and so the quota the screen has to quote: without a
   // default the curve is handed undefined and the line reads "$NaN".
   const state = { bank: 2140, film: 8, rides: 0,
                   mz: 1, rs: 0, sh: 0, ...st };
   ui.showShop(state, cfg, offersFor(state), () => {}, () => {}, () => {},
-              goal(state.rides));
+              goal(state.rides), onPhotos);
   return nodes.card.innerHTML;
 };
 
@@ -123,6 +123,20 @@ check('and the shop itself is unchanged by it', later,
 check('one button per ladder, and nothing else',
       (mid.match(/data-i="\d"/g) || []).length, LADDERS.length);
 check('the header is the bank', mid, (h) => /<h2>\$2140<\/h2>/.test(h));
+
+// --- the way back to the roll --------------------------------------------
+// The roll only exists on the page load that shot it, so index.js hands over a
+// handler only when there is one to go back to. No handler, no button: a Photos
+// button opening an empty table is worse than no button at all.
+let back = 0;
+const withRoll = render({}, () => { back = 1; });
+check('a shop opened off a ride offers the way back to the roll',
+      withRoll, (h) => h.includes('<button id="s">Photos</button>'));
+nodes.card.onclick({ target: { closest: (q) => (q === 'button' ? { id: 's', dataset: {} } : null) },
+                     stopPropagation() {} });
+check('and the button is wired to it', back, 1);
+check('a shop opened with no roll offers none',
+      render({}), (h) => !h.includes('id="s"'));
 
 // --- affordability ---
 const broke = render({ bank: 0, mz: 2, rs: 1, sh: 1 });

@@ -150,12 +150,14 @@ check('and nothing sells it', !/frames\(/.test(src));
 const shopSrc = /^function showShop\(\)[\s\S]*?^}$/m.exec(src)[0];
 const routed = (dead) => {
   let to = null;
-  const state = { dead, rides: 0 };
+  // `scored` is the roll the Photos button offers to go back to; empty here,
+  // since what this pins is the routing and not the footer.
+  const state = { dead, rides: 0, scored: [] };
   new Function('state', 'broke', 'ui', 'CONFIG', 'offers', 'buy', 'ride', 'title',
-               'SHOP', 'goal', shopSrc + ';showShop()')(
+               'SHOP', 'goal', 'showResults', shopSrc + ';showShop()')(
     state, () => state.dead,
     { showShop: () => { to = 'shop'; } }, {}, () => [], 0, 0,
-    () => { to = 'title'; }, SHOP, () => 0);
+    () => { to = 'title'; }, SHOP, () => 0, () => { to = 'results'; });
   return to;
 };
 check('a player who missed the quota is sent to the dead end',
@@ -557,17 +559,18 @@ check('a rider who left after reporting cannot drive it negative',
 check('nor can several of them', waitingFor(1, 3) === 0, waitingFor(1, 3));
 
 // --- which screen a load lands on --------------------------------------------
-// Three routes, and the one-shot `g` marker is what separates "Ride again"
-// (straight onto the cart) from an actual refresh (back to the shop).
-const bootLines = /^if \(saved\.g\)[\s\S]*?^else title\(\);$/m.exec(src);
+// Four routes, and the one-shot `g` marker is what separates "Ride again"
+// (straight onto the cart) from an actual refresh (back to the shop). The dead
+// end is the first of them and outranks the other three -- see below.
+const bootLines = /^if \(broke\(\)\)[\s\S]*?^else title\(\);$/m.exec(src);
 check('the boot routing is still there to test', !!bootLines);
 
 const route = (saved, mp) => {
   const hit = [];
   const state = { mp };
-  new Function('saved', 'state', 'persist', 'primary', 'showShop', 'title', 'lobby', 'ui',
-               'brief', bootLines[0])(
-    saved, state,
+  new Function('saved', 'state', 'broke', 'persist', 'primary', 'showShop', 'title', 'lobby',
+               'ui', 'brief', bootLines[0])(
+    saved, state, () => saved.q,
     () => hit.push('persist'), () => hit.push('ride'), () => hit.push('shop'),
     () => hit.push('title'), (c, h) => hit.push('lobby:' + c + ':' + (h || 0)),
     { toast: () => {} }, () => hit.push('brief'));
@@ -575,6 +578,18 @@ const route = (saved, mp) => {
 };
 
 check('a fresh player lands on the title', route({}).hit.join() === 'title');
+
+// The dead end has to beat all three. It used to be discovered inside showShop
+// and nowhere else, which made it the ONLY route that could discover it: a save
+// still carrying a lobby code went back to the lobby, and one carrying the Ride
+// again marker went straight back onto the cart, both of them playing on a run
+// that had already ended.
+check('a missed quota beats the Ride again marker',
+      route({ v: VERSION, q: 1, g: 1 }).hit.join() === 'title');
+check('and beats a lobby code',
+      route({ v: VERSION, q: 1, c: '4821' }).hit.join() === 'title');
+check('and beats a plain reload into the shop',
+      route({ v: VERSION, q: 1, b: 900 }).hit.join() === 'title');
 
 // `c` without `g` is what Rematch and a mid-match refresh come back to: it means
 // "you belong to this lobby", not "a ride is starting".
