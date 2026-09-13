@@ -407,19 +407,20 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota, onPho
   panel(
     '<h1>Shop</h1>' +
     '<h2>$' + state.bank + '</h2>' +
+    '<p class="h">' + state.rides + ' rides, $' + state.earned + ' lifetime</p>' +
     // A `current`/`Upgrade` header row here measured at 35 bytes -- a tenth of
     // everything the three-column rebuild saved -- and the columns read without
     // it: a name, the rung you own in green, and a button naming what it buys
     // and what it costs. Restore it here if the budget ever allows.
     '<table>' + rows + '</table>' +
-    '<p class="h"><button id="e">Ride again</button> ' +
+    // Everything else you might want -- multiplayer, wiping the save -- lives on
+    // the menu now, so the shop only has to be able to get you back there.
+    '<p class="h"><button id="mp">Menu</button> ' +
     // Only when there is a roll to go back to. A shop opened at boot, or after
     // the Ride again reload, has an empty one -- index.js passes no handler
     // there, and a button that led to an empty table would be worse than none.
     (onPhotos ? '<button id="s">Photos</button> ' : '') +
-    // Everything else you might want -- multiplayer, wiping the save -- lives on
-    // the menu now, so the shop only has to be able to get you back there.
-    '<button id="mp">Menu</button></p>'
+    '<button id="e">Ride again</button></p>'
   );
   el.card.onclick = (e) => {
     const b = e.target.closest('button');

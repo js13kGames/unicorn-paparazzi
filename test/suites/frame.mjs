@@ -126,7 +126,7 @@ for (const a of ASPECTS) {
   console.log('        jpeg quality per tier: ' + jpeg.join(' / '));
   check('a better camera develops a better jpeg',
         jpeg.every((q, i) => i === 0 || q > jpeg[i - 1]), true);
-  check('the cheapest camera is heavily compressed', jpeg[0], 0.05, 1e-9);
+  check('the cheapest camera is heavily compressed', jpeg[0], 0.15, 1e-9);
   check('and the best one is not', jpeg[3], 0.9, 1e-9);
   check('quality never reaches the scoring pass',
         new Set(calls.map((c) => c.join(','))).size, before.size);

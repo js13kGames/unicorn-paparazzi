@@ -676,12 +676,12 @@ function title() {
 const brief = () => ui.showBrief(goal(state.rides));
 
 // The menu is reachable from the shop without a reload, and by then the world
-// has been ridden -- the film is spent and the cart is round the track. A fresh
-// boot has not, so it can just brief and start where it stands rather than
-// paying for a second worldgen. There used to be a third case here, for a roll
-// with no frames in it; a ride always starts with eight now, so it could not be
-// reached.
-const solo = () => (distance ? ride() : brief());
+// has been ridden -- the film is spent and the cart is round the track. Solo
+// from there goes back to the shop, not straight into another ride: a run
+// already in progress has upgrades sitting unbought. A fresh boot has ridden
+// nothing yet, so it can just brief and start where it stands rather than
+// paying for a second worldgen.
+const solo = () => (distance ? showShop() : brief());
 
 // Whatever screen is up, redraw it: the roster and the results board both move
 // on their own as riders arrive, finish and leave.

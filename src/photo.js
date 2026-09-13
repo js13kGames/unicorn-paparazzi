@@ -84,7 +84,7 @@ export function createPhotoRig(gl, canvas, draw) {
     const cw = canvas.width * fx, ch = canvas.height * fy;
     tctx.drawImage(canvas, (canvas.width - cw) / 2, (canvas.height - ch) / 2, cw, ch,
                    0, 0, thumb.width, thumb.height);
-    const pic = thumb.toDataURL('image/jpeg', [.05, .3, .6, .9][res]);
+    const pic = thumb.toDataURL('image/jpeg', [.15, .3, .6, .9][res]);
     // The 540p copy exists only to fit on the wire. Solo play never sends one,
     // and a second JPEG encode per shot is real work on a phone.
     let small = '';

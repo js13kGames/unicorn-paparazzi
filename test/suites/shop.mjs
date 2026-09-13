@@ -60,7 +60,7 @@ const check = (name, got, want) => {
 const render = (st, onPhotos) => {
   // `rides` is the level, and so the quota the screen has to quote: without a
   // default the curve is handed undefined and the line reads "$NaN".
-  const state = { bank: 2140, film: 8, rides: 0,
+  const state = { bank: 2140, film: 8, rides: 0, earned: 0,
                   mz: 1, rs: 0, sh: 0, ...st };
   ui.showShop(state, cfg, offersFor(state), () => {}, () => {}, () => {},
               goal(state.rides), onPhotos);
@@ -204,15 +204,16 @@ const soloSrc = /^(const solo = .+)$/m.exec(src);
 check('solo() is still there to test', !!soloSrc, true);
 const runSolo = (distance) => {
   const went = [];
-  new Function('distance', 'ride', 'brief',
+  new Function('distance', 'showShop', 'brief',
                soloSrc[1] + ';solo()')(
-    distance, () => went.push('ride'), () => went.push('brief'));
+    distance, () => went.push('shop'), () => went.push('brief'));
   return went[0];
 };
 // A fresh boot briefs where it stands rather than paying for a second worldgen;
-// the click that dismisses the briefing is what starts the cart.
+// the click that dismisses the briefing is what starts the cart. A world
+// already ridden goes back to the shop instead, so upgrades never sit unbought.
 check('a fresh boot briefs where it stands', runSolo(0), 'brief');
-check('and a world already ridden reloads into a fresh one', runSolo(800), 'ride');
+check('and a world already ridden goes back to the shop', runSolo(800), 'shop');
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);
