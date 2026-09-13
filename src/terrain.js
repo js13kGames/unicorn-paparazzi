@@ -32,11 +32,10 @@ function generateBands(seed, N, cfg) {
       const i = y * N + x;
       const e = rawElevation(seed, x, y);
       let q = Math.round(e);
-      // Plains are sticky: bands adjacent to 1 mostly collapse onto it, which is
-      // what turns noisy lowland into the broad open plains the game wants.
-      // Band 0 is spared near the waterline so shores keep their sand rim.
-      // The roll comes from a noise field rather than white noise, so sticky
-      // regions are coherent patches instead of salt-and-pepper along every edge.
+      // Plains are sticky: bands adjacent to 1 mostly collapse onto it, turning
+      // noisy lowland into broad plains. Band 0 is spared near the waterline so
+      // shores keep their sand rim. The roll comes from a noise field, not white
+      // noise, so sticky regions are patches rather than salt-and-pepper.
       if ((q === 2 || (q === 0 && e > 0.15)) &&
           fbm(seed + 555, x / 5, y / 5, 2) < cfg.plainStickiness) q = 1;
       band[i] = q;
@@ -182,10 +181,9 @@ function carve(N, height, path) {
   }
   for (let k = 0; k < N * N; k++) {
     if (weight[k] <= 0) continue;
-    // Sea floor is never touched. Grading it up to meet the rails built a mound
-    // out of the bay, and the raised cells kept their water coloring, so the
-    // crossing appeared to stand on blue supports. The track simply spans open
-    // water instead.
+    // Sea floor is never touched: grading it up to the rails built a mound out of
+    // the bay that kept its water colouring, so the crossing stood on blue
+    // supports. The track spans open water instead.
     if (height[k] < 0) continue;
     height[k] += (target[k] - height[k]) * weight[k];
   }
@@ -194,10 +192,9 @@ function carve(N, height, path) {
 
 // --- the track's own mesh ------------------------------------------------
 
-// Painting the track onto the terrain grid can only ever give it a one-tile
-// blurred edge, because the grid's corner vertices are shared. Building it as a
-// ribbon straight off the path polyline instead gives exact, hard edges that owe
-// nothing to the tile grid -- and lets it carry rails.
+// Painted onto the terrain grid the track can only have a one-tile blurred edge,
+// since corner vertices are shared. A ribbon off the path polyline has exact edges
+// that owe nothing to the grid -- and can carry rails.
 const RIBBON_LIFT = 0.20;   // clears the ground under the whole bed; reads as embankment
 const HALF_W = 1.50;
 const BED = [108, 82, 58], RAIL = [176, 170, 160];
@@ -236,9 +233,8 @@ function buildTrackMesh(path, mesh, N) {
   }
 
   // A rail bed is flat across its width, so each cross-section takes one height:
-  // the highest ground anywhere under it. Sampling only at the ribbon's own
-  // vertices is not enough -- the ground bulges up between them on steep flanks,
-  // and the terrain pokes through the middle of the bed.
+  // the highest ground under it. Sampling only at the ribbon's own vertices misses
+  // the bulge between them, and the terrain pokes through the bed.
   const y = new Float32Array(P);
   const SAMPLES = 13;
   for (let i = 0; i < P; i++) {

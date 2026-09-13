@@ -104,7 +104,6 @@ function persist() {
       // the shop spends the bank down, so it is no measure of how the run went.
       e: state.earned,
       y: state.trophies,
-      k: state.lastPaid,
     }));
   } catch (e) { /* private browsing: the run just doesn't carry over */ }
 }
@@ -116,7 +115,9 @@ const state = {
   // a build with more tiers indexes off the end of the ladder, which reads as an
   // undefined focal length and a NaN field of view.
   mz: Math.min(saved.z || 1, CONFIG.zoomLevels.length - 1),
-  rs: Math.min(saved.r || 0, 3),   // clamped for the same reason
+  // Clamped for the same reason. Keep these one-expression-per-line and with
+  // nothing after the comma: test/suites/save.mjs lifts each field by regex.
+  rs: Math.min(saved.r || 0, 3),
   // A capacity, not a stock: every ride is a page load, so the initialiser IS the
   // refill.
   film: FRAMES,
@@ -131,7 +132,6 @@ const state = {
   dead: saved.q || 0,
   earned: saved.e || 0,       // gross takings of the whole run; see persist()
   trophies: saved.y || 0,     // cosmetic once the shop has nothing left to sell
-  lastPaid: saved.k || 0,     // what the last (failed) ride earned; see endRun()
   room: '',              // the lobby we are in, '' when playing alone
   owner: 0,
   who: saved.n || '',   // what other riders see us called
@@ -383,13 +383,13 @@ function endRun() {
   state.phase = RESULTS;
   // One result per rider per ride: the total and the best single frame, both
   // wanted twice over (on the wire, and by the bank).
-  let best = 0;
-  for (let i = 1; i < state.scored.length; i++) {
+  // Not `ride` -- that name is the frame loop's ride PROGRESS.
+  let best = 0, paid = 0;
+  for (let i = 0; i < state.scored.length; i++) {
+    paid += state.scored[i].sum;
     if (state.scored[i].sum > state.scored[best].sum) best = i;
   }
   const shot = state.scored[best];
-  // Not `ride` -- that name is the frame loop's ride PROGRESS.
-  const paid = state.scored.reduce((a, s) => a + s.sum, 0);
   // Borrowed gear earns no money, or a match would be the cheapest way to farm the
   // shop. The level counter is inside the guard for the same reason: a match must
   // not advance a solo run, nor end it by missing a quota it never set.
@@ -398,9 +398,7 @@ function endRun() {
     state.earned += paid;
     keepBest(shot, state.photos[best]);
     // Checked against the level just ridden, before the counter moves on.
-    // `lastPaid` is for the game-over card: it answers "missed by how much" after
-    // the run has moved on from `paid`.
-    if (paid < goal(state.rides)) { state.dead = 1; state.lastPaid = paid; }
+    if (paid < goal(state.rides)) state.dead = 1;
     state.rides++;
   }
   persist();
@@ -546,7 +544,7 @@ function title() {
   // the dead end on their first ride had no way out of it. Same for the picture,
   // which a ride has already written by the time this card can show.
   ui.showTitle(solo, lobby, restart, broke(), read(SAVE_KEY).v, read(PIC_KEY), state.earned,
-               goal(state.rides - 1), state.trophies, state.lastPaid);
+               goal(state.rides - 1), state.trophies);
 }
 
 // What the ride is for, and what it has to earn, before every solo ride.
@@ -638,8 +636,9 @@ function frame(now) {
   if (state.phase === RIDE) {
     // Gated to RIDE: once the ride ends `state.rides` moves on to a higher quota,
     // and one more update would flash the just-met quota red as it jumped.
-    ui.updateHud(state, ride, clock, CONFIG.zoomLevels, state.mp ? 0 :
-                 [state.scored.reduce((a, s) => a + s.sum, 0), goal(state.rides)]);
+    let taken = 0;
+    for (const s of state.scored) taken += s.sum;
+    ui.updateHud(state, ride, clock, CONFIG.zoomLevels, state.mp ? 0 : [taken, goal(state.rides)]);
     if (ride >= 1) endRun();
     // Solo, an empty roll ends the ride at once. In a match the cart runs on with
     // a dead shutter until every roll in the room is empty, so the first rider to

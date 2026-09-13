@@ -52,8 +52,12 @@ function fold(html) {
 
   const markup = body[1].trim();
   const lit = (s) => JSON.stringify(s);
+  // js13kgames.com deletes its game iframe on any load after the first, and every
+  // ride is a reload -- so under a foreign parent, run in a nested frame of our own.
+  // The block opened here is closed, with the shell as its `else`, in main().
   const boot =
     'document.head.insertAdjacentHTML("beforeend","<style>"+' + lit(style[1]) + '+"<\\/style>");' +
+    'if(frameElement||top==self){' +
     'document.body.innerHTML=' + lit(markup) + ';';
 
   // What is left is the shell the browser parses before the script runs. It is
@@ -80,7 +84,7 @@ async function main() {
   const js = fs.readFileSync(path.join(DOCS, 'main.js'), 'utf8');
   const html = fs.readFileSync(path.join(DOCS, 'index.html'), 'utf8');
   const { boot, shell } = fold(html);
-  const source = boot + js;
+  const source = boot + js + '}else document.body.innerHTML="<iframe id=c src=?>"';
 
   // Chosen by sweeping seeds and keeping the smallest; any fixed value works,
 // this one happens to pack best. Worth re-sweeping when the budget gets tight --

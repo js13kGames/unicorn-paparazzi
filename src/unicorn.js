@@ -11,17 +11,15 @@ export const COLORS = [
   [0.35, 0.78, 0.35],  // G
   [0.31, 0.55, 0.94],  // B
   [0.67, 0.39, 0.90],  // V
-  // Not a rainbow colour and not on the band table -- the only way to wear this
-  // coat is the rare roll in spawn(), and any photograph it appears in is void.
+  // Not on the band table: only the rare roll in spawn() wears it, and any
+  // photograph it appears in is void.
   [0.13, 0.12, 0.15],  // dark
 ];
 export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'dark'];
 
-// The first one is deliberately blank. A pose only earns a row on the card when
-// it pays something, and walking pays nothing -- so `walking` was seven
-// characters of prose the packer carried and nothing ever printed. What the
-// array still has to be is four long, since the pose table is built off its
-// length. Dev tools that want the word can supply their own; see capture.mjs.
+// The first is deliberately blank: walking pays nothing, so it never earns a row
+// on the card. The array must stay four long -- the pose table is built off its
+// length. Dev tools that want the word supply their own; see capture.mjs.
 export const POSE_NAMES = ['', 'eating', 'sitting', 'neighing'];
 export const POSE_FRAMES = 16;
 const TAU = Math.PI * 2;
@@ -114,10 +112,8 @@ function poseAngles(pose, ph) {
   const set = (p, rx, rz) => { a[p * 2] = rx; a[p * 2 + 1] = rz || 0; };
 
   if (pose === 0) {                       // walking: a trot on the diagonals
-    // Front left swings with back right, and the other pair opposes them, which
-    // is the cheapest gait that reads as walking rather than paddling: one sine
-    // and its negative across four legs. The body bobs at twice the leg rate --
-    // once per footfall rather than once per stride -- which is what s2 is for.
+    // One sine and its negative across four legs -- the cheapest thing that reads
+    // as walking. The body bobs at twice the leg rate, once per footfall.
     lift = 0.03 * s2;
     set(NECK, -0.25);
     set(HEAD, 0.10 + 0.04 * s2);
@@ -192,8 +188,8 @@ export function buildPoseTable() {
 
 // --- population ----------------------------------------------------------
 
-// Each color keeps to its home biome, so rare terrain means rare colors --
-// which is what makes an all-six-color photograph hard to stage.
+// Each color keeps to its home biome, so rare terrain means rare colors -- which
+// is what makes an all-six-color photograph hard to stage.
 function colorForBand(q, volcanic) {
   if (q >= 7) return 4;                      // blue: high peaks
   if (q >= 5) return volcanic ? 0 : 5;       // red on volcanoes, violet on mountains
@@ -213,22 +209,19 @@ export function spawn(world, cfg, seed) {
       const q = Math.round(world.elev[i]);
       if (q < 0) continue;                   // no unicorns in the sea
       if (rnd() >= cfg.unicornDensity) continue;
-      // A few drifters wear an off-biome color, which is what makes a rainbow
-      // shot possible at all near the track.
+      // A few drifters wear an off-biome color; without them no rainbow shot is
+      // possible near the track.
       const color = rnd() < cfg.driftChance
         ? (rnd() * 6) | 0
         : colorForBand(q, world.volcanic[i]);
       list.x.push(x + 0.5);
       list.z.push(z + 0.5);
-      // Bicorn 6%, tricorn 3%, quadricorn 2% -- roughly 40, 20 and 13 per map,
-      // so a ride turns one up and a quadricorn is a few rides' hunting. One draw
-      // whatever the outcome, which is what keeps the herd deterministic.
+      // Bicorn 6%, tricorn 3%, quadricorn 2%. ONE draw whatever the outcome, which
+      // is what keeps the herd deterministic.
       const r = rnd();
       list.horns.push(r < 0.02 ? 3 : r < 0.05 ? 2 : r < 0.11 ? 1 : 0);
-      // 5% wear the dark coat. The horn roll reads the bottom of the same draw,
-      // so the top of it is free and the two stay uncorrelated. At 2% there were
-      // about thirteen to a map, which was too few to be worth watching for --
-      // the hazard has to be common enough that you look before you shoot.
+      // 5% wear the dark coat, off the top of the same draw the horns read the
+      // bottom of. Common enough that you look before you shoot.
       list.coat.push(r > 0.95 ? 6 : color);
     }
   }
@@ -264,13 +257,9 @@ function makeHerd(list, cfg, seed) {
   };
   for (let i = 0; i < n; i++) {
     h.aim[i] = h.yaw[i] = rnd() * TAU;
-    // Irwin-Hall n=3: a bell centred on 1.5 that tails off around 0.5x and 2.5x.
-    // Three uniform draws are the cheapest normal-ish distribution there is, and
-    // they sit in the loop that already draws five times per animal -- which is
-    // what keeps the count unconditional, and the herd the same on both machines.
-    // The floor stays at 0.5 and only the spread above it opened up: a herd that
-    // barely moved made every photograph a still life, and the slow animals are
-    // still there to be found -- there are just fewer of them.
+    // Irwin-Hall n=3: a bell centred on 1.5, tailing off near 0.5x and 2.5x. Three
+    // uniform draws are the cheapest normal-ish distribution there is, and the
+    // count stays unconditional -- which is what keeps both machines in step.
     h.gait[i] = 0.5 + (rnd() + rnd() + rnd()) * (2 / 3);
     h.phase[i] = rnd();
     h.stride[i] = rnd();
@@ -309,12 +298,10 @@ export function updateHerd(h, world, cfg, dt) {
         h.stride[i] -= 1;
         h.fromX[i] = h.toX[i];
         h.fromZ[i] = h.toZ[i];
-        // One tile up, down or sideways -- the same +1/0/-1 walk the terrain uses.
-        // Standing still is NOT one of the nine outcomes: the pair (0,0) came up
-        // one step in nine, and now that the legs move that read as an animal
-        // marking time on the spot. `|| (dx ? 0 : 1)` only fires when both rolled
-        // zero, so it is still exactly two draws every time through -- which is
-        // what keeps the two machines in step.
+        // One tile up, down or sideways. Standing still is NOT one of the nine
+        // outcomes -- with the legs moving it read as marking time on the spot.
+        // `|| (dx ? 0 : 1)` fires only when both rolled zero, so it is still
+        // exactly two draws every time through, which keeps the machines in step.
         const dx = ((rnd() * 3) | 0) - 1;
         const dz = (((rnd() * 3) | 0) - 1) || (dx ? 0 : 1);
         const nx = h.toX[i] + dx, nz = h.toZ[i] + dz;
@@ -326,21 +313,17 @@ export function updateHerd(h, world, cfg, dt) {
           h.aim[i] = Math.atan2(-dx, -dz);
         }
       }
-      // The stride IS the step: one tile crossed, one gait cycle. Left on the
-      // free-running POSE_CYCLE timer the legs would swing at their own rate
-      // and the animal would still be gliding, just with its legs moving --
-      // and a fast walker would stride no quicker than a slow one. This one
-      // assignment is what couples the two, and what makes h.gait visible.
+      // The stride IS the step: one tile crossed, one gait cycle. On the
+      // free-running POSE_CYCLE timer the animal glides with its legs moving, and
+      // a fast walker strides no quicker than a slow one.
       h.phase[i] = h.stride[i];
       const t = h.stride[i];
       const e = t * t * (3 - 2 * t);        // ease so steps don't look robotic
       h.x[i] = h.fromX[i] + (h.toX[i] - h.fromX[i]) * e;
       h.z[i] = h.fromZ[i] + (h.toZ[i] - h.fromZ[i]) * e;
-      // Turn to face where the step is going rather than snapping to it. The
-      // headings are 45 degrees apart, so a snap read as the whole animal
-      // flicking round between one footfall and the next. Shortest way round,
-      // or a turn across the seam would spin the long way. No rnd() in here, so
-      // the draw sequence -- and the shared herd -- is untouched.
+      // Turn towards the new heading rather than snapping: the headings are 45
+      // degrees apart. Shortest way round, or a turn across the seam spins the long
+      // way. No rnd() in here, so the shared draw sequence is untouched.
       let d = h.aim[i] - h.yaw[i];
       d -= Math.round(d / TAU) * TAU;
       h.yaw[i] += d * Math.min(1, dt * 8);
@@ -348,9 +331,8 @@ export function updateHerd(h, world, cfg, dt) {
   }
 }
 
-// Pack every unicorn into the instance buffer. All of them go up each frame:
-// the GPU culls far cheaper than we can, and it keeps gl_InstanceID equal to
-// the herd index, which the photo scoring pass in step 3 depends on.
+// Every unicorn goes up each frame: the GPU culls cheaper than we can, and it
+// keeps gl_InstanceID equal to the herd index, which photo scoring depends on.
 export function packInstances(h, world) {
   const a = h.instances;
   for (let i = 0; i < h.n; i++) {

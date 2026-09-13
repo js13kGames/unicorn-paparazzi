@@ -1,6 +1,5 @@
-// The js13k relay hands any URL path its own isolated room, which is what makes a
-// join code cheap: the code IS the room, so nothing has to filter a shared
-// firehose and presence is per-lobby for free. Single player never connects.
+// The js13k relay gives every URL path its own room, so the join code IS the room
+// -- no filtering, and presence per lobby for free. Single player never connects.
 //
 //   {t:'h', i:id, n:name}           I just arrived -- who is here?
 //   {t:'h', i:id, n:name, r:1}       a reply; r stops it echoing forever
@@ -13,30 +12,25 @@
 // leaving. We act on the first and the last. '+id' is redundant -- an arriving
 // rider says hello for itself -- and JSON.parse drops it for free.
 //
-// Everything here is optional by construction. If the socket never opens, or the
-// relay is down, or we are offline, the lobby simply stays empty: every send is
-// guarded and no failure path reaches the frame loop.
+// Optional by construction: every send is guarded, and no failure path reaches the
+// frame loop -- a dead relay just means an empty lobby.
 
 // The room prefix js13kgames issued. A lobby appends '-' and its four digits.
 const RELAY = 'wss://relay.js13kgames.com/unicorn-paparazzi';
 
-// Our own id. The relay issues one on connect; the random stand-in only matters
-// until that lands, and is what the local relay tool leaves us with.
+// Our own id. The relay issues one on connect; this stand-in covers until then.
 let ME = Math.random().toString(36).slice(2, 6);
 
-// Ids are strangers' text, so one length cap, applied everywhere an id enters --
-// otherwise the roster and the results board could disagree about who someone is.
+// Ids are strangers' text: one cap, applied everywhere an id enters, or the roster
+// and the results board could disagree about who someone is.
 const key = (s) => s.slice(0, 8);
 
-// A rival's breakdown is drawn as markup on the winner's card, so a rival
-// controls bytes that reach innerHTML. Filtered to a whitelist rather than an
-// escape list: whatever else is in it, what comes out can only be text. Length
-// and row count are capped too, because a hostile peer chooses those as well.
+// A rival's breakdown reaches innerHTML, so a rival controls those bytes.
+// Whitelist, not an escape list: whatever goes in, what comes out is text. Length
+// and row count are capped too, since a hostile peer picks those as well.
 //
-// \u00d7 is the multiplication sign a bonus row uses and \u00b7 the dot that
-// separates a detail row's label from its arithmetic; without them a rival's
-// card would lose the punctuation your own keeps. Both are spelled as escapes,
-// not as themselves: a non-ASCII byte inside a regex literal fails roadroller's
+// \u00d7 (x) and \u00b7 (·) are the punctuation the breakdown rows use, spelled as
+// escapes because a non-ASCII byte in a regex literal fails roadroller's
 // round-trip check at pack time.
 const clean = (v) => String(v == null ? '' : v).replace(/[^\w \u00d7\u00b7%+.-]/g, '').slice(0, 24);
 const rows = (v) => (Array.isArray(v) ? v : []).slice(0, 16)
@@ -48,44 +42,37 @@ const here = new Map();            // everyone in the lobby, id -> their name
 const spent = new Set();           // ...and which of them have no film left
 let myName = '';
 
-// What to call a rider on screen. A relay id is unreadable, so four characters
-// of it stand in until they tell us something better.
+// A relay id is unreadable, so four characters of it stand in until they say more.
 const nameOf = (i) => here.get(i) || 'rider ' + i.slice(0, 4);
 
 
 export const online = () => !!ws && ws.readyState === 1;
 export const others = () => [...riders.values()];
-// Ready to draw. Your own row is your own name rather than "You!": in a lobby
-// the useful thing is seeing that the name you typed took, and the results
-// screen is where being told which one is you actually matters.
+// Your own lobby row is your typed name, not "You!" -- seeing it took is the
+// useful thing here; the results screen is where "which one is me" matters.
 export const lobby = () => [...here.keys()].map(nameOf);
-// Returns what it actually kept: the name goes straight into an HTML attribute
-// on the way back out, so the caller must store the filtered one, not the typed
-// one. clean() also caps the length, which is why the field needs no maxlength.
+// Returns what it KEPT: the name goes into an HTML attribute on the way back out,
+// so the caller must store the filtered one. clean() caps length too, which is why
+// the field needs no maxlength.
 export const setName = (s) => {
   myName = clean(s);
   hello(1);
   return myName;
 };
-// Once nobody can take another photograph there is nothing left to ride for, so
-// the ride can stop early. Empty means no lobby at all, which is not everyone
-// being out of film -- it is a solo player, and they must never match this.
+// Nothing left to ride for. An empty roster is a solo player, not everyone being
+// out of film, and must never match.
 export const allSpent = () => here.size > 0 && spent.size >= here.size;
 
 // onGo(seed) fires when the host starts the ride. onChange() fires whenever the
 // roster or the results board moves, so whichever screen is up can redraw.
 export function connect(code, name, onGo, onChange) {
   myName = clean(name);
-  // Hopping to another code is a second connect, so the old room has to be let
-  // go of first -- otherwise you would still be broadcasting into a lobby you
-  // left, and still counting its riders as your own.
+  // Hopping codes is a second connect, so let go of the old room first.
   close();
   try {
-    // Served from localhost: talk to test/tools/relay.mjs, which rooms by path
-    // the same way the real relay does. Webpack folds NODE_ENV in at build time,
-    // so a production build sees `if (false && ...)` and terser takes the whole
-    // branch out -- the local URL and the hostname regex are 25 bytes of the zip
-    // that only the dev workflow ever needed.
+    // On localhost, talk to test/tools/relay.mjs instead. Webpack folds NODE_ENV in
+    // at build time, so a production build sees `if (false && ...)` and terser
+    // drops the whole branch -- 25 bytes only the dev workflow needed.
     let url = RELAY + '-' + code;
     if (process.env.NODE_ENV !== 'production'
         && /^(localhost|127|\[?::1)/.test(location.hostname)) url = 'ws://localhost:1313/' + code;
@@ -94,37 +81,30 @@ export function connect(code, name, onGo, onChange) {
     return;                        // no socket, no lobby, still a game
   }
   ws.onmessage = (e) => {
-    // The relay names us before anything else arrives, so this is the earliest
-    // point at which we can say hello AS someone -- saying it on open would sign
-    // the message with the stand-in id, and then '-id' would name a rider the
-    // roster has no row for.
+    // The earliest point we can say hello AS someone: saying it on open would sign
+    // with the stand-in id, and '-id' would then name a rider with no row.
     if (e.data[0] === '@') {
       ME = e.data.slice(1);
       here.set(key(ME), myName);
       hello();
       return onChange();
     }
-    // A rider who leaves comes off the roster and off the film tally, so nobody
-    // waits on them. Their RESULT stays: they already finished, and their score
-    // and photograph stand whether or not they are still connected. Dropping it
-    // meant the first player to hit Rematch wiped their own card off everyone
-    // else's results screen on the way out.
+    // A leaver comes off the roster and the film tally so nobody waits on them.
+    // Their RESULT stays -- dropping it meant the first to hit Rematch wiped their
+    // own card off everyone else's results screen.
     if (e.data[0] === '-') {
       const i = key(e.data.slice(1));
       if (here.delete(i) | spent.delete(i)) onChange();
       return;
     }
-    // Anything else is a stranger's text. Parse defensively and check the shape
-    // before use -- a malformed payload must not throw inside a frame.
+    // A stranger's text: parse defensively, check the shape, never throw in a frame.
     let m;
     try { m = JSON.parse(e.data); } catch (err) { return; }
     if (!m || m.i === ME) return;
     if (m.t === 'g' && typeof m.s === 'number') return onGo(m.s | 0);
     if (typeof m.i !== 'string') return;
     if (m.t === 'h') {
-      // A hello always carries the sender's name, so it is the whole record:
-      // presence and what to call them. "My roll is empty" rides along on it too
-      // rather than earning a message type of its own.
+      // A hello is the whole record: presence, name, and whether their roll is out.
       const h = key(m.i);
       here.set(h, clean(m.n));
       if (m.e) spent.add(h);
@@ -133,8 +113,7 @@ export function connect(code, name, onGo, onChange) {
     } else if (m.t === 'd' && typeof m.n === 'number') {
       const i = key(m.i);
       here.set(i, here.get(i) || '');    // a result is proof of presence
-      // The name is captured here rather than looked up later, because a result
-      // outlives the connection that sent it and the roster does not.
+      // Captured now, not looked up later: a result outlives the connection.
       riders.set(i, {
         who: nameOf(i),
         n: Math.max(0, m.n | 0),
@@ -148,8 +127,7 @@ export function connect(code, name, onGo, onChange) {
   };
 }
 
-// Leaving the lobby: the socket goes, and with it the roster the host is
-// counting. Without this, walking away leaves a ghost rider behind.
+// Without this, walking away leaves a ghost rider on everyone else's roster.
 export function close() {
   if (ws) ws.close();
   ws = null;
@@ -160,11 +138,9 @@ export function close() {
 
 const send = (o) => { if (online()) try { ws.send(JSON.stringify(o)); } catch (e) { /* dropped */ } };
 
-// Presence, and name. Every hello this side sends goes through here, so there is
-// one place that decides what a hello says. `r` marks a reply, so it does not
-// start an echo; `e` says the roll is empty. JSON.stringify drops an undefined
-// field, which is what keeps all three shapes in the protocol comment above one
-// call.
+// Every hello goes through here. `r` marks a reply so it does not start an echo;
+// `e` says the roll is empty. JSON.stringify drops undefined fields, which is what
+// keeps all three shapes above one call.
 const hello = (r, e) => send({ t: 'h', i: ME, n: myName, r, e });
 
 // Flagged as a reply so nobody answers it: this is news, not an arrival.

@@ -42,12 +42,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new TerserPlugin({
-        // The service worker is copied, not bundled, and it is NOT part of the
-        // jam zip -- but the minimizer still ran over it, and the property
-        // mangler renamed the ServiceWorker API out from under it: `waitUntil`
-        // became `i` and `respondWith` became `t`, so install threw and every
-        // fetch event threw after it. Terser's DOM list does not carry those
-        // names. Nothing here is worth a byte to us, so it is simply excluded.
+        // The service worker is copied, not bundled, and not in the jam zip -- but
+        // the property mangler still renamed the ServiceWorker API out from under
+        // it (`waitUntil`, `respondWith`), which Terser's DOM list does not carry.
         exclude: /service-worker/,
         extractComments: false,
         terserOptions: {
@@ -65,35 +62,28 @@ module.exports = {
           },
           mangle: {
             toplevel: true,
-            // Terser's `toplevel` renames variables but never object properties,
-            // which is why `driftChance`, `trackMesh` and `horns` were shipping in
-            // full. This mangles our own property names too.
+            // `toplevel` renames variables but never properties, so this mangles
+            // our own property names too.
             //
-            // The rule that makes it safe: only names of THREE OR MORE characters
-            // are touched. Everything already at one or two characters is left
-            // exactly as it is -- which costs nothing, since a one-character name
-            // has nothing left to save -- and that single line protects both
-            // formats that outlive a build:
-            //   the save keys  (v t g c h n b z r f s, index.js persist())
-            //   the wire keys  (t i n p b e r s, net.js) -- renaming these would
-            //                  make this build unable to play with any other, and
-            //                  would silently void every existing save.
-            //   the ladder keys (mz rs sh) -- LADDERS carries these as strings and
-            //                  index.js spends them as `state[key]`, so the dotted
-            //                  reads have to keep matching the string. They used to
-            //                  be `maxZoom`/`res`/`shutterTier` on the reserved list
-            //                  below; two characters costs the same as a mangled
-            //                  name and needs no entry to defend it.
+            // THE RULE THAT MAKES IT SAFE: only names of three or more characters
+            // are touched, so every format that outlives a build is protected by
+            // being one or two characters long --
+            //   save keys   (v t g c h n b z r f s, index.js persist())
+            //   wire keys   (t i n p b e r s, net.js): renaming these would make
+            //               this build unable to play with any other.
+            //   ladder keys (mz rs sh): LADDERS carries them as strings and spends
+            //               them as `state[key]`, so the dotted reads must keep
+            //               matching the string.
             properties: {
               regex: /^.{3,}$/,
               // Quoted stays quoted: render.js reads `prog.u['pal[0]'] || prog.u.pal`,
               // and mangling only the dotted half is exactly how that breaks.
               keep_quoted: true,
               reserved: [
-                // Uniform names. gl.js fills `p.u[name]` from getActiveUniform, so
-                // the keys arrive from the shader at runtime and Terser cannot see
-                // them -- but every read is dotted, and would be renamed to a name
-                // the GLSL never declares. Kept in step with build/check-shaders.mjs.
+                // Uniform names: gl.js fills `p.u[name]` from getActiveUniform, so
+                // these keys arrive from the shader at runtime and Terser cannot see
+                // them, but every read is dotted. Kept in step with
+                // build/check-shaders.mjs.
                 'eye', 'sky', 'fog', 'idPass', 'sentinel', 'pal', 'poses',
               ],
             },

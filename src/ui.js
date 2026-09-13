@@ -1,8 +1,7 @@
 import { RIDE } from './mode.js';
 
-// Element ids are written into HTML strings, and terser cannot see into a string
-// -- it renames variables and leaves "id=\"shop\"" exactly as typed. So unlike
-// everything else in this file, these are hand-shortened. Measured at 11 bytes.
+// Element ids appear inside HTML strings, which terser cannot rename, so they are
+// hand-shortened:
 //
 //   a start (host)   e ride again   k back    m my photos / results
 //   o join           s shop / rematch         x reset
@@ -35,35 +34,19 @@ export function updateHud(state, ride, clock, zoom, quota) {
   el.vf.style.inset = ((1 - state.fy) * 50).toFixed(1) + '% ' +
                       ((1 - state.fx) * 50).toFixed(1) + '%';
   el.bar.style.width = (Math.min(1, ride) * 100).toFixed(1) + '%';
-  // Losing the pointer is otherwise invisible -- you find out by taking a photo
-  // you did not mean to take. This used to be a 2.6s toast fired from the
-  // pointerlockchange event, which meant the one moment it mattered -- sitting
-  // unlocked, wondering why the camera will not turn -- was the moment it had
-  // already expired. It is a state now, so it is on screen for exactly as long
-  // as it is true. A phone never has a pointer to lose, so `state.t` keeps the
-  // hint off a screen where it could only ever be wrong.
-  // innerHTML rather than textContent, because the quota below carries a colour.
-  // Everything interpolated in is either a number or one of two fixed strings.
+  // The lost-pointer hint is a state, not a toast: it is on screen for exactly as
+  // long as it is true. `state.t` keeps it off a phone, which has no pointer to
+  // lose. innerHTML because the quota below carries a colour; everything
+  // interpolated is a number or a fixed string.
   el.hud.innerHTML = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
     (state.phase === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '') +
-    // What the ride has taken against what it owes, on its own line under the
-    // progress. Red until the target is met, green once it is -- at a glance,
-    // "am I safe yet". Solo only; a match sets no quota.
-    //
-    // It lived under the film count for a day and was invisible there: #roll,
-    // the thumbnail strip, starts at top:60px in the same right-hand corner, and
-    // a three-line film box reaches exactly that far -- so the first photograph
-    // taken painted a thumbnail straight over this line. The left column is empty
-    // all the way down to the track bar, which is why it is here.
+    // Taken against owed: red until the target is met, green once it is. Solo only.
+    // It must stay in the left column -- under the film count, #roll paints the
+    // first thumbnail straight over it.
     (quota ? '<br><b class="' + (quota[0] >= quota[1] ? 'p' : 'm') +
              '">$' + quota[0] + ' / $' + quota[1] + '</b>' : '');
-  // Under the frame count: the lens, or a winding dot while the shutter is
-  // still recovering. The ladder is read rather than derived: it used to be
-  // `1 << state.lens`, which was true only while every rung was a power of two,
-  // and the free 1.2x rung is not one.
-  // The bank used to read here too and was taken out because money is a
-  // between-rides number. The quota is not that number, but it does not go here
-  // either -- see the note on it above.
+  // The lens, or a winding dot while the shutter recovers. The ladder is read, not
+  // derived: not every rung is a power of two.
   el.film.innerHTML = 'film <b>' + state.film + '</b><br><small>' +
     (clock < state.armed ? '·' : '×' + zoom[state.lens]) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
@@ -71,9 +54,8 @@ export function updateHud(state, ride, clock, zoom, quota) {
 
 
 export function flash() {
-  // Web Animations, not a CSS class: reading offsetWidth restarts a transition
-  // but not an animation, so the class-toggle version fired once and then sat at
-  // "on" forever -- a white veil over the game after the first shot.
+  // Web Animations, not a CSS class: an offsetWidth read restarts a transition but
+  // not an animation, so the class-toggle version stuck at "on" after one shot.
   el.flash.animate([{ opacity: 0.85 }, { opacity: 0 }], { duration: 320, easing: 'ease-out' });
 }
 
@@ -92,9 +74,7 @@ export function hidePanel() {
 // Enter key ask this.
 const four = (v) => /^\d{4}$/.test(v);
 
-// Read at click time, never from the render: the change event fires on the way
-// out of a field, so by the time a button is clicked these are current. A field
-// that is not on the card at all reads as empty rather than throwing.
+// Read at click time, never from the render. A field not on the card reads empty.
 const val = (id) => ($(id) || {}).value || '';
 
 // Every card that has its own buttons stops the click reaching #panel, which
@@ -108,39 +88,25 @@ function onCard(fn) {
   };
 }
 
-// The browser tab's name. It lives here rather than in a <title> tag because
-// the same words are on the card below: inside the packed payload the second
-// copy is nearly free, while in the shell it was 32 characters of plain text.
+// Here rather than a <title> tag: the same words are on the card below, so inside
+// the packed payload the second copy is nearly free -- in the shell it was 32
+// characters of raw text.
 document.title = 'Unicorn Paparazzi';
 
-export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, missed, trophies, paid) {
-  // `lost` is the dead end -- a ride that came in under its quota -- and it is this
-  // card rather than one of its own, because the one button that gets out of it
-  // is already here and the rest of the menu simply comes off.
+export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, missed, trophies) {
+  // `lost` is the dead end, and it shares this card because the one button that
+  // gets out of it is already here. It is the only reading the run ever gets, so
+  // it shows earnings rather than the bank -- the shop has spent most of the bank,
+  // and what you spent is not what you earned.
   //
-  // It is the only reading the run ever gets, so it is where the run is read
-  // out: the best photograph of the whole game with its breakdown intact, and
-  // what the whole game took. The bank would be the wrong number -- the shop has
-  // spent most of it, and what you spent is not what you earned.
-  //
-  // `saved` is whether there is a run on disk to wipe. index.js reads it live
-  // rather than from its boot snapshot, so the dead end -- which can only be
-  // reached after a run has been written -- still gets the button.
-  //
-  // The 't' class centres a title and two buttons in a full-height column, which
-  // is the menu and not this: the dead end carries a photograph and a table, and
-  // a 6em headline over them crowds both off the screen.
+  // The 't' class centres a headline and two buttons full-height, which suits the
+  // menu but crowds the dead end's photograph and table off the screen.
   panel((lost ? '<h1>Game over</h1>' +
-                '<h2>missed $' + paid + ' / $' + missed + '</h2>' +
+                '<h2>missed $' + missed + '</h2>' +
                 photoCard(pic.p, pic.b || [], 'Best picture', pic.n || 0) +
-                // Named, not bare. It read as a figure with no question
-                // attached -- under a photograph and over a Reset button, a
-                // lone dollar amount could as easily have been the bank or
-                // what the last ride made.
+                // Named, not bare: a lone dollar amount here could as easily be
+                // the bank or what the last ride made.
                 '<h2>total earnings $' + earned + '</h2>' +
-                // The shop offer is unlimited on purpose -- once every real
-                // upgrade is maxed, this is the only thing left to show for a
-                // run, so it is shown, not just counted.
                 (trophies ? '<p>' + '🏆'.repeat(trophies) + '</p>' : '')
               : '<h1>Unicorn Paparazzi</h1>' +
                 '<p><button id="go">Solo</button></p>' +
@@ -149,55 +115,28 @@ export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, mi
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
 }
 
-// What the game wants, said once, before every solo ride. You used to arrive on a
-// moving cart with eight frames and a dollar figure in the corner, and nothing
-// anywhere had said to photograph the unicorns or what the figure was for.
+// What the game wants, said once, before every solo ride.
 //
-// No button, and deliberately so: index.js binds a click ANYWHERE on the panel to
-// primary(), which starts the ride whenever the mode is still TITLE -- so this
-// card is put up and simply ridden away by the next click. Calling onCard() here
-// would swallow that click instead.
-//
-// It is also the gesture the ride needs. Booting straight onto the cart called
-// askIMU() and lock() with no user gesture behind them, which is exactly what
-// iOS refuses; now there is always a real tap first.
+// No button, deliberately: index.js binds a click anywhere on #panel to primary(),
+// so this card is simply ridden away by the next click, and onCard() would swallow
+// it. That tap is also the user gesture iOS demands before askIMU() and lock().
 export function showBrief(quota) {
   panel('<h1>Unicorn Paparazzi</h1>' +
         '<p>Take pictures of unicorns</p>' +
         '<p>Better pictures earn more $</p>' +
-        // Lifted verbatim off the shop screen, which no longer says it: this card
-        // comes between that screen and the cart, so saying it twice was saying
-        // it twice -- and moving the string rather than copying it is what keeps
-        // this card near free.
         '<p>To continue you must get $' + quota + ' this ride</p>' +
-        // `h m` is the case the stylesheet's own comment describes: a hint that
-        // is also a problem. It is the one rule the game will not teach you by
-        // playing -- a dark unicorn in frame zeroes the whole photograph, so the
-        // shot that taught you costs a frame and looks like a scoring bug.
+        // The one rule playing will not teach you: a dark unicorn zeroes the whole
+        // photograph, so the shot that taught you looks like a scoring bug.
         '<p class="h m">Warning · Pictures containing dark unicorns earn $0</p>' +
-        // No button, and this line instead of one. index.js binds a click
-        // anywhere on the panel to primary(), which starts the ride while the
-        // mode is still TITLE -- so the card is simply ridden away by the next
-        // click, and a button would call onCard(), whose stopPropagation() would
-        // swallow the very click meant to dismiss it. The hint measured FREE
-        // (`click to ` is already in the hud string, `ride` is everywhere); a
-        // real Ride button measured 28 bytes. `press`, not `click`, costs 7 of
-        // those back and is the only verb that is true on a phone as well.
+        // `press`, not `click`: the only verb true on a phone as well.
         '<p class="h">press to ride</p>', 't');
 }
 
-// The whole of multiplayer, in one card with two states. Out of a room it is the
-// way in: who you are, and the two doors -- make one, or walk into someone
-// else's. In a room it is the roster, live, redrawn by net.js on every arrival
-// and departure. `code` is the switch: empty means no room yet.
-//
-// One card rather than two because almost all of it is shared -- the code field,
-// Join, Back, the Enter key, the four-digit guard and the click router are
-// written once here and serve both states. A second screen would have been a
-// second copy of that scaffolding for the sake of one headline.
+// The whole of multiplayer in one card with two states, `code` being the switch:
+// out of a room, the way in; in one, the live roster. One card because the field,
+// the buttons, the Enter key, the four-digit guard and the click router are shared
+// -- a second screen would be a second copy of all of it.
 export function showLobby(code, host, riders, name, onGo, onJoin, onBack, onName) {
-  // net.js hands these over ready to draw, yours already reading "You!", so
-  // there is nothing here to work out about who is who.
   let rows = '';
   for (const nm of riders) rows += row3('class="r"', '', nm, '');
   panel(
@@ -221,11 +160,8 @@ export function showLobby(code, host, riders, name, onGo, onJoin, onBack, onName
     (code ? '' : '<p class="h">code <input id="j"> <button id="o">Join Game</button></p>') +
     '<p class="h"><button id="k">Back</button></p>'
   );
-  // What each door actually needs, live as you type rather than on the way out
-  // of a field: a nameless rider is a riddle on everyone else's roster, and
-  // joining needs somewhere to go as well, so Join stays shut until the code is
-  // a code. A button that lights up before it can do anything is a promise the
-  // card cannot keep.
+  // Live as you type, not on the way out of a field: a nameless rider is a riddle
+  // on everyone else's roster, and Join stays shut until the code is a code.
   if (!code) {
     const n = $('n'), j = $('j');
     (n.oninput = j.oninput = () => {
@@ -251,29 +187,22 @@ const NONE = 0 + ' unicorns';
 // Only the first three need naming; every later index falls through to 'th',
 // which is right all the way to 20th.
 const ORD = ['st', 'nd', 'rd'];
-// Both tables on the results screen are the same three columns -- a thumbnail, a
-// label, a score -- and the lobby roster is that shape with the picture missing.
-// One builder for all three: roadroller charges almost nothing for the second and
-// third call sites once it has seen the first.
+// Both results tables and the lobby roster are the same three columns: thumbnail,
+// label, score.
 const row3 = (attrs, url, what, n) =>
   '<tr ' + attrs + '><td class="i">' + (url ? '<img src="' + url + '">' : '') +
   '</td><td>' + what + '</td><td class="n b"><b>' + n + '</b></td></tr>';
 
-// One photograph, big, with score.js's compact breakdown under it. This draws
-// your own shots and the winning shot alike -- and a rival's winning shot, whose
-// rows came off the wire already sanitised by net.js.
-//
-// A row whose label starts with a space is a detail of the row above it.
+// One photograph, big, with score.js's breakdown under it. Draws your own shots
+// and rivals' alike -- theirs arrive off the wire already sanitised by net.js.
 export function photoCard(url, rows, heading, total) {
   let body = '';
   for (const [label, value] of rows) {
     // A leading space means "detail of the row above": dim it and indent it,
     // rather than ruling it off as a subject of its own.
     const sub = label[0] === ' ';
-    // A gain reads green and a loss red. Only a SIGNED value is colored, so plain
-    // totals -- and a framing of exactly parity, which prints an unsigned 0% --
-    // stay neutral. There is no multiplier case any more: every adjustment on
-    // the breakdown is a signed percentage now, poses and horns included.
+    // Only a SIGNED value is coloured, so plain totals -- and exact parity, which
+    // prints an unsigned 0% -- stay neutral.
     const k = value[0];
     const c = k === '-' ? ' m' : k === '+' ? ' p' : '';
     body += '<tr class="' + (sub ? 'd' : 'r') + '"><td>' +
@@ -289,9 +218,8 @@ export function photoCard(url, rows, heading, total) {
 
 // The breakdown for one of your own shots, reached by clicking a row in the roll.
 export function showPhoto(scored, onBack, onStep, i, n) {
-  // `<` has to be an entity: innerHTML reads a bare one as the start of a tag
-  // and eats the button with it. `>` is only special after a `<`, so it stays
-  // the one character it is.
+  // `<` has to be an entity or innerHTML eats the button; `>` is only special
+  // after a `<`.
   const step = (id, glyph, at) => '<button id="' + id + '"' +
     (at ? ' disabled' : '') + '>' + glyph + '</button> ';
   panel(
@@ -311,16 +239,12 @@ export function showPhoto(scored, onBack, onStep, i, n) {
 //   match, still riding   who is not in yet, and nothing to read
 //   match, everyone in    every rider's best photograph, ranked
 //
-// The two match views are named after the buttons that swap them, so "Results"
-// and "Photos" each earn their keep twice. `mine` is that swap: a sub-view,
-// not a mode of its own.
+// `mine` swaps the two match views -- a sub-view, not a mode of its own.
 export function showResults(state, scored, onPick, onNext, rivals, waiting, mine, quota) {
-  // Best first. It used to run worst-first so you ended on your best shot, but
-  // this is a scoreboard now and the interesting one belongs at the top.
+  // Best first: this is a scoreboard, and the interesting one belongs at the top.
   const order = scored.map((s, i) => i).sort((a, b) => scored[b].sum - scored[a].sum);
-  let rows = '';
-  // Keyed by rank, not by the raw shot index -- so paging with < / > in the
-  // detail view walks the same order this list is shown in.
+  let rows = '', ride = 0;
+  // Keyed by rank, not shot index, so < / > in the detail view walk this order.
   for (let pos = 0; pos < order.length; pos++) {
     const s = scored[order[pos]];
     const what = s.subjects.length
@@ -328,20 +252,12 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
         (s.bonuses.length ? ' · ' + s.bonuses.map((b) => b.legend).join(', ') : '')
       : NONE;
     rows += row3('class="o" data-i="' + pos + '"', s.pic, what, '$' + s.sum);
+    ride += s.sum;
   }
   if (!rows) rows = '<tr><td class="d">' + NONE + '</td></tr>';
   const roll = '<table>' + rows + '</table>';
-  // The money reads under the roll, not over it: the photographs are what you
-  // came to look at, and the bank is what they add up to. What this ride paid
-  // rides along with it -- the roll is priced in dollars now, so the two totals
-  // belong on the same line. A borrowed-gear ride earns nothing and never gets
-  // here: the match view draws cards instead.
-  const ride = scored.reduce((a, s) => a + s.sum, 0);
-  // The bank stays neutral and only the ride figure takes a colour: you can be
-  // flush and still have missed, so the bank is no answer to "did that ride pass".
-  // The same green/red the hud picks between while you are still riding, which is
-  // the point -- the line under the roll settles the question the hud was asking.
-  // A match sets no quota, and neither win nor loss is a fact about it, so the
+  // Only the ride figure takes a colour -- you can be flush and still have missed,
+  // so the bank is no answer to "did that ride pass". A match sets no quota, so the
   // figure stays plain there.
   const earned = '<h2>$' + state.bank + ' · <b class="' +
     (quota ? ride >= quota ? 'p' : 'm' : '') + '">$' + ride + ' this ride</b></h2>';
@@ -351,11 +267,10 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
     panel('<h1>Photos</h1>' + roll + earned +
           '<p class="h"><button id="s">Shop</button></p>');
   } else {
-    // Your own entry has to carry a photograph and a breakdown like everyone
-    // else's, or winning would show a blank card. Rivals send their best shot;
-    // this picks yours the same way endRun does, but at full thumbnail size
-    // rather than the small copy that had to fit on the wire.
-    const best = scored.reduce((a, s) => (a && a.sum > s.sum ? a : s), null);
+    // Your own entry needs a photo and a breakdown like everyone else's, or winning
+    // shows a blank card. The top of the ranked roll, at full thumbnail size rather
+    // than the small copy that had to fit on the wire.
+    const best = scored[order[0]];
     const all = [{ who: 'You!', n: ride,
                    p: best ? best.pic : '', b: best ? best.b : [] }, ...rivals];
     all.sort((a, b) => b.n - a.n);
@@ -364,9 +279,8 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
       const r = all[i];
       cards += photoCard(r.p, r.b, i + 1 + (ORD[i] || 'th') + ' place: ' + r.who, r.n);
     }
-    // Both buttons sit on every match screen, the waiting one included. A rider
-    // who types the code mid-ride joins the roster and never reports, so `waiting`
-    // can stall for good -- nobody may be trapped on a screen with no way out.
+    // Both buttons sit on every match screen, waiting included: a rider who joins
+    // mid-ride never reports, so `waiting` can stall for good.
     panel(
       '<h1>' + (mine ? 'Photos' : 'Results') + '</h1>' +
       (waiting ? '<h2>waiting for ' + waiting + '</h2>' : mine ? roll : cards) +
@@ -383,23 +297,16 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
   };
 }
 
-// The run summary and the shop are one screen: you see what the roll earned and
-// immediately spend it.
-// `cfg` and `quota` are both unread -- the shop draws its values off the offers,
-// and the quota moved to the briefing card. Dropping them measured WORSE, by 3
-// bytes and 8 bytes respectively: the long call site is a substring roadroller
-// has already seen from the other ui.show* calls, and each shorter one is new to
-// it. Left in deliberately; see the note on `* 0.2` in score.js for the same
-// trade. Delete them the day the budget stops being the binding constraint.
+// The run summary and the shop are one screen: see what the roll earned, spend it.
+//
+// `cfg` and `quota` are deliberately unread. Dropping them measured WORSE (3 and 8
+// bytes): the long call site is a substring roadroller has already seen from the
+// other ui.show* calls, while each shorter one is new to it.
 export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota, onPhotos) {
-  // Three columns: what the line is, where you stand on it, and what you can
-  // buy with the price inside the button. The whole ladder used to be drawn,
-  // which was a table of markup for something read once -- and a maxed ladder
-  // now simply has no button rather than a row of dimmed text.
+  // Three columns: the line, where you stand on it, and what the next rung costs.
+  // The rung you own is bold, not green -- .p is the gain colour, and here it is
+  // simply where you stand.
   let rows = '';
-  // The rung you own is bold rather than green: .p is the gain colour, and on
-  // the shop every one of these is simply where you stand, not a win. Bold
-  // against the dim .d label is enough to separate the two.
   const row = (label, now, buys) => '<tr class="r"><td class="d">' + label +
     '</td><td class="n"><b>' + now + '</b></td><td class="n">' + buys + '</td></tr>';
   for (let i = 0; i < offers.length; i++) {
@@ -413,18 +320,13 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota, onPho
   panel(
     '<h1>Shop</h1>' +
     '<h2>$' + state.bank + '</h2>' +
-    '<p class="h">' + state.rides + ' rides, $' + state.earned + ' lifetime</p>' +
-    // A `current`/`Upgrade` header row here measured at 35 bytes -- a tenth of
-    // everything the three-column rebuild saved -- and the columns read without
-    // it: a name, the rung you own in green, and a button naming what it buys
-    // and what it costs. Restore it here if the budget ever allows.
+    '<p class="h">' + state.rides + ' rides, $' + state.earned + '</p>' +
+    // A `current`/`Upgrade` header row measured 35 bytes and the columns read
+    // without it. Restore it here if the budget ever allows.
     '<table>' + rows + '</table>' +
-    // Everything else you might want -- multiplayer, wiping the save -- lives on
-    // the menu now, so the shop only has to be able to get you back there.
     '<p class="h"><button id="mp">Menu</button> ' +
-    // Only when there is a roll to go back to. A shop opened at boot, or after
-    // the Ride again reload, has an empty one -- index.js passes no handler
-    // there, and a button that led to an empty table would be worse than none.
+    // Only when there is a roll to go back to: a shop opened at boot has none, and
+    // index.js passes no handler there.
     (onPhotos ? '<button id="s">Photos</button> ' : '') +
     '<button id="e">Next ride</button></p>'
   );

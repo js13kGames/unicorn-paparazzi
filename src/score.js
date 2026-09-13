@@ -6,15 +6,10 @@ export function scorePhoto(photo, cfg, state) {
   const total = photo.w * photo.h;
   const bonus = cfg.resBonus[state.rs];
   const subjects = [];
-  // Everything too small to photograph properly, kept as a bare list of colors.
-  // These used to be dropped on the floor, for a good reason -- a dozen distant
-  // specks handing out a huge color-variety multiplier. They are back because
-  // the color bonus is worth far less than it was, and because a herd on the
-  // horizon is genuinely part of the picture: a point each, and a vote in what
-  // colors are in frame. A dark one still voids the shot from out there, which
-  // is only fair because the world is a fixed seed now and you can learn it --
-  // but only down to a floor of its own: a handful of stray pixels is not a
-  // photograph of anything, dark coat or not, so it does not even reach the list.
+  // Too small to photograph properly: a point each and a vote in what colors are
+  // in frame, nothing more. Below a tenth of minCoverage they do not even reach
+  // this list -- a handful of stray pixels is not a photograph of anything, and a
+  // dark coat out there would otherwise void the shot.
   const smalls = [];
 
   for (const [id, s] of photo.subjects) {
@@ -22,28 +17,17 @@ export function scorePhoto(photo, cfg, state) {
     if (coverage < cfg.minCoverage * .1) continue;
     if (coverage < cfg.minCoverage) { smalls.push(s.coat); continue; }
 
-    // How big the animal comes out, paid at this sensor's rate -- which is what
-    // makes a bigger camera worth buying. Measured as the share of the frame it
-    // actually fills: the square root read fairer on paper, but it paid a speck
-    // on the horizon a third of what a unicorn filling the frame was worth, so
-    // there was little reason to work for the close shot. On area the range is
-    // the real one, and getting close is the strongest thing a photographer does.
+    // Share of the frame filled, paid at this sensor's rate. Area, not its square
+    // root: on the root a distant speck was worth a third of a frame-filling
+    // animal, and there was little reason to work for the close shot.
     const size = coverage * bonus;
-    // The moment, as a multiplier rather than something added on. As `size + pose`
-    // a 98-point pose swamped a 6-point size, so the camera you saved for and the
-    // distance you worked for were both noise beside a dice roll. Multiplied, the
-    // three things a good photograph does compound instead of competing: get
-    // close, own a better sensor, catch a rare moment.
-    //
-    // Modest on purpose. Derived from rarity it ran to 6.3x for a neighing
-    // unicorn, which made the roll a lottery on what the herd happened to be
-    // doing; at 1.9x the rare pose is a bonus on a well-taken photograph rather
-    // than a substitute for taking one well.
+    // A multiplier, not an addition: added, a big pose score swamped size, and the
+    // camera you saved for was noise beside a dice roll. Modest on purpose -- the
+    // rare pose is a bonus on a well-taken photograph, not a substitute for one.
     const pose = cfg.poseBonus[s.stance];
 
-    // How much of the outline is cut, and by what. A flat penalty for touching
-    // an edge was a cliff: a clipped hoof cost the same as half a missing
-    // unicorn. These grade instead.
+    // How much of the outline is cut, and by what. Graded, not flat: a clipped hoof
+    // must not cost what half a missing unicorn does.
     const out = s.rim || 1;
     const cEdge = s.edge / out, cEnv = s.env / out, cOcc = s.occ / out;
     const cropF = Math.exp(-cfg.cropK * cEdge);
@@ -65,36 +49,27 @@ export function scorePhoto(photo, cfg, state) {
       poseName: POSE_NAMES[s.stance],
       horns: s.horns,
       // Normalised centre of the neck, y flipped into image space (readPixels is
-      // bottom-up). An animal facing away, or with its neck behind a rock, has no
-      // neck pixels at all and falls back to its whole-body centroid -- it still
-      // has to be framed somehow.
+      // bottom-up). No neck pixels at all falls back to the body centroid.
       cx: (s.nn ? s.nx / s.nn : s.sx / s.n) / photo.w - 0.5,
       cy: 0.5 - (s.nn ? s.ny / s.nn : s.sy / s.n) / photo.h,
       extent: size, stance: pose,
       cEdge, cEnv, cOcc,
       cropLoss, envLoss, occLoss,
-      // The extra horns pay on the animal that grew them, and only its own
-      // subtotal moves: 20% more per horn, so a quadricorn is worth half as much
-      // again. One step of the same 20% the colour bonus pays, which is the only
-      // thing on this card that lets a player read one multiplier and know what
-      // the next one would be worth. Written `* 0.2` rather than the colour
-      // bonus's equivalent `/ 5` purely because roadroller charges 3 bytes less
-      // for it, and we are sitting on the limit exactly.
-      //
-      // Cut twice now, from double-to-quadruple and then from x1.5-to-x2.5. A
-      // freak animal is a bonus on a photograph, not a substitute for taking one:
-      // it cannot outweigh getting close, and it should not.
+      // 20% per extra horn, on this animal's subtotal alone -- the same step the
+      // colour bonus pays, so one multiplier tells you what the next is worth.
+      // `* 0.2` rather than `/ 5` because roadroller charges 3 bytes less for it.
       subtotal: (gross - cropLoss - envLoss - occLoss) * (1 + s.horns * 0.2),
     });
   }
 
-  // Framing is a multiplier rather than an addition. As a flat 0-100 bonus it
-  // was invisible beside subtotals in the thousands on a good camera; as a
-  // factor it matters just as much at every tier.
+  // A multiplier, not an addition: a flat bonus was invisible beside subtotals in
+  // the thousands on a good camera.
   const framing = compose(subjects);
-  const base = subjects.reduce((a, s) => a + s.subtotal, 0);
+  let base = 0;
+  for (const s of subjects) base += s.subtotal;
   const bonuses = bonusList(subjects, smalls);
-  const multiplier = bonuses.reduce((a, b) => a * b.factor, 1);
+  let multiplier = 1;
+  for (const b of bonuses) multiplier *= b.factor;
 
   return {
     pic: photo.pic,
@@ -102,96 +77,73 @@ export function scorePhoto(photo, cfg, state) {
     framing,
     bonuses,
     multiplier,
-    // Framing is the composition of what you actually photographed, so it is
-    // paid on the subjects alone -- a speck at the edge of the frame must not
-    // drag the arrangement of the animals you meant to shoot. The multiplier is
-    // paid on everything, which is what keeps a dark speck's factor of 0
-    // zeroing the whole photograph rather than leaving the small points standing.
+    // Framing is paid on the subjects alone, so a speck at the edge cannot drag the
+    // arrangement you meant to shoot. The multiplier is paid on everything, which
+    // is what lets a dark speck's factor of 0 zero the whole photograph.
     sum: Math.round((base * framing + smalls.length) * multiplier),
     b: breakdown(subjects, framing, bonuses, bonus, smalls),
   };
 }
 
 // The one breakdown format in the game: a flat list of [label, value], both
-// already strings. It is what a photo's own screen draws, what the winner's card
-// draws, and -- because it is nothing but short strings -- what goes on the wire
-// so a rival's winning card can be drawn too.
+// strings, drawn by every card and small enough to go on the wire.
 //
-// A leading space marks a detail row. One character, it survives the wire's
-// character whitelist, and it saves carrying a third field per row just to say
-// "indent me".
+// A leading space marks a detail row -- one character, it survives the wire's
+// whitelist, and it saves a third field per row.
 function breakdown(subjects, framing, bonuses, dpi, smalls) {
   const out = [];
   for (const s of subjects) {
-    // Just the color: a scored pose already names itself on its own detail row
-    // below, and heading the subject with it too read as a stutter.
     out.push([s.coat, '' + Math.round(s.subtotal)]);
-    // The size row shows its own arithmetic: the share of the frame this animal
-    // fills, times what the sensor pays for a share. They multiply out to
-    // exactly the points beside them, which is the only thing on screen that
-    // says why the resolution upgrade is worth buying.
+    // The size row shows its own arithmetic -- frame share x what the sensor pays,
+    // multiplying out to exactly the points beside it. It is the only thing on
+    // screen that says why the dpi upgrade is worth buying.
     out.push([' size · ' + (s.extent / dpi * 100).toFixed(1) + '% × ' + dpi + 'dpi', sign(s.extent)]);
     if (s.stance > 1) out.push([' pose · ' + s.poseName, pct(s.stance)]);
-    // Cut by the frame, hidden behind scenery, blocked by another unicorn: three
-    // penalties that compound in order, but one number as far as the player is
-    // concerned. Sub-point losses read as "-0", which looks like a bug.
+    // Three penalties compound in order, but one number as far as the player is
+    // concerned. Sub-point losses would read "-0", which looks like a bug.
     const loss = s.cropLoss + s.envLoss + s.occLoss;
     if (loss > 0.5) out.push([' obscured', sign(-loss)]);
     if (s.horns) out.push([' ' + HORNS[s.horns], pct(1 + s.horns * 0.2)]);
   }
-  // The herd on the horizon, as one block rather than a row each: a point apiece
-  // is not worth a line apiece, but which colors are out there decides the color
-  // bonus and so is worth naming. Counted in palette order, dark last, which is
-  // the order every other list of colors in the game is in.
+  // The horizon herd as one block: a point apiece is not worth a line apiece, but
+  // which colors are out there decides the color bonus. Palette order, dark last.
   if (smalls.length) {
     out.push(['small unicorns', sign(smalls.length)]);
     for (let i = 0; i < COLOR_NAMES.length; i++) {
       const n = smalls.filter((c) => c === i).length;
-      // The label carries the count the way the size row carries its arithmetic,
-      // and the value carries what the count is worth -- which is the same
-      // number, because a small unicorn is worth exactly one point.
       if (n) out.push([' ' + COLOR_NAMES[i] + ' · ' + n, sign(n)]);
     }
   }
-  // Shown as the adjustment it is, not as a total: a shot scoring a twentieth of
-  // its subtotals reads -95%, and a perfect frame +100%.
+  // An adjustment, not a total: a twentieth reads -95%, a perfect frame +100%.
   if (subjects.length) out.push(['framing', pct(framing)]);
   for (const b of bonuses) out.push([b.row || b.legend, pct(b.factor)]);
   return out;
 }
 
 const sign = (n) => (n > 0 ? '+' : '') + Math.round(n);
-// Every multiplier on the breakdown, said the one way: how much more, or less,
-// than the photograph's parts add up to. A pose at ×2.2 beside a framing at -40%
-// read as two different kinds of number, and neither said what the next one of
-// the same thing would be worth. Parity prints a plain 0%, which sign() leaves
-// unsigned and so uncolored.
+// Every multiplier on the breakdown, said one way: how much more or less than the
+// parts add up to. Parity prints a plain 0%, which sign() leaves unsigned and so
+// uncoloured.
 const pct = (f) => sign((f - 1) * 100) + '%';
 
-// Framing, x0.05 to x2. Two mistakes, punished on the same curve and multiplied
-// together so neither can be bought off with the other: herding the animals on
-// top of each other, and letting one drift into the edge of the frame.
+// Framing, x0.05 to x2. Two mistakes -- crowding the animals together, and letting
+// one drift into the edge -- on the same curve and multiplied, so neither can be
+// bought off with the other.
 //
-// The curve is logarithmic, which puts the resolution where the decisions are --
-// a tenth of the way to a comfortable distance still scores under a tenth, while
-// everything past comfortable is flat. It is exactly 0 at nothing and exactly 1
-// at the reference distance, so both ends of the range stay calculable.
+// Logarithmic, which puts the resolution where the decisions are, and exactly 0 at
+// nothing and 1 at the reference distance so both ends stay calculable.
 const K = 3, LK = Math.log(1 + K);
 const f = (d, D) => Math.log(1 + (K * Math.min(d, D)) / D) / LK;
 
 // The two terms pull against each other: spreading out to earn separation walks
-// everyone towards the edges. Against fixed distances only a lone unicorn could
-// ever satisfy both, and every crowd shot would be capped short of the ceiling.
-// So the references are whatever an ideal arrangement of this many subjects
-// actually achieves -- evenly spaced on a circle that widens as the crowd grows,
-// one animal dead centre, six in a ring -- and the top of the range stays
-// reachable however many turned up.
+// everyone towards the edges. So the references are what an ideal arrangement of
+// THIS many subjects achieves -- evenly spaced on a circle that widens with the
+// crowd -- and the top of the range stays reachable however many turned up.
 function compose(subjects) {
   const N = subjects.length;
   if (!N) return 0.05;
   const r = 0.35 * Math.sqrt(1 - 1 / N);
-  // Capped a little short of the frame's half-width, so a lone subject has some
-  // slack at the centre rather than one exact pixel of it.
+  // Capped short of the half-width, so a lone subject has slack at the centre.
   const DE = Math.min(0.45, 0.5 - r);
 
   // Every subject's distance to the nearest edge, averaged.
@@ -220,40 +172,27 @@ function compose(subjects) {
   return 0.05 + 1.95 * edge * spread;
 }
 
-// A fifth of the photograph for every colour in it, added rather than
-// compounded, and the full set doubled on top: six colours is x4.4 where the
-// bare count made it x12. At x12 the rainbow was not a bonus, it was the only
-// shot in the game worth taking -- one lucky crowd outscored a whole roll of
-// deliberate photographs.
-//
-// The label carries the arithmetic, the way the size row does: `3 colors × 20%`
-// earning `+60%` says what a fourth colour would be worth, where a bare `×1.6`
-// said only what this one happened to come to.
+// A fifth of the photograph per colour, added rather than compounded, and the full
+// set doubled on top: six colours is x4.4. Compounded it reached x12, at which the
+// rainbow was not a bonus but the only shot in the game worth taking.
 function bonusList(subjects, smalls) {
   const big = new Set(subjects.map((s) => s.colorIndex));
-  // What colors are in the frame at all, however small. A speck counts here and
-  // nowhere else.
+  // What colors are in frame at all: a speck counts here and nowhere else.
   const c = new Set([...big, ...smalls]);
-  // One dark unicorn anywhere in shot voids the photograph, and nothing else
-  // about it is worth saying once it has. Returning early is also the only way
-  // the colour rows stay honest: five rainbow coats plus a dark one is six
-  // distinct colours, and would otherwise print RAINBOW on a zeroed card.
+  // One dark unicorn voids the photograph. Returning early is also what keeps the
+  // colour rows honest: five coats plus a dark one is six distinct colours, and
+  // would otherwise print RAINBOW on a zeroed card.
   if (c.has(6)) return [{ legend: 'dark unicorn', factor: 0 }];
   const out = [];
   const n = c.size;
-  // Two names for the one bonus: `label` is what the roll summary lists beside a
-  // shot, where a rate would be noise, and `row` is the breakdown's, which shows
-  // the arithmetic the way the size row does -- `3 colors · 3 × 20%` earning
-  // `+60%` says what a fourth colour would be worth, where a bare `+60%` said
-  // only what this one came to.
+  // Two names for one bonus: `legend` for the roll summary, `row` for the
+  // breakdown, which shows the arithmetic so a fourth colour's worth is readable.
   if (n >= 2) {
     out.push({ legend: n + ' colors', row: n + ' colors · ' + n + ' × 20%',
                factor: 1 + n / 5 });
   }
-  // The rainbow is the one thing specks cannot buy. Six colors in frame earns
-  // the 20% steps above, but the doubling still demands six animals photographed
-  // properly -- otherwise the shot of the whole valley, taken from as far back as
-  // possible, would be the best photograph in the game again.
+  // The one thing specks cannot buy: the doubling demands six animals photographed
+  // properly, or the whole-valley shot from as far back as possible wins again.
   if (big.size === 6) out.push({ legend: 'RAINBOW', factor: 2 });
   return out;
 }

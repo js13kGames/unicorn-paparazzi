@@ -69,10 +69,9 @@ uniform vec3 pal[7];
 out vec3 wp;
 out vec3 vc;
 flat out int vid;
-// Which end of the animal this pixel is, for the ID pass: alpha there was a
-// constant 1.0 doing nothing. 1.0 head or horn, so the scoring knows which end
-// got cut off; 0.4 neck, which is where framing is measured from -- the head
-// swings about as the animal grazes and the body centroid sits back in the
+// Which end of the animal this pixel is, for the ID pass: 1.0 head or horn, so
+// scoring knows which end got cut off; 0.4 neck, where framing is measured from --
+// the head swings as the animal grazes and the body centroid sits back in the
 // barrel, so the neck is the steady middle.
 flat out float vh;
 
@@ -159,11 +158,9 @@ export function createRenderer(canvas, world, herd) {
 
   const N = world.N, wy = WATER_Y;
   const wPos = new Float32Array([0, wy, N, N, wy, N, N, wy, 0, 0, wy, N, N, wy, 0, 0, wy, 0]);
-  // Every vertex of the sea shares one colour and one normal, so it carries
-  // neither. An attribute whose array is switched off in this VAO reads the
-  // context's constant for that slot instead, and those two constants are set
-  // once here: the terrain's own buffers stay bound to the same slots in its
-  // own VAO, and nothing else ever looks at them.
+  // The sea shares one colour and one normal across every vertex, so it carries
+  // neither: an attribute with its array off reads the context constant for that
+  // slot, set once here. The terrain's VAO keeps its own buffers on those slots.
   const water = vao(gl, [[P, buffer(gl, wPos), 3, gl.FLOAT, false]]);
   gl.vertexAttrib4f(C, 46 / 255, 108 / 255, 190 / 255, 165 / 255);
   gl.vertexAttrib4f(NM, 0, 1, 0, 0);
@@ -226,18 +223,14 @@ export function createRenderer(canvas, world, herd) {
     gl.drawElements(gl.TRIANGLES, world.trackMesh.tally, gl.UNSIGNED_INT, 0);
     gl.enable(gl.CULL_FACE);
 
-    // The sea is one flat quad, drawn here while the terrain program and its
-    // uniforms are still current -- so it costs a bind and a draw and nothing
-    // else. TERRAIN_FS already writes vc.a, and the quad's colour is a constant
-    // vertex attribute, so the translucency is just the alpha it is set with:
-    // everything below is the depth-mask dance around it, which is what stops a
-    // surface that does not occlude from writing depth as if it did.
+    // One flat quad, drawn while the terrain program and its uniforms are still
+    // current. Translucency is just the alpha on its constant colour attribute;
+    // the depth-mask dance below stops a surface that does not occlude from
+    // writing depth as if it did.
     //
-    // It does NOT need a pass of its own at the end of the frame, which is what
-    // it used to have. Nothing is ever drawn between the eye and the surface: no
-    // unicorn spawns in the sea, and the eye rides 2.4 above the rails, so no
-    // ray to an animal crosses the plane. Skipped in the ID pass, where the sea
-    // is not a subject and the sea floor is the thing being measured.
+    // No pass of its own is needed: nothing is ever drawn between the eye and the
+    // surface (no unicorn spawns in the sea, and the eye rides 2.4 above the
+    // rails). Skipped in the ID pass, where the sea floor is what is measured.
     if (!idPass) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

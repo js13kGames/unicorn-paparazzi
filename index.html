@@ -3,42 +3,28 @@
 
 <head>
   <meta charset="utf-8">
-  <!-- No user-scalable=no: maximum-scale=1 already stops the pinch on Android,
-       and Safari has ignored both since iOS 10 -- there it is `touch-action:
-       none` below and the gesturestart handler in index.js that actually hold
-       the zoom off. So it was 17 characters of shell, which is the most
-       expensive place in the archive to keep a duplicate. -->
+  <!-- No user-scalable=no: maximum-scale=1 covers Android, and Safari has ignored
+       both since iOS 10 -- there `touch-action: none` below and the gesturestart
+       handler in index.js hold the zoom off. -->
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-  <!-- No <title> and no theme-color: everything left in the shell is the one
-       part of the archive Roadroller never sees -- it has to stay parseable
-       HTML -- so it costs close to raw bytes. The title is set from ui.js
-       instead, where the same words are already written on the title card and
-       cost the packer almost nothing the second time. The tab is nameless for
-       the instant before the script runs. Comments here are stripped at build
-       time, so saying so is free. -->
-  <!-- No theme-color: the shell is the one part of the archive Roadroller never
-       sees -- it has to stay parseable HTML -- so its characters cost close to
-       raw bytes in the zip. That one meta tag measured 26 of them, which bought
-       a tinted address bar on mobile and nothing else. Comments here are
-       stripped at build time, so saying so is free. -->
-  <!-- GitHub Pages only. docs/ is served as a normal multi-file site, so the
-       hosted build can carry a manifest and a service worker that the jam
-       archive -- one self-contained index.html with nothing beside it -- cannot.
-       Both are stripped in build/pack.mjs before the shell is measured, so they
-       cost the zip nothing; the copies they point at are placed in docs/ by
-       CopyPlugin. -->
+  <!-- The shell is the one part of the archive Roadroller never sees -- it must
+       stay parseable HTML -- so every character here costs close to raw bytes.
+       Hence no <title> (ui.js sets it, where the words are already paid for) and
+       no theme-color (26 bytes for a tinted address bar). Comments are stripped
+       at build time, so they are free. -->
+  <!-- GitHub Pages only: docs/ is a multi-file site, the jam archive is one
+       self-contained file. build/pack.mjs strips both before measuring, so they
+       cost the zip nothing; CopyPlugin places what they point at. -->
   <link rel="manifest" href="manifest.json">
   <script>navigator.serviceWorker&&addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js"))</script>
   <style>
-    /* Deliberately lean: this stylesheet rides inside the compressed payload,
-       and unique prose is the one thing the packer cannot squeeze. */
     html, body {
       margin: 0; height: 100%; overflow: hidden;
       touch-action: none; overscroll-behavior: none;
       background: #9ce; color: #fff;
       font: 13px/1.45 ui-monospace, monospace;
     }
-    #c { display: block; width: 100vw; height: 100vh; cursor: crosshair }
+    #c { display: block; width: 100vw; height: 100vh; cursor: crosshair; border: 0 }
     #ui { position: fixed; inset: 0; pointer-events: none }
     #ui > * { position: absolute }
     .sh { text-shadow: 0 1px 3px #0009 }
@@ -50,14 +36,14 @@
     #film b { font-size: 24px }
     #film.low b { color: #f86 }
     #roll {
-      top: 60px; right: 10px; width: 84px; bottom: 46px; gap: 4px;
+      top: 72px; right: 10px; width: 84px; bottom: 46px; gap: 4px;
       display: flex; flex-direction: column-reverse; justify-content: flex-end;
       overflow: hidden;
     }
     #roll img { width: 100%; border: 1px solid #fff6; display: block }
 
-    /* The crosshair as two centred gradient strips rather than two pseudo-elements
-       with their own position, offsets and content: same 20px cross, far less CSS. */
+    /* The crosshair as two centred gradient strips rather than two pseudo-elements:
+       same 20px cross, far less CSS. */
     #vf {
       border: 1px solid #fff6;
       background: linear-gradient(#fff9, #fff9) center/20px 1px no-repeat,
@@ -70,20 +56,14 @@
 
     #panel { inset: 0; display: none; place-items: center; background: #421c; pointer-events: auto }
     #panel.on { display: grid }
-    /* No fill and no border: one system everywhere. The card used to be a dark
-       #201 box with a #fff3 rule around it, which the title card then had to
-       undo -- so the menu and every other screen read as two different pieces
-       of software. Now the scrim is the background on all five screens and the
-       structure is carried by what is already there: the outlined buttons and
-       the .r row rules. */
+    /* No fill and no border: the scrim is the background on all five screens, and
+       the outlined buttons and .r row rules carry the structure. */
     #card {
       width: min(720px, 92vw); max-height: 88vh; overflow: auto; touch-action: pan-y;
       padding: 18px 20px
     }
-    /* All that is left of the title card is layout: the full width and no
-       padding it needs for the 6em display face, no scroll so the tall column
-       is never given a scrollbar whose gutter would pull it off centre, and the
-       flex column that stacks the title over the menu. */
+    /* The title card is layout only: full width for the 6em face, no scroll (a
+       scrollbar gutter would pull the column off centre), and the stacking flex. */
     #card.t {
       width: 100%; padding: 0; overflow: visible;
       display: flex; flex-direction: column; align-items: center
@@ -99,17 +79,13 @@
     /* No tabular-nums: the page is set in a monospace face, so digits already line up. */
     td.n { text-align: right }
     td.i { width: 92px; padding-right: 10px }
-    /* The lobby roster is the only place row3 is called with neither a thumbnail
-       nor a score, so an empty .i cell is what identifies it -- no class to pass
-       and no second builder. Collapsing the empty picture column lets the name
-       centre across the whole table instead of hanging off the left of it, and
-       the empty score cell beside it has no width to pull it back. */
+    /* The lobby roster is the only row3 call with neither thumbnail nor score, so
+       an empty .i cell identifies it -- no class to pass, no second builder.
+       Collapsing it centres the name across the whole table. */
     td.i:empty { width: 0; padding: 0 }
     td.i:empty ~ td { text-align: center }
-    /* Single letters because every one of these is written out in ui.js many
-       times over, and the stylesheet rides inside the compressed payload with
-       the markup. Measured at 14 bytes; CSS comments like this one are stripped
-       before packing, so the legend is free.
+    /* Single letters: each is written out many times over in ui.js. Measured at
+       14 bytes, and this legend is stripped before packing, so it is free.
          r rule (a ruled-off row)   d dim      w weak      p positive
          m minus (a loss, or a multiplier below parity)
          h hint (a footer line)     b big      o row (clickable)
@@ -124,9 +100,9 @@
     /* After .h, so a footer line can take the loss color: `class="h m"` is a
        hint that is also a problem, and .m has to win the tie. */
     .m { color: #f86 }
-    /* One control everywhere: an outline on the scrim, filling in on hover.
-       The inputs are outlined too -- an exception keeping a solid fill for them
-       cost 14 bytes, and the empty box already reads as a field. */
+    /* One control everywhere: an outline on the scrim, filling in on hover. Inputs
+       included -- an exception for them cost 14 bytes, and an empty outlined box
+       already reads as a field. */
     button, input {
       background: none; color: #fff; border: 1px solid #fff3;
       padding: 10px 16px; font: inherit; cursor: pointer; min-width: 88px
@@ -134,10 +110,8 @@
     /* Scoped to the title card, where the buttons are the menu and carry the
        display face the title is set in. */
     .t button { font: 2em serif }
-    /* Fills in to its own outline. The old hover was a solid #533, which now
-       sits within a few points of the brown scrim and would barely register;
-       #fff3 is the border colour the button already carries, so it is a value
-       the packer has seen three times over. */
+    /* Fills in to its own outline: #fff3 is the border colour it already carries,
+       so it is a value the packer has seen three times over. */
     button:hover:not(:disabled) { background: #fff3 }
     button:disabled { opacity: .35; cursor: default }
   </style>

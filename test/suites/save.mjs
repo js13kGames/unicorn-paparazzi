@@ -31,7 +31,9 @@ function boot(stored) {
       setItem: (_, v) => { written = JSON.parse(v); }, removeItem(){},
     },
   };
-  sandbox.window = sandbox; sandbox.globalThis = sandbox;
+  // A top-level window, so the pack bootstrap's frame check takes the run-the-game path.
+  sandbox.window = sandbox.top = sandbox.self = sandbox; sandbox.globalThis = sandbox;
+  sandbox.frameElement = null;
   let err = null;
   try { vm.runInNewContext(script, sandbox, { timeout: 60000 }); } catch (e) { err = e; }
   if (!err || !/no gl/.test(err.message)) throw err || new Error('expected the GL stop');

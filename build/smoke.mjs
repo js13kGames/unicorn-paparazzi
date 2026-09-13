@@ -97,7 +97,9 @@ const sandbox = {
   location: { hash: '', reload() {} },
   localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
 };
-sandbox.window = sandbox;
+// A top-level window, so the pack bootstrap's frame check takes the run-the-game path.
+sandbox.window = sandbox.top = sandbox.self = sandbox;
+sandbox.frameElement = null;
 sandbox.globalThis = sandbox;
 
 function collectIds(html) {

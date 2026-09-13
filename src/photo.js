@@ -1,31 +1,23 @@
-// Taking a photograph is two renders. The visible one becomes the thumbnail the
-// player reviews; a second pass into a small offscreen buffer paints each
-// unicorn in a flat color keyed to its instance id, and reading that back gives
-// -- exactly, and with correct occlusion -- who is in frame, how much of the
-// frame each one fills, whether any is clipped by an edge, and where its centre
-// of mass sits. Every term in the scoring rubric falls out of that one buffer.
+// Taking a photograph is two renders: the visible one becomes the thumbnail, and a
+// second pass into a small offscreen buffer paints each unicorn in a flat colour
+// keyed to its instance id. Reading that back gives -- exactly, and with correct
+// occlusion -- who is in frame, how much of it each fills, what is clipped, and
+// where each centre of mass sits. Every scoring term falls out of that buffer.
 
-// The photograph is a fixed shape whatever the window is doing. It used to
-// follow the canvas, which meant the same shot scored twice as much in a
-// half-width window: vertical fov is fixed, so a subject's pixels track the
-// buffer HEIGHT while the frame area is width x height, and coverage came out
-// proportional to 1/aspect.
+// Fixed shape whatever the window does. Following the canvas made the same shot
+// score twice as much in a half-width window: vertical fov is fixed, so a
+// subject's pixels track HEIGHT while frame area is width x height.
 export const PHOTO_ASPECT = 16 / 9;
-// Exactly 16:9, which no integer width at the old 240 could be. readPixels at
-// real photo resolution would stall for 100ms+.
+// Exactly 16:9. readPixels at real photo resolution would stall for 100ms+.
 const ID_W = 384, ID_H = 216;
-// Big enough to be worth downloading, small enough that a 50-shot roll is a few
-// megabytes. The film roll and results list scale the same image down in CSS, so
-// one canvas serves the preview and the saved file.
+// One canvas serves preview and saved file; the roll scales it down in CSS.
 const THUMB_H = 900;
-// What goes over the relay. The results screen shows a rival's shot at card
-// width, so 320x180 was being upscaled 2x and looked it. Measured at ~24KB of
-// base64 at this size and quality, against a relay verified to pass 128KB.
+// What goes over the relay: ~24KB of base64 at this size and quality, against a
+// relay verified to pass 128KB. 320x180 was upscaled 2x on the card and looked it.
 const WIRE_H = 540;
 
-// How much of the screen the frame takes. One value for every camera: it used to
-// climb with the sensor tier and reached the whole screen at the top, which left
-// the best camera in the game with no margin to see a unicorn coming.
+// How much of the screen the frame takes. One value for every camera -- climbing
+// with the sensor left the best camera with no margin to see a unicorn coming.
 export const FRAME_SHARE = 0.7;
 
 // The photograph's own vertical fov is the real one; the screen shows that
@@ -51,9 +43,8 @@ export function createPhotoRig(gl, canvas, draw) {
   thumb.height = THUMB_H;
   const tctx = thumb.getContext('2d');
 
-  // A second, tiny copy of every shot, encoded once at capture time because the
-  // thumb canvas is overwritten by the next photograph. Only the best one is ever
-  // sent, but by then the pixels are long gone.
+  // Encoded at capture time because the thumb canvas is overwritten by the next
+  // shot: only the best is ever sent, and by then those pixels are gone.
   const wire = document.createElement('canvas');
   wire.width = Math.round(WIRE_H * PHOTO_ASPECT);
   wire.height = WIRE_H;
@@ -70,23 +61,20 @@ export function createPhotoRig(gl, canvas, draw) {
   gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-  // Must run inside the same frame as the visible draw, while the drawing buffer
-  // is still intact -- that is what lets us skip preserveDrawingBuffer.
+  // Must run in the same frame as the visible draw, while the drawing buffer is
+  // intact -- that is what lets us skip preserveDrawingBuffer.
   //
-  // fx/fy locate the frame within the canvas, so the thumbnail is cut from
-  // exactly the rectangle the viewfinder was outlining. The ID pass renders the
-  // photo's own frustum, so it needs no crop at all: the buffer IS the
-  // photograph, and nothing about it depends on the window.
-  // `res` is the camera tier, and it sets the JPEG quality: the cheap camera
-  // develops a heavily compressed photograph. Cosmetic by construction -- the ID
-  // pass below reads the GL buffer, never the JPEG, so no score can move.
+  // fx/fy cut the thumbnail from exactly the rectangle the viewfinder outlined.
+  // The ID pass renders the photo's own frustum, so it needs no crop: that buffer
+  // IS the photograph. `res` sets JPEG quality only -- scoring reads the GL
+  // buffer, never the JPEG, so no score can move.
   function capture(cam, fovy, herd, fx, fy, res, mp) {
     const cw = canvas.width * fx, ch = canvas.height * fy;
     tctx.drawImage(canvas, (canvas.width - cw) / 2, (canvas.height - ch) / 2, cw, ch,
                    0, 0, thumb.width, thumb.height);
     const pic = thumb.toDataURL('image/jpeg', [.15, .3, .6, .9][res]);
-    // The 540p copy exists only to fit on the wire. Solo play never sends one,
-    // and a second JPEG encode per shot is real work on a phone.
+    // Solo never sends one, and a second JPEG encode per shot is real work on a
+    // phone.
     let small = '';
     if (mp) {
       wctx.drawImage(thumb, 0, 0, wire.width, wire.height);
@@ -105,23 +93,18 @@ export function createPhotoRig(gl, canvas, draw) {
   return { capture };
 }
 
-// Walk the ID buffer once, accumulating per-unicorn pixel count, bounding box
-// and centroid. Pose, color and age are snapshotted here because the herd keeps
-// moving while the photos wait to be scored.
-// Scenery's sentinel id. The herd is a few hundred animals, so real ids never
-// come near it.
+// Walk the ID buffer once, accumulating per-unicorn pixel count, bounding box and
+// centroid. Pose and colour are snapshotted here because the herd keeps moving
+// while the photos wait to be scored.
+
+// Scenery's sentinel id; real ids never come near it.
 export const TERRAIN = 65535;
-// Blue carries distance/256, so one step is about a unit. A neighbour only
-// counts as occluding if it is genuinely nearer -- a unicorn always borders the
-// ground it is standing on, and the gaps between its legs are all terrain, so
-// bare contact says nothing.
+// Blue carries distance/256, so one step is about a unit. A neighbour occludes
+// only if genuinely nearer: an animal always borders the ground it stands on.
 const NEARER = 2;
-// What a head pixel is worth against a flank pixel when the outline is measured.
-// A unicorn cut off at the neck, or standing behind a rock that hides its face,
-// is a worse photograph than the same animal missing a hindquarter -- so the
-// head and the horn count for more of the outline, in both directions: they
-// raise the penalty when they are the part that is cut, and they raise the
-// denominator, so losing a flank instead now costs slightly less than it did.
+// What a head pixel is worth against a flank pixel in the outline. Cut off at the
+// neck is a worse photograph than missing a hindquarter. It weights both the
+// penalty and the denominator, so losing a flank costs a little less.
 const HEAD_W = 3;
 
 export function tally(px, W, H, herd, rect) {
@@ -151,9 +134,8 @@ export function tally(px, W, H, herd, rect) {
       // Alpha carries the part out of the ID pass: 255 head or horn, 102 neck.
       const a = px[o + 3];
       const hw = a > 127 ? HEAD_W : 1;
-      // The neck is where framing is measured from, so it gets a centroid of its
-      // own. The whole-body one stays as the fallback for an animal whose neck is
-      // hidden or out of shot.
+      // Framing is measured from the neck, so it gets its own centroid; the
+      // whole-body one is the fallback when the neck is hidden.
       if (a > 50 && a < 180) { s.nx += cx; s.ny += cy; s.nn++; }
       s.sx += cx; s.sy += cy;
       if (cx < s.minx) s.minx = cx;
@@ -161,10 +143,8 @@ export function tally(px, W, H, herd, rect) {
       if (cy < s.miny) s.miny = cy;
       if (cy > s.maxy) s.maxy = cy;
 
-      // Walk the four neighbours. Every crossing out of this subject is a piece
-      // of its outline, and what sits on the other side says why it is cut:
-      // off the edge of the photograph, behind scenery, or behind another
-      // unicorn. Cropping and both occlusions are the same measurement.
+      // Every crossing out of this subject is a piece of its outline, and what sits
+      // on the other side says why: the frame edge, scenery, or another unicorn.
       for (let k = 0; k < 4; k++) {
         const nx = x + (k === 0 ? -1 : k === 1 ? 1 : 0);
         const ny = y + (k === 2 ? -1 : k === 3 ? 1 : 0);
