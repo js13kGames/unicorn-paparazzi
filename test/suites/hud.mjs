@@ -76,27 +76,32 @@ check('ride bar tracks progress', nodes.bar.style.width, '40.0%');
 // --- the quota, live -------------------------------------------------------
 // The one number that is worth money mid-ride. The bank is still a between-rides
 // number and stays off the screen; what this ride has taken against what it owes
-// is the whole of the tension, and it reads under the frame count -- beside the
-// frames it is telling you whether to spend, rather than off in the corner with
-// the ride progress where it was easy to miss.
+// is the whole of the tension.
+//
+// It sits in the LEFT column, under the ride progress. It spent a day under the
+// film count on the right and was invisible there -- #roll, the thumbnail strip,
+// starts at top:60px in that same corner, and a three-line film box reaches
+// exactly that far, so the first photograph taken painted a thumbnail over it.
+// Anything added to the right-hand box has to clear 60px or it will be covered.
 ui.updateHud(state, 0.4, 0, CFG, [282, 3000]);
-check('the quota reads as a score against a target', nodes.film.innerHTML,
+check('the quota reads as a score against a target', nodes.hud.innerHTML,
       (s) => s.includes('$282 / $3000'));
-check('and sits under the frame count, not in the progress corner',
-      nodes.film.innerHTML.indexOf('$282') > nodes.film.innerHTML.indexOf('film'), true);
-check('so the ride progress is left alone', nodes.hud.textContent, 'ride 40%');
+check('and sits under the ride progress, in the left column',
+      nodes.hud.innerHTML.indexOf('$282') > nodes.hud.innerHTML.indexOf('ride '), true);
+check('and stays out of the right-hand box the thumbnails cover',
+      nodes.film.innerHTML, (s) => !s.includes('$'));
 // At a glance: am I safe yet. Red short of the target, green once it is met.
-check('short of the target it reads as a loss', nodes.film.innerHTML,
+check('short of the target it reads as a loss', nodes.hud.innerHTML,
       (s) => /class="m"/.test(s));
 ui.updateHud(state, 0.4, 0, CFG, [3000, 3000]);
-check('and exactly on it reads as a gain', nodes.film.innerHTML,
+check('and exactly on it reads as a gain', nodes.hud.innerHTML,
       (s) => /class="p"/.test(s));
 ui.updateHud(state, 0.4, 0, CFG, [4200, 3000]);
-check('as does clearing it outright', nodes.film.innerHTML, (s) => /class="p"/.test(s));
+check('as does clearing it outright', nodes.hud.innerHTML, (s) => /class="p"/.test(s));
 // A match sets no quota, and index.js passes 0 rather than a pair. A stray "$0 /
 // $0" on a versus ride would read as a target nobody could ever miss.
 ui.updateHud(state, 0.4, 0, CFG, 0);
-check('a match shows no quota at all', nodes.film.innerHTML, (s) => !s.includes('$'));
+check('a match shows no quota at all', nodes.hud.innerHTML, (s) => !s.includes('$'));
 check('low-film warning off at 12', nodes.film.className, (c) => !/low/.test(c));
 state.film = 2; ui.updateHud(state, 0.4, 0, CFG);
 check('low-film warning on at 2', nodes.film.className, (c) => /low/.test(c));
@@ -185,18 +190,18 @@ check('back returns to the results list', backed, true);
 // the player needs it.
 document.pointerLockElement = null;
 ui.updateHud({ ...state, mode: RIDE }, 0.4, 0, CFG);
-check('riding without the lock says so', nodes.hud.textContent, (s) => /click to look/.test(s));
+check('riding without the lock says so', nodes.hud.innerHTML, (s) => /click to look/.test(s));
 document.pointerLockElement = nodes.c || {};
 ui.updateHud({ ...state, mode: RIDE }, 0.4, 0, CFG);
-check('and shuts up once the pointer is held', nodes.hud.textContent, (s) => !/click to look/.test(s));
+check('and shuts up once the pointer is held', nodes.hud.innerHTML, (s) => !/click to look/.test(s));
 document.pointerLockElement = null;
 ui.updateHud({ ...state, mode: TITLE }, 0.4, 0, CFG);
-check('a card on screen is not a lost pointer', nodes.hud.textContent, (s) => !/click to look/.test(s));
+check('a card on screen is not a lost pointer', nodes.hud.innerHTML, (s) => !/click to look/.test(s));
 // A phone has no pointer to lose, so the hint could only ever be wrong there --
 // it would sit on screen for the whole ride telling you to do the one thing the
 // device cannot do.
 ui.updateHud({ ...state, mode: RIDE, t: 1 }, 0.4, 0, CFG);
-check('and a touch device is never told to click', nodes.hud.textContent, (s) => !/click to look/.test(s));
+check('and a touch device is never told to click', nodes.hud.innerHTML, (s) => !/click to look/.test(s));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

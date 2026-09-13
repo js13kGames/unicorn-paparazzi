@@ -57,7 +57,7 @@ views.forEach((v, n) => {
     '(base ' + Math.round(base) + ' x' + scored.multiplier + ')');
   for (const s of scored.subjects) {
     console.log('    ' + s.color.padEnd(14) +
-      s.poseName.padEnd(10) +
+      (s.poseName || 'walking').padEnd(10) +
       (s.size / cfg.resBonus[st.res] * 100).toFixed(2).padStart(6) + '% ' +
       'size ' + s.size.toFixed(1).padStart(5) +
       '  pose ' + String(s.pose).padStart(3) +

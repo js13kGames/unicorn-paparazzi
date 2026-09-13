@@ -657,12 +657,16 @@ function title() {
                goal(state.rides - 1));
 }
 
+// What the ride is for, and what it has to earn, before every solo ride.
+const brief = () => ui.showBrief(goal(state.rides));
+
 // The menu is reachable from the shop without a reload, and by then the world
 // has been ridden -- the film is spent and the cart is round the track. A fresh
-// boot has not, so it can just start where it stands rather than paying for a
-// second worldgen. There used to be a third case here, for a roll with no frames
-// in it; a ride always starts with eight now, so it could not be reached.
-const solo = () => (distance ? ride() : primary());
+// boot has not, so it can just brief and start where it stands rather than
+// paying for a second worldgen. There used to be a third case here, for a roll
+// with no frames in it; a ride always starts with eight now, so it could not be
+// reached.
+const solo = () => (distance ? ride() : brief());
 
 // Whatever screen is up, redraw it: the roster and the results board both move
 // on their own as riders arrive, finish and leave.
@@ -686,7 +690,9 @@ if (mpCode) net.connect(mpCode, state.name, start, refresh);
 // world, so it lands straight on the cart -- consuming the marker here means an
 // actual refresh does not do the same. That refresh reopens the shop instead, so
 // a stray reload mid-ride costs the ride but not the bank.
-if (saved.g) { state.go = 0; persist(); primary(); }
+// A match drops straight onto the cart: riders start together, and a card
+// waiting on a click would hold one of them behind the others.
+if (saved.g) { state.go = 0; persist(); state.mp ? primary() : brief(); }
 else if (saved.c) lobby(saved.c, saved.h);
 else if (saved.v) showShop();
 else title();

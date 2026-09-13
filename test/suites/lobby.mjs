@@ -111,6 +111,23 @@ check('leaving Reset as the only way on', lost, (h) => h.includes('>Reset<'));
 click('x');
 check('which still wipes', hits.pop(), 'reset');
 
+// --- the briefing --------------------------------------------------------
+// What the game wants, said once, before every solo ride. You used to arrive on
+// a moving cart with eight frames and a dollar figure in the corner and nothing
+// anywhere had said to photograph the unicorns or what the figure was for.
+ui.showBrief(3000);
+const brief = card();
+check('the briefing says what to do', brief, (h) => /pictures of unicorns/i.test(h));
+check('and that better ones pay more', brief, (h) => /earn more/i.test(h));
+check('and what this ride has to make', brief, (h) => h.includes('$3000'));
+// THE load-bearing property: index.js binds a click anywhere on the panel to
+// primary(), which starts the ride while the mode is still TITLE. A button here
+// would call onCard(), which stopPropagation()s -- and the card would swallow
+// the very click that is supposed to ride it away, stranding the player on a
+// screen with no way off it.
+check('and it carries no button to swallow the click that starts the ride',
+      brief, (h) => !h.includes('<button'));
+
 // --- the multiplayer card ------------------------------------------------
 // One card, two states: no code is the way in (name yourself, then make a room
 // or walk into one), a code is the room itself.

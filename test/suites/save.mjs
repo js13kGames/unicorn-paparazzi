@@ -562,15 +562,15 @@ check('nor can several of them', waitingFor(1, 3) === 0, waitingFor(1, 3));
 const bootLines = /^if \(saved\.g\)[\s\S]*?^else title\(\);$/m.exec(src);
 check('the boot routing is still there to test', !!bootLines);
 
-const route = (saved) => {
+const route = (saved, mp) => {
   const hit = [];
-  const state = {};
+  const state = { mp };
   new Function('saved', 'state', 'persist', 'primary', 'showShop', 'title', 'lobby', 'ui',
-               bootLines[0])(
+               'brief', bootLines[0])(
     saved, state,
     () => hit.push('persist'), () => hit.push('ride'), () => hit.push('shop'),
     () => hit.push('title'), (c, h) => hit.push('lobby:' + c + ':' + (h || 0)),
-    { toast: () => {} });
+    { toast: () => {} }, () => hit.push('brief'));
   return { hit, go: state.go };
 };
 
@@ -588,9 +588,19 @@ check('but the code alone never starts a ride',
       !route({ v: VERSION, c: '4821' }).hit.includes('ride'));
 check('a plain refresh lands on the shop', route({ v: VERSION }).hit.join() === 'shop');
 const again = route({ v: VERSION, g: 1 });
-check('the ride marker lands on the cart', again.hit.includes('ride'), true);
+// Solo stops for its briefing first -- what the ride is for, and what it has to
+// earn. The click that dismisses it is what actually starts the cart, and it is
+// also the user gesture askIMU() and lock() need; booting straight onto the cart
+// called both with no gesture behind them, which is what iOS refuses.
+check('the ride marker lands on the briefing', again.hit.includes('brief'), true);
+check('and not straight on the cart', !again.hit.includes('ride'));
 check('and the marker is consumed so the next refresh does not re-ride',
       again.go === 0 && again.hit.includes('persist'), true);
+// A match must not stop for it: riders start together, and a card waiting on a
+// click would hold one of them behind the others.
+const match = route({ v: VERSION, g: 1, c: '4821' }, 1);
+check('a match still drops straight onto the cart', match.hit.includes('ride'), true);
+check('with no briefing to wait on', !match.hit.includes('brief'));
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

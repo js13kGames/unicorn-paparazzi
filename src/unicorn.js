@@ -17,7 +17,12 @@ export const COLORS = [
 ];
 export const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'black'];
 
-export const POSE_NAMES = ['walking', 'eating', 'sitting', 'neighing'];
+// The first one is deliberately blank. A pose only earns a row on the card when
+// it pays something, and walking pays nothing -- so `walking` was seven
+// characters of prose the packer carried and nothing ever printed. What the
+// array still has to be is four long, since the pose table is built off its
+// length. Dev tools that want the word can supply their own; see capture.mjs.
+export const POSE_NAMES = ['', 'eating', 'sitting', 'neighing'];
 export const POSE_FRAMES = 16;
 const TAU = Math.PI * 2;
 export const POSE_ROWS = POSE_NAMES.length * POSE_FRAMES;
@@ -220,9 +225,11 @@ export function spawn(world, cfg, seed) {
       // whatever the outcome, which is what keeps the herd deterministic.
       const r = rnd();
       list.horns.push(r < 0.02 ? 3 : r < 0.05 ? 2 : r < 0.11 ? 1 : 0);
-      // 2% wear the black coat. The horn roll reads the bottom of the same draw,
-      // so the top of it is free and the two stay uncorrelated.
-      list.color.push(r > 0.98 ? 6 : color);
+      // 3% wear the black coat. The horn roll reads the bottom of the same draw,
+      // so the top of it is free and the two stay uncorrelated. At 2% there were
+      // about thirteen to a map, which was too few to be worth watching for --
+      // the hazard has to be common enough that you look before you shoot.
+      list.color.push(r > 0.97 ? 6 : color);
     }
   }
   return makeHerd(list, cfg, seed);

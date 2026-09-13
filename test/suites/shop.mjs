@@ -109,19 +109,15 @@ check('the table is three columns all the way down', mid, (h) => {
   return cells.length === LADDERS.length && new Set(cells).size === 1 && cells[0] === 3;
 });
 
-// --- the quota, asked in full ---------------------------------------------
-// This is the screen where the target is a decision rather than a readout: what
-// you buy here is how you intend to make it. So it gets the whole sentence,
-// where the ride HUD gets two figures and a slash.
-check('the shop asks for the ride\'s quota', mid,
-      (h) => h.includes('Must get this ride: $' + goal(0)));
-// The curve is the level number, and the shop is the only place it is ever
-// stated before you ride into it.
+// --- the quota is asked on the briefing, not here --------------------------
+// The briefing card comes between this screen and the cart, so saying it in both
+// places was saying it twice -- and moving the string rather than copying it is
+// what kept that card near free. See the briefing checks in lobby.mjs.
+check('the shop does not ask for the quota', mid,
+      (h) => !h.includes('Must get this ride'));
 const later = render({ rides: 4 });
-check('a later level asks for more', later,
-      (h) => h.includes('Must get this ride: $' + goal(4)));
-check('and it really is more than the first level', goal(4) > goal(0), true);
-check('and nothing else on the screen moved', later,
+check('the level still reaches the curve', goal(4) > goal(0), true);
+check('and the shop itself is unchanged by it', later,
       (h) => h.includes(L.zoom.v[2] + '\u00d7 ' + P('zoom', 1) + '</button>'));
 
 check('one button per ladder, and nothing else',
@@ -194,12 +190,14 @@ const soloSrc = /^(const solo = .+)$/m.exec(src);
 check('solo() is still there to test', !!soloSrc, true);
 const runSolo = (distance) => {
   const went = [];
-  new Function('distance', 'ride', 'primary',
+  new Function('distance', 'ride', 'brief',
                soloSrc[1] + ';solo()')(
-    distance, () => went.push('ride'), () => went.push('start'));
+    distance, () => went.push('ride'), () => went.push('brief'));
   return went[0];
 };
-check('a fresh boot starts where it stands', runSolo(0), 'start');
+// A fresh boot briefs where it stands rather than paying for a second worldgen;
+// the click that dismisses the briefing is what starts the cart.
+check('a fresh boot briefs where it stands', runSolo(0), 'brief');
 check('and a world already ridden reloads into a fresh one', runSolo(800), 'ride');
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');

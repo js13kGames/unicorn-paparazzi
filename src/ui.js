@@ -42,24 +42,30 @@ export function updateHud(state, ride, clock, zoom, quota) {
   // already expired. It is a state now, so it is on screen for exactly as long
   // as it is true. A phone never has a pointer to lose, so `state.t` keeps the
   // hint off a screen where it could only ever be wrong.
-  el.hud.textContent = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
-    (state.mode === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '');
+  // innerHTML rather than textContent, because the quota below carries a colour.
+  // Everything interpolated in is either a number or one of two fixed strings.
+  el.hud.innerHTML = 'ride ' + Math.floor(Math.min(1, ride) * 100) + '%' +
+    (state.mode === RIDE && !state.t && !document.pointerLockElement ? '  ·  click to look' : '') +
+    // What the ride has taken against what it owes, on its own line under the
+    // progress. Red until the target is met, green once it is -- at a glance,
+    // "am I safe yet". Solo only; a match sets no quota.
+    //
+    // It lived under the film count for a day and was invisible there: #roll,
+    // the thumbnail strip, starts at top:60px in the same right-hand corner, and
+    // a three-line film box reaches exactly that far -- so the first photograph
+    // taken painted a thumbnail straight over this line. The left column is empty
+    // all the way down to the track bar, which is why it is here.
+    (quota ? '<br><b class="' + (quota[0] >= quota[1] ? 'p' : 'm') +
+             '">$' + quota[0] + ' / $' + quota[1] + '</b>' : '');
   // Under the frame count: the lens, or a winding dot while the shutter is
   // still recovering. The ladder is read rather than derived: it used to be
   // `1 << state.zoom`, which was true only while every rung was a power of two,
   // and the free 1.2x rung is not one.
-  //
-  // ...and under that, what the ride has taken against what it owes. The bank
-  // used to read here and was taken out because money is a between-rides number.
-  // This is not that number: it is the one thing on screen that says whether the
-  // frames still in your hand have to count, and it belongs beside the count of
-  // them rather than in the corner with the ride progress, where it was easy to
-  // miss entirely. Red until the quota is met, green once it is -- at a glance,
-  // "am I safe yet". Solo only; a match sets no quota.
+  // The bank used to read here too and was taken out because money is a
+  // between-rides number. The quota is not that number, but it does not go here
+  // either -- see the note on it above.
   el.film.innerHTML = 'film <b>' + state.film + '</b><br><small>' +
-    (clock < state.ready ? '·' : '×' + zoom[state.zoom]) + '</small>' +
-    (quota ? '<br><small class="' + (quota[0] >= quota[1] ? 'p' : 'm') +
-             '">$' + quota[0] + ' / $' + quota[1] + '</small>' : '');
+    (clock < state.ready ? '·' : '×' + zoom[state.zoom]) + '</small>';
   el.film.className = 'sh' + (state.film <= 3 ? ' low' : '');
 }
 
@@ -136,6 +142,38 @@ export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, mi
                 '<p><button id="mp">Multiplayer</button></p>') +
         (saved ? '<p class="h"><button id="x">Reset</button></p>' : ''), lost ? '' : 't');
   onCard((b) => (b.id === 'mp' ? onMulti() : b.id === 'x' ? onReset() : onSolo()));
+}
+
+// What the game wants, said once, before every solo ride. You used to arrive on a
+// moving cart with eight frames and a dollar figure in the corner, and nothing
+// anywhere had said to photograph the unicorns or what the figure was for.
+//
+// No button, and deliberately so: index.js binds a click ANYWHERE on the panel to
+// primary(), which starts the ride whenever the mode is still TITLE -- so this
+// card is put up and simply ridden away by the next click. Calling onCard() here
+// would swallow that click instead.
+//
+// It is also the gesture the ride needs. Booting straight onto the cart called
+// askIMU() and lock() with no user gesture behind them, which is exactly what
+// iOS refuses; now there is always a real tap first.
+export function showBrief(quota) {
+  panel('<h1>Unicorn Paparazzi</h1>' +
+        '<p>Take pictures of unicorns</p>' +
+        '<p>Better pictures earn more $</p>' +
+        // Lifted verbatim off the shop screen, which no longer says it: this card
+        // comes between that screen and the cart, so saying it twice was saying
+        // it twice -- and moving the string rather than copying it is what keeps
+        // this card near free.
+        '<p class="h">Must get this ride: $' + quota + '</p>' +
+        // No button, and this line instead of one. index.js binds a click
+        // anywhere on the panel to primary(), which starts the ride while the
+        // mode is still TITLE -- so the card is simply ridden away by the next
+        // click, and a button would call onCard(), whose stopPropagation() would
+        // swallow the very click meant to dismiss it. The hint measured FREE
+        // (`click to ` is already in the hud string, `ride` is everywhere); a
+        // real Ride button measured 28 bytes. `press`, not `click`, costs 7 of
+        // those back and is the only verb that is true on a phone as well.
+        '<p class="h">press to ride</p>', 't');
 }
 
 // The whole of multiplayer, in one card with two states. Out of a room it is the
@@ -319,11 +357,12 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
 
 // The run summary and the shop are one screen: you see what the roll earned and
 // immediately spend it.
-// `cfg` is unread -- the shop draws its values off the offers now. Dropping it
-// measured 3 bytes WORSE: the call site `ui.showShop(state, CONFIG, offers()...`
-// is a substring roadroller has already seen from the other ui.show* calls, and
-// the shorter one is new to it. Left in deliberately; see the note on `* 0.2` in
-// score.js for the same trade.
+// `cfg` and `quota` are both unread -- the shop draws its values off the offers,
+// and the quota moved to the briefing card. Dropping them measured WORSE, by 3
+// bytes and 8 bytes respectively: the long call site is a substring roadroller
+// has already seen from the other ui.show* calls, and each shorter one is new to
+// it. Left in deliberately; see the note on `* 0.2` in score.js for the same
+// trade. Delete them the day the budget stops being the binding constraint.
 export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
   // Three columns: what the line is, where you stand on it, and what you can
   // buy with the price inside the button. The whole ladder used to be drawn,
@@ -345,10 +384,6 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota) {
   panel(
     '<h1>Shop</h1>' +
     '<h2>$' + state.bank + '</h2>' +
-    // The quota, asked in full. This is the screen where it is a decision rather
-    // than a readout -- what you buy here is how you intend to make it -- so it
-    // gets the whole sentence, where the ride HUD gets two figures and a slash.
-    '<p class="h">Must get this ride: $' + quota + '</p>' +
     // A `current`/`Upgrade` header row here measured at 35 bytes -- a tenth of
     // everything the three-column rebuild saved -- and the columns read without
     // it: a name, the rung you own in green, and a button naming what it buys
