@@ -225,11 +225,11 @@ export function spawn(world, cfg, seed) {
       // whatever the outcome, which is what keeps the herd deterministic.
       const r = rnd();
       list.horns.push(r < 0.02 ? 3 : r < 0.05 ? 2 : r < 0.11 ? 1 : 0);
-      // 4% wear the dark coat. The horn roll reads the bottom of the same draw,
+      // 5% wear the dark coat. The horn roll reads the bottom of the same draw,
       // so the top of it is free and the two stay uncorrelated. At 2% there were
       // about thirteen to a map, which was too few to be worth watching for --
       // the hazard has to be common enough that you look before you shoot.
-      list.coat.push(r > 0.96 ? 6 : color);
+      list.coat.push(r > 0.95 ? 6 : color);
     }
   }
   return makeHerd(list, cfg, seed);

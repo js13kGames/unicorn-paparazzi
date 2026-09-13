@@ -113,7 +113,7 @@ function onCard(fn) {
 // copy is nearly free, while in the shell it was 32 characters of plain text.
 document.title = 'Unicorn Paparazzi';
 
-export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, missed) {
+export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, missed, trophies, paid) {
   // `lost` is the dead end -- a ride that came in under its quota -- and it is this
   // card rather than one of its own, because the one button that gets out of it
   // is already here and the rest of the menu simply comes off.
@@ -131,13 +131,17 @@ export function showTitle(onSolo, onMulti, onReset, lost, saved, pic, earned, mi
   // is the menu and not this: the dead end carries a photograph and a table, and
   // a 6em headline over them crowds both off the screen.
   panel((lost ? '<h1>Game over</h1>' +
-                '<h2>missed $' + missed + '</h2>' +
+                '<h2>missed $' + paid + ' / $' + missed + '</h2>' +
                 photoCard(pic.p, pic.b || [], 'Best picture', pic.n || 0) +
                 // Named, not bare. It read as a figure with no question
                 // attached -- under a photograph and over a Reset button, a
                 // lone dollar amount could as easily have been the bank or
                 // what the last ride made.
-                '<h2>total earnings $' + earned + '</h2>'
+                '<h2>total earnings $' + earned + '</h2>' +
+                // The shop offer is unlimited on purpose -- once every real
+                // upgrade is maxed, this is the only thing left to show for a
+                // run, so it is shown, not just counted.
+                (trophies ? '<p>' + '🏆'.repeat(trophies) + '</p>' : '')
               : '<h1>Unicorn Paparazzi</h1>' +
                 '<p><button id="go">Solo</button></p>' +
                 '<p><button id="mp">Multiplayer</button></p>') +
@@ -315,13 +319,15 @@ export function showResults(state, scored, onPick, onNext, rivals, waiting, mine
   // this is a scoreboard now and the interesting one belongs at the top.
   const order = scored.map((s, i) => i).sort((a, b) => scored[b].sum - scored[a].sum);
   let rows = '';
-  for (const i of order) {
-    const s = scored[i];
+  // Keyed by rank, not by the raw shot index -- so paging with < / > in the
+  // detail view walks the same order this list is shown in.
+  for (let pos = 0; pos < order.length; pos++) {
+    const s = scored[order[pos]];
     const what = s.subjects.length
       ? s.subjects.length + ' unicorn' + (s.subjects.length > 1 ? 's' : '') +
         (s.bonuses.length ? ' · ' + s.bonuses.map((b) => b.legend).join(', ') : '')
       : NONE;
-    rows += row3('class="o" data-i="' + i + '"', s.pic, what, '$' + s.sum);
+    rows += row3('class="o" data-i="' + pos + '"', s.pic, what, '$' + s.sum);
   }
   if (!rows) rows = '<tr><td class="d">' + NONE + '</td></tr>';
   const roll = '<table>' + rows + '</table>';
@@ -420,7 +426,7 @@ export function showShop(state, cfg, offers, onBuy, onRide, onMenu, quota, onPho
     // the Ride again reload, has an empty one -- index.js passes no handler
     // there, and a button that led to an empty table would be worse than none.
     (onPhotos ? '<button id="s">Photos</button> ' : '') +
-    '<button id="e">Ride again</button></p>'
+    '<button id="e">Next ride</button></p>'
   );
   el.card.onclick = (e) => {
     const b = e.target.closest('button');

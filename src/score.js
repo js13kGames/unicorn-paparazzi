@@ -12,11 +12,14 @@ export function scorePhoto(photo, cfg, state) {
   // the color bonus is worth far less than it was, and because a herd on the
   // horizon is genuinely part of the picture: a point each, and a vote in what
   // colors are in frame. A dark one still voids the shot from out there, which
-  // is only fair because the world is a fixed seed now and you can learn it.
+  // is only fair because the world is a fixed seed now and you can learn it --
+  // but only down to a floor of its own: a handful of stray pixels is not a
+  // photograph of anything, dark coat or not, so it does not even reach the list.
   const smalls = [];
 
   for (const [id, s] of photo.subjects) {
     const coverage = s.n / total;
+    if (coverage < cfg.minCoverage * .1) continue;
     if (coverage < cfg.minCoverage) { smalls.push(s.coat); continue; }
 
     // How big the animal comes out, paid at this sensor's rate -- which is what

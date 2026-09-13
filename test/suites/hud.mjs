@@ -165,9 +165,11 @@ let picked = null, shopped = false;
 ui.showResults({ bank: 1260 }, scored,
                (i) => { picked = i; }, () => { shopped = true; });
 const list = nodes.card.innerHTML;
-const order = [...list.matchAll(/data-i="(\d)"/g)].map((m) => +m[1]);
-check('results list is sorted best to worst', order.join(','), '0,2,1');
-check('results list shows every shot', order.length, scored.length);
+// data-i is keyed by rank now, not raw shot index (see ui.js showResults), so
+// sort order is checked against the scores actually printed, not the indices.
+const shown = [...list.matchAll(/<b>\$(\d+)<\/b>/g)].map((m) => +m[1]);
+check('results list is sorted best to worst', shown.join(','), '900,300,60');
+check('results list shows every shot', shown.length, scored.length);
 // The empty label is built out of the words the other rows already use rather
 // than being prose of its own, so it reads "0 unicorns".
 check('a frame with nothing big enough is labelled', list, (s) => s.includes('0 unicorns'));
