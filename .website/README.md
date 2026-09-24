@@ -1,4 +1,8 @@
 ---
+genres:
+  - simulation
+  - casual
+  - stealth
 # See github.com/js13kGames/hello-world for supported frontmatter
 ---
 
